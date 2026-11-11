@@ -1,9 +1,39 @@
-const page=location.pathname.replace('/','')||'pos';const labels={pos:'前厅 POS',kitchen:'后厨 KDS',admin:'老板监控',scanner:'外卖扫描'};const app=document.querySelector('#app');let token=sessionStorage.getItem('ck_token_'+page)||'',menu=[],orders=[],cart={},ws=null,connected=false,category='全部',type='dinein',table='01',note='',lastIds=new Set(),audio=null,beepEnabled=false,editingOrder='',pendingKey=crypto.randomUUID(),busy=false;const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const statusName={new:'待制作',cooking:'制作中',done:'已完成',cancelled:'已取消'};const sourceName={dinein:'堂食',takeaway:'外带',delivery:'外卖'};
+const page=location.pathname.replace('/','')||'home';const labels={pos:'前厅 POS',kitchen:'后厨 KDS',admin:'老板监控',scanner:'外卖扫描'};const app=document.querySelector('#app');let token=sessionStorage.getItem('ck_token_'+page)||'',menu=[],orders=[],cart={},ws=null,connected=false,category='全部',type='dinein',table='01',note='',lastIds=new Set(),audio=null,beepEnabled=false,editingOrder='',pendingKey=crypto.randomUUID(),busy=false;const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const statusName={new:'待制作',cooking:'制作中',done:'已完成',cancelled:'已取消'};const sourceName={dinein:'堂食',takeaway:'外带',delivery:'外卖'};
 async function api(path,method='GET',data){const r=await fetch('/api'+path,{method,headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw Error(out.error||'请求失败');return out;}
 function notify(msg){const el=document.createElement('div');el.className='notice';el.style.cssText='position:fixed;bottom:15px;right:15px;z-index:99;box-shadow:0 8px 30px #0002;max-width:350px';el.textContent=msg;document.body.append(el);setTimeout(()=>el.remove(),3800)}
 function sound(){if(!beepEnabled||!audio)return;try{const t=audio.currentTime;const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.setValueAtTime(880,t);osc.frequency.setValueAtTime(660,t+.17);gain.gain.setValueAtTime(.15,t);gain.gain.exponentialRampToValueAtTime(.001,t+.4);osc.connect(gain).connect(audio.destination);osc.start(t);osc.stop(t+.4)}catch{}}
 function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${connected?'online':'offline'}">● ${connected?'实时连接':'正在连接 / 离线'}</span><button class="alt" id="logout">退出</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=()=>{sessionStorage.removeItem('ck_token_'+page);token='';ws?.close();render()};}
-function login(){app.innerHTML=`<div class="panel login"><h2>Chicken i Kimchi</h2><p>${esc(labels[page]||'POS')} · 设备登录</p><input type="password" id="pin" placeholder="请输入此页面 PIN" autocomplete="off"><button id="enter">登录</button><p id="loginerr" class="err"></p><p class="muted small">各页面使用独立 PIN。仅在可信设备上登录。</p></div>`;document.querySelector('#enter').onclick=async()=>{try{const result=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value})});const b=await result.json();if(!result.ok)throw Error(b.error);token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start()}catch(e){document.querySelector('#loginerr').textContent=e.message}};document.querySelector('#pin').onkeydown=e=>{if(e.key==='Enter')document.querySelector('#enter').click()};}
+function login(){
+  const choices=[
+    {id:'pos',icon:'🧾',name:'前厅 POS',desc:'点单 · 加菜'},
+    {id:'kitchen',icon:'👨‍🍳',name:'厨房 KDS',desc:'接单 · 出餐'},
+    {id:'admin',icon:'📊',name:'老板管理',desc:'监控 · 菜单'},
+    {id:'scanner',icon:'📷',name:'外卖扫描',desc:'功能预留'}
+  ];
+  const selected=choices.find(r=>r.id===page);
+  document.body.className='role-login-body';
+  app.innerHTML=`<div class="role-login-screen"><section class="role-login-box">
+    <div class="role-brand"><div class="role-brand-mark">C<span>&</span>K</div><h1>Chicken i Kimchi</h1><p>RESTAURANT MANAGEMENT SYSTEM</p></div>
+    <h2>${selected?'登录 '+selected.name:'请选择工作角色'}</h2>
+    <p class="role-subtitle">${selected?'输入此角色的独立 PIN':'选择角色后输入对应 PIN，进入工作界面'}</p>
+    <div class="role-selection">${choices.map(r=>`<a class="role-choice ${selected?.id===r.id?'role-selected':''}" href="/${r.id}"><span class="role-icon">${r.icon}</span><span class="role-info"><strong>${r.name}</strong><small>${r.desc}</small></span></a>`).join('')}</div>
+    ${selected?`<form id="role-login-form" class="role-pin-section"><label for="pin">${selected.name} · PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="请输入 PIN" required><button id="enter" type="submit">进入 ${selected.name}</button><p id="loginerr" class="role-login-error" role="alert"></p></form>`:`<p class="role-login-hint">每个角色使用自己的 PIN；外卖扫描功能目前仍为预留。</p>`}
+    <div class="role-login-footer">Chicken i Kimchi · Staff Access</div>
+  </section></div>`;
+  if(!selected)return;
+  const form=document.querySelector('#role-login-form');
+  const button=document.querySelector('#enter');
+  const error=document.querySelector('#loginerr');
+  form.onsubmit=async e=>{
+    e.preventDefault();button.disabled=true;button.textContent='正在验证…';error.textContent='';
+    try{
+      const result=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value})});
+      const b=await result.json();if(!result.ok)throw Error(b.error||'登录失败');
+      token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start();
+    }catch(err){error.textContent=err.message||'登录失败';}
+    finally{button.disabled=false;button.textContent='进入 '+selected.name;}
+  };
+}
 async function refresh(initial=false){try{const [m,o]=await Promise.all([api('/menu'),api('/orders')]);menu=m;const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));if(!initial&&page==='kitchen'&&o.some(x=>x.status==='new'&&!lastIds.has(x.id)))sound();lastIds=current;orders=o;render()}catch(e){if(e.message==='Unauthorized'){token='';sessionStorage.removeItem('ck_token_'+page);login()}else notify('同步失败：'+e.message)}}
 function connect(){if(!token)return;const proto=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(`${proto}//${location.host}/ws`,['ckauth.'+token]);ws.onopen=()=>{connected=true;render();refresh();};ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu')refresh()}catch{}};ws.onclose=()=>{connected=false;render();setTimeout(()=>{if(token)connect()},2500)};ws.onerror=()=>{};}
 function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();else scanner();}
