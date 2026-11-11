@@ -1,0 +1,1 @@
+{"name":"chicken-kds","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"wrangler dev","deploy":"wrangler deploy","db:local":"wrangler d1 execute chicken_kds --local --file=./schema.sql","db:remote":"wrangler d1 execute chicken_kds --remote --file=./schema.sql"},"devDependencies":{"wrangler":"^4.0.0"}}
