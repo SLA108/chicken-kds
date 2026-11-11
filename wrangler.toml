@@ -6,7 +6,7 @@ assets = { directory = "./public", binding = "ASSETS", run_worker_first = ["/api
 [[d1_databases]]
 binding = "DB"
 database_name = "chicken_kds"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "82bc303c-98c0-4701-9a5d-bbf703a2bb6d"
 
 [[durable_objects.bindings]]
 name = "ROOM"
