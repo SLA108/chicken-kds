@@ -1,1 +1,33 @@
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f4f6fa}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button{cursor:pointer;border:0;border-radius:10px;padding:11px 14px;background:#2563eb;color:white;font-weight:650}button:disabled{opacity:.4;cursor:not-allowed}button.alt{background:#e9eef6;color:#263449}button.danger{background:#b91c1c}input,select,textarea{border:1px solid #cbd5e1;border-radius:9px;padding:10px;width:100%;background:white}textarea{resize:vertical}header{background:#111827;color:white;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}header a{color:#cbd5e1;text-decoration:none;margin-right:12px}header a.active{color:white;font-weight:700}main{max-width:1350px;margin:auto;padding:16px}.panel{background:white;border:1px solid #e2e8f0;border-radius:15px;padding:16px;margin-bottom:15px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px}.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}.menu button{text-align:left;min-height:95px;background:white;border:1px solid #d6ddea;color:#1e293b}.menu button strong{display:block}.muted{color:#64748b}.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}.chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.chips button{background:#e2e8f0;color:#1e293b}.chips button.selected{background:#2563eb;color:white}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:13px}.ticket{background:white;border:2px solid #f59e0b;border-radius:14px;padding:15px}.ticket.cooking{border-color:#3b82f6}.ticket.done{border-color:#16a34a}.ticket.cancelled{opacity:.55;border-color:#94a3b8}.ticket h3{margin:0 0 6px}.ticket p{margin:7px 0}.ticket .items{font-size:1.07rem;font-weight:600}.ticket button{width:100%;margin-top:8px}.tag{padding:5px 9px;border-radius:20px;background:#fef3c7;color:#92400e;font-size:.8rem}.tag.cooking{background:#dbeafe;color:#1d4ed8}.tag.done{background:#dcfce7;color:#166534}.tag.cancelled{background:#f1f5f9;color:#475569}.stats{display:flex;gap:12px;flex-wrap:wrap}.stat{padding:12px 20px;background:white;border:1px solid #e2e8f0;border-radius:12px;min-width:130px}.stat b{font-size:1.8rem;display:block}.status{font-size:.85rem}.online{color:#4ade80}.offline{color:#fbbf24}.login{max-width:390px;margin:10vh auto}.login input{margin:12px 0}.login button{width:100%}.err{color:#b91c1c}.notice{background:#eff6ff;padding:13px;border-radius:10px}.warning{background:#fff7ed;padding:13px;border-radius:10px}.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.toolbar input,.toolbar select{width:auto}.small{font-size:.85rem}.kitchen{background:#111827;min-height:100vh;color:#e5e7eb}.kitchen main{max-width:1600px}.kitchen .panel,.kitchen .stat{background:#1f2937;border-color:#374151;color:#e5e7eb}.kitchen .ticket{background:#1f2937;color:#f9fafb}.kitchen .muted{color:#aab7ca}.kitchen .ticket button{font-size:1.1rem;padding:15px}.empty{text-align:center;padding:40px;color:#94a3b8}@media(max-width:800px){.layout{grid-template-columns:1fr}.menu{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:10px}header{padding:12px}}
+
+
+/* Unified role login – isolated from POS/KDS styles */
+.role-login-body{background:#f5f6f8;color:#20242a;min-height:100dvh}
+.role-login-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.role-login-box{width:100%;max-width:470px;padding:32px;background:#fff;border:1px solid #e9e9ed;border-radius:22px;box-shadow:0 14px 48px rgba(0,0,0,.07)}
+.role-brand{text-align:center;margin-bottom:28px}
+.role-brand-mark{width:66px;height:66px;margin:0 auto 14px;border-radius:19px;display:flex;align-items:center;justify-content:center;background:#181818;color:#fff;font-size:23px;font-weight:800;letter-spacing:-2px}
+.role-brand-mark span{color:#ff6b35;margin:0 3px}
+.role-brand h1{font-size:25px;margin:0;font-weight:800}
+.role-brand p{margin:7px 0 0;font-size:11px;color:#92949b;letter-spacing:.5px}
+.role-login-box h2{font-size:19px;margin:0;text-align:center}
+.role-subtitle{text-align:center;color:#868b94;font-size:13px;margin:8px 0 22px}
+.role-selection{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.role-choice{display:flex;flex-direction:column;align-items:center;text-decoration:none;color:#20242a;border:1.5px solid #e7e8eb;background:#fff;border-radius:15px;padding:19px 8px;transition:.15s ease}
+.role-choice:hover{border-color:#ff6b35;background:#fff9f6;transform:translateY(-2px)}
+.role-choice:focus-visible{outline:3px solid #ffb89c;outline-offset:2px}
+.role-selected{border-color:#ff6b35;background:#fff6f1}
+.role-icon{font-size:28px;margin-bottom:9px}
+.role-info{display:flex;flex-direction:column;text-align:center;gap:5px}
+.role-info strong{font-size:14px}
+.role-info small{font-size:11px;color:#92949b}
+.role-pin-section{display:flex;flex-direction:column;gap:10px;margin-top:24px;padding-top:22px;border-top:1px solid #eee}
+.role-pin-section label{font-size:13px;font-weight:650}
+.role-pin-section input{width:100%;padding:14px;font-size:18px;text-align:center;letter-spacing:5px;border:1px solid #ddd;border-radius:11px}
+.role-pin-section input:focus{outline:2px solid #ffb89c;border-color:#ff6b35}
+.role-pin-section button{width:100%;background:#202020;color:#fff;padding:14px;border:0;border-radius:11px;font-weight:700;cursor:pointer}
+.role-pin-section button:disabled{opacity:.6;cursor:wait}
+.role-login-error{text-align:center;color:#c92a2a;font-size:13px;min-height:16px;margin:0}
+.role-login-hint{text-align:center;font-size:12px;color:#92949b;margin-top:24px}
+.role-login-footer{text-align:center;margin-top:28px;color:#b0b2b8;font-size:11px}
+@media(max-width:420px){.role-login-box{padding:23px 18px}.role-choice{padding:16px 6px}}
