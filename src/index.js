@@ -270,6 +270,23 @@ if(releaseMatch&&req.method==='POST'){
  await event(env,id,'table_released',role,{table_no:order.table_no});
  await broadcast(env,'orders',{id});return json({ok:true});
 }
+const posDetailMatch=path.match(/^\/api\/pos\/history\/([^/]+)$/);
+if(posDetailMatch&&req.method==='GET'){
+ if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
+ const id=decodeURIComponent(posDetailMatch[1]);
+ const order=await env.DB.prepare('SELECT id,source,table_no,status,note,created_at,paid_at,kitchen_completed_at FROM orders WHERE id=? AND paid_at IS NOT NULL').bind(id).first();
+ if(!order)return json({error:'Paid order not found'},404);
+ const [itemsResult,paymentsResult,eventsResult,occupancy]=await Promise.all([
+  env.DB.prepare('SELECT id,name,quantity,note,price_cents,is_done,created_at FROM order_items WHERE order_id=? ORDER BY created_at,id').bind(id).all(),
+  env.DB.prepare('SELECT id,method,amount_cents,created_at FROM payments WHERE order_id=? ORDER BY created_at').bind(id).all(),
+  env.DB.prepare('SELECT event,actor,detail,created_at FROM events WHERE order_id=? ORDER BY created_at').bind(id).all(),
+  env.DB.prepare('SELECT table_no FROM table_occupancy WHERE order_id=?').bind(id).first()
+ ]);
+ const items=itemsResult.results;
+ const ids=items.map(i=>i.id);
+ const modifiers=ids.length?(await env.DB.prepare('SELECT order_item_id,name,price_cents FROM order_item_modifiers WHERE order_item_id IN ('+ids.map(()=>'?').join(',')+')').bind(...ids).all()).results:[];
+ return json({order:{...order,table_occupied:!!occupancy},items:items.map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)})),payments:paymentsResult.results,events:eventsResult.results});
+}
 if(path==='/api/pos/history'&&req.method==='GET'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
  const u=new URL(req.url),range=u.searchParams.get('range')||'today',q=(u.searchParams.get('q')||'').trim().slice(0,80),page=Math.max(1,parseInt(u.searchParams.get('page')||'1',10)||1),size=15;
