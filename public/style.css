@@ -93,3 +93,22 @@ body:has(.admin-head){background:#f5f6f8}
 .admin-modal-head h2{margin:4px 0}
 .admin-modal-actions{display:flex;gap:12px;justify-content:flex-end;padding-top:14px;border-top:1px solid #eceff2}
 @media(max-width:650px){.admin-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-head,.admin-section-head{align-items:flex-start;flex-direction:column}.admin-workspace{padding:15px}.admin-dish{gap:8px}.admin-dish-media{width:52px;height:52px}.admin-modal{padding:18px}.admin-filter{flex-wrap:wrap}}
+
+/* Phase 2 modifiers */
+.modifier-group-card{border:1px solid #dbe3ef;border-radius:12px;padding:14px;margin:12px 0;background:#fff}
+.modifier-group-card .row{border-bottom:1px solid #eef2f7;padding-bottom:7px}
+.modifier-link{display:flex;align-items:center;gap:10px;padding:9px;border-bottom:1px solid #eef2f7}
+.modifier-link input{width:auto}
+.item-dialog-backdrop{position:fixed;inset:0;background:#0f172a99;z-index:200;display:flex;justify-content:center;align-items:center;padding:14px}
+.item-dialog{background:#fff;border-radius:18px;padding:20px;width:min(100%,520px);max-height:92dvh;overflow:auto;box-shadow:0 18px 60px #0003}
+.item-dialog h2{margin:0}
+.item-dialog>button#item-confirm{width:100%;margin-top:14px;position:sticky;bottom:0}
+.modifier-fieldset{border:1px solid #dbe3ef;border-radius:12px;margin:14px 0;padding:8px}
+.modifier-fieldset legend{font-weight:700;padding:0 6px}
+.modifier-fieldset legend small{font-weight:400;margin-left:8px}
+.modifier-choice{display:flex;gap:12px;align-items:center;min-height:48px;padding:8px;border-bottom:1px solid #eef2f7;cursor:pointer}
+.modifier-choice:last-child{border-bottom:0}
+.modifier-choice input{width:20px;height:20px;flex:none}
+.modifier-choice span{flex:1}
+.modifier-choice b{white-space:nowrap}
+@media(max-width:600px){.item-dialog-backdrop{align-items:flex-end;padding:0}.item-dialog{width:100%;max-height:94dvh;border-radius:18px 18px 0 0}}
