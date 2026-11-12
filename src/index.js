@@ -10,12 +10,42 @@ async function parse(req){try{return await req.json();}catch{return null;}}
 function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
 async function getOrders(env,limit=120){const orders=(await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT ?').bind(limit).all()).results;const ids=orders.map(o=>o.id);if(!ids.length)return [];const items=(await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at ASC`).bind(...ids).all()).results;return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id)}));}
-export default {async fetch(req,env){const url=new URL(req.url);const path=url.pathname;if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitchen','/admin','/scanner','/'].includes(path))assetPath='/';return env.ASSETS.fetch(new Request(new URL(assetPath,url),req));}
+export default {async fetch(req,env){const url=new URL(req.url);const path=url.pathname;if(path.startsWith('/images/')){if(req.method!=='GET')return new Response('Method not allowed',{status:405});const key=path.slice('/images/'.length);if(!/^[0-9a-f-]{36}\\.(webp|png|jpg)$/.test(key))return new Response('Not found',{status:404});if(!env.MENU_IMAGES)return new Response('Image storage unavailable',{status:503});const object=await env.MENU_IMAGES.get(key);if(!object)return new Response('Not found',{status:404});return new Response(object.body,{headers:{'content-type':object.httpMetadata?.contentType||'image/webp','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'}});}
+if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitchen','/admin','/scanner','/'].includes(path))assetPath='/';return env.ASSETS.fetch(new Request(new URL(assetPath,url),req));}
 if(!env.AUTH_SECRET||!env.POS_PIN||!env.KITCHEN_PIN||!env.ADMIN_PIN||!env.SCANNER_PIN)return json({error:'Server secrets not configured'},503);
 if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||!['pos','kitchen','admin','scanner'].includes(b.role))return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
 if(path==='/ws'){if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);return room(env).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':role,'sec-websocket-protocol':req.headers.get('sec-websocket-protocol')||''}}));}
+if(path==='/api/menu/all'&&req.method==='GET'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);return json((await env.DB.prepare('SELECT * FROM menu ORDER BY sort_order,category,name').all()).results);}
+if(path==='/api/menu/images'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ if(!env.MENU_IMAGES)return json({error:'R2 storage not configured'},503);
+ const length=Number(req.headers.get('content-length')||0);
+ if(length>5*1024*1024)return json({error:'Image exceeds 5 MB'},413);
+ const contentType=(req.headers.get('content-type')||'').split(';')[0].toLowerCase();
+ if(!['image/jpeg','image/png','image/webp'].includes(contentType))return json({error:'Use JPEG, PNG or WebP'},415);
+ const bytes=new Uint8Array(await req.arrayBuffer());
+ if(!bytes.length||bytes.length>5*1024*1024)return json({error:'Image must be 5 MB or less'},413);
+ const jpeg=bytes.length>3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+ const png=bytes.length>8&&[137,80,78,71,13,10,26,10].every((x,i)=>bytes[i]===x);
+ const webp=bytes.length>12&&String.fromCharCode(...bytes.slice(0,4))==='RIFF'&&String.fromCharCode(...bytes.slice(8,12))==='WEBP';
+ if(!(contentType==='image/jpeg'&&jpeg||contentType==='image/png'&&png||contentType==='image/webp'&&webp))return json({error:'Invalid image content'},415);
+ const ext=contentType==='image/jpeg'?'jpg':contentType==='image/png'?'png':'webp';
+ const key=uid()+'.'+ext;await env.MENU_IMAGES.put(key,bytes,{httpMetadata:{contentType}});
+ return json({image_url:'/images/'+key},201);
+}
+const menuMatch=path.match(/^\\/api\\/menu\\/([^/]+)$/);
+if(menuMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req);
+ if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!b.category.trim()||!Number.isInteger(b.price_cents)||b.price_cents<0||b.price_cents>10000000||![0,5,8,23].includes(b.vat_rate)||![0,1,false,true].includes(b.active)||!Number.isInteger(b.sort_order)||Math.abs(b.sort_order)>100000)return json({error:'Invalid menu item'},400);
+ const image=String(b.image_url||'');
+ if(image.length>1000||image&&!(/^\\/images\\/[0-9a-f-]{36}\\.(webp|png|jpg)$/.test(image)||/^https:\\/\\//i.test(image)))return json({error:'Invalid image URL'},400);
+ const result=await env.DB.prepare('UPDATE menu SET name=?,category=?,price_cents=?,vat_rate=?,image_url=?,sort_order=?,active=? WHERE id=?').bind(b.name.trim().slice(0,100),b.category.trim().slice(0,50),b.price_cents,b.vat_rate,image,b.sort_order,Number(b.active),menuMatch[1]).run();
+ if(!result.meta.changes)return json({error:'Menu item not found'},404);
+ await broadcast(env,'menu',{});return json({ok:true});
+}
 if(path==='/api/menu'&&req.method==='GET')return json((await env.DB.prepare('SELECT * FROM menu WHERE active=1 ORDER BY sort_order,category,name').all()).results);
 if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate) VALUES(?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8).run();await broadcast(env,'menu',{});return json({id},201);}
 if(path==='/api/orders'&&req.method==='GET')return json(await getOrders(env));
