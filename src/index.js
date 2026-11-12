@@ -17,6 +17,64 @@ if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typ
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
 if(path==='/ws'){if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);return room(env).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':role,'sec-websocket-protocol':req.headers.get('sec-websocket-protocol')||''}}));}
+// Modifier configuration endpoints. Existing Phase 2 foundation tables are reused.
+if(path==='/api/modifiers'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const [groups,options,links]=await Promise.all([
+  env.DB.prepare('SELECT * FROM modifier_groups ORDER BY name').all(),
+  env.DB.prepare('SELECT * FROM modifier_options ORDER BY name').all(),
+  env.DB.prepare('SELECT * FROM menu_modifier_groups').all()
+ ]);
+ return json({groups:groups.results,options:options.results,links:links.results});
+}
+if(path==='/api/modifiers/groups'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),name=String(b?.name||'').trim(),min=b?.min_select,max=b?.max_select;
+ if(!name||name.length>100||!Number.isInteger(min)||!Number.isInteger(max)||min<0||max<1||min>max||max>20)return json({error:'Invalid modifier group'},400);
+ const id=uid();await env.DB.prepare('INSERT INTO modifier_groups(id,name,required,min_select,max_select,active) VALUES(?,?,?,?,?,1)').bind(id,name,min>0?1:0,min,max).run();
+ await broadcast(env,'menu',{});return json({id},201);
+}
+const modifierGroupMatch=path.match(/^\/api\/modifiers\/groups\/([^/]+)$/);
+if(modifierGroupMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),name=String(b?.name||'').trim(),min=b?.min_select,max=b?.max_select;
+ if(!name||name.length>100||!Number.isInteger(min)||!Number.isInteger(max)||min<0||max<1||min>max||max>20||![0,1].includes(b?.active))return json({error:'Invalid modifier group'},400);
+ const result=await env.DB.prepare('UPDATE modifier_groups SET name=?,required=?,min_select=?,max_select=?,active=? WHERE id=?').bind(name,min>0?1:0,min,max,b.active,modifierGroupMatch[1]).run();
+ if(!result.meta.changes)return json({error:'Group not found'},404);
+ await broadcast(env,'menu',{});return json({ok:true});
+}
+if(path==='/api/modifiers/options'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),name=String(b?.name||'').trim();
+ if(!name||name.length>100||typeof b?.group_id!=='string'||!Number.isInteger(b?.price_cents)||b.price_cents<0||b.price_cents>1000000)return json({error:'Invalid modifier option'},400);
+ const group=await env.DB.prepare('SELECT id FROM modifier_groups WHERE id=?').bind(b.group_id).first();
+ if(!group)return json({error:'Group not found'},404);
+ const id=uid();await env.DB.prepare('INSERT INTO modifier_options(id,group_id,name,price_cents,active) VALUES(?,?,?,?,1)').bind(id,b.group_id,name,b.price_cents).run();
+ await broadcast(env,'menu',{});return json({id},201);
+}
+const modifierOptionMatch=path.match(/^\/api\/modifiers\/options\/([^/]+)$/);
+if(modifierOptionMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),name=String(b?.name||'').trim();
+ if(!name||name.length>100||!Number.isInteger(b?.price_cents)||b.price_cents<0||b.price_cents>1000000||![0,1].includes(b?.active))return json({error:'Invalid modifier option'},400);
+ const result=await env.DB.prepare('UPDATE modifier_options SET name=?,price_cents=?,active=? WHERE id=?').bind(name,b.price_cents,b.active,modifierOptionMatch[1]).run();
+ if(!result.meta.changes)return json({error:'Option not found'},404);
+ await broadcast(env,'menu',{});return json({ok:true});
+}
+const modifierLinkMatch=path.match(/^\/api\/menu\/([^/]+)\/modifiers$/);
+if(modifierLinkMatch&&req.method==='PUT'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req);
+ if(!Array.isArray(b?.group_ids)||b.group_ids.length>30||b.group_ids.some(id=>typeof id!=='string')||new Set(b.group_ids).size!==b.group_ids.length)return json({error:'Invalid group selection'},400);
+ const dish=await env.DB.prepare('SELECT id FROM menu WHERE id=?').bind(modifierLinkMatch[1]).first();
+ if(!dish)return json({error:'Dish not found'},404);
+ if(b.group_ids.length){
+  const matches=await env.DB.prepare('SELECT id FROM modifier_groups WHERE id IN ('+b.group_ids.map(()=>'?').join(',')+')').bind(...b.group_ids).all();
+  if(matches.results.length!==b.group_ids.length)return json({error:'Unknown modifier group'},400);
+ }
+ await env.DB.batch([env.DB.prepare('DELETE FROM menu_modifier_groups WHERE menu_id=?').bind(dish.id),...b.group_ids.map(id=>env.DB.prepare('INSERT INTO menu_modifier_groups(menu_id,group_id) VALUES(?,?)').bind(dish.id,id))]);
+ await broadcast(env,'menu',{});return json({ok:true});
+}
 if(path==='/api/categories'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  return json((await env.DB.prepare('SELECT c.*, (SELECT COUNT(*) FROM menu m WHERE m.category=c.name) item_count FROM menu_categories c ORDER BY c.sort_order,c.name').all()).results);
