@@ -203,7 +203,7 @@ if(path==='/api/tables'&&req.method==='GET'){
  const active=(await env.DB.prepare("SELECT id,table_no,status,created_at FROM orders WHERE source='dinein' AND paid_at IS NULL AND status!='cancelled' AND table_no IN ("+Array.from({length:20},(_,i)=>"'"+String(i+1).padStart(2,'0')+"'").join(',')+") ORDER BY created_at DESC").all()).results;
  return json(Array.from({length:20},(_,i)=>{const number=String(i+1).padStart(2,'0'),matches=active.filter(o=>o.table_no===number);return {number,occupied:matches.length>0,order_id:matches[0]?.id||null,conflict:matches.length>1,status:matches[0]?.status||null}}));
 }
-const checkoutMatch=path.match(/^\\/api\\/orders\\/([^/]+)\\/checkout$/);
+const checkoutMatch=path.match(/^\/api\/orders\/([^/]+)\/checkout$/);
 if(checkoutMatch&&req.method==='POST'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
  const b=await parse(req);
