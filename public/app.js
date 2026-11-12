@@ -144,8 +144,27 @@ function kitchen(){
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
  document.querySelector('#sync').onclick=()=>refresh();
  document.querySelectorAll('[data-item-done]').forEach(btn=>btn.onclick=async()=>{
-  if(btn.disabled)return;btn.disabled=true;
-  try{await api('/order-items/'+btn.dataset.itemDone+'/done','PATCH',{});await refresh()}catch(e){notify(e.message);btn.disabled=false}
+  const id=btn.dataset.itemDone;
+  if(kitchenBusy.has(id))return;
+  const order=orders.find(o=>(o.items||[]).some(i=>i.id===id));
+  const item=order?.items.find(i=>i.id===id);
+  if(!item)return;
+  kitchenBusy.add(id);
+  // Optimistic local feedback: no network round trip before the visual change.
+  const previous=!!item.is_done;
+  item.is_done=previous?0:1;
+  btn.classList.toggle('is-done',!!item.is_done);
+  const check=btn.querySelector('.kds-check');
+  if(check)check.textContent=item.is_done?'✓':'○';
+  const head=btn.closest('.kds-order')?.querySelector('.kds-head-row:nth-child(2) span:last-child');
+  const count=order.items.filter(i=>i.is_done).length;
+  if(head)head.textContent=count+'/'+order.items.length+' Done';
+  const complete=btn.closest('.kds-order')?.querySelector('[data-kitchen-complete]');
+  if(complete){const ready=count===order.items.length;complete.disabled=!ready;complete.textContent=ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+count+'/'+order.items.length}
+  btn.blur();
+  try{await api('/order-items/'+id+'/done','PATCH',{});}
+  catch(e){item.is_done=previous;notify('Could not save dish: '+e.message);}
+  finally{kitchenBusy.delete(id);await refresh();}
  });
  document.querySelectorAll('[data-kitchen-complete]').forEach(btn=>btn.onclick=async()=>{
   if(btn.disabled)return;btn.disabled=true;btn.textContent='Completing...';
