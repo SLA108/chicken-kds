@@ -159,3 +159,15 @@ body:has(.foh-head) .foh-ticket h3{margin:14px 0}
 .foh-ticket-note{font-size:12px;color:#f1c9a2}
 .foh-back-top{white-space:nowrap}
 @media(max-width:650px){.foh-title{align-items:flex-start;flex-wrap:wrap}.foh-back-top{width:100%}}
+
+/* POS dish configuration dialog: match low-glare POS palette */
+body:has(.foh-head) .item-dialog{background:#29394b;color:#ecf2f8;border:1px solid #52677c;box-shadow:0 22px 70px #0008}
+body:has(.foh-head) .item-dialog .muted{color:#bdc9d6}
+body:has(.foh-head) .modifier-fieldset{background:#304255;border-color:#62768b}
+body:has(.foh-head) .modifier-fieldset legend{color:#ecf2f8}
+body:has(.foh-head) .modifier-choice{border-color:#52657a}
+body:has(.foh-head) .modifier-choice:hover{background:#394d62}
+body:has(.foh-head) .item-dialog input,body:has(.foh-head) .item-dialog textarea,body:has(.foh-head) .item-dialog select{background:#35495d;color:#f1f5f9;border-color:#6a7e92}
+body:has(.foh-head) .item-dialog-backdrop{background:#07101cc9}
+.foh-modal-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:15px 0}
+.foh-modal-tabs button{font-size:12px;padding:10px 5px}
