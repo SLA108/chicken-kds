@@ -54,6 +54,25 @@ if(path==='/api/modifiers'&&req.method==='GET'){
  ]);
  return json({groups:groups.results,options:options.results,links:links.results});
 }
+if(path==='/api/modifiers/assign'&&req.method==='PUT'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req);
+ if(!b||typeof b.group_id!=='string'||!Array.isArray(b.menu_ids)||b.menu_ids.length>2000||b.menu_ids.some(id=>typeof id!=='string')||new Set(b.menu_ids).size!==b.menu_ids.length)return json({error:'Invalid assignment'},400);
+ const group=await env.DB.prepare('SELECT id FROM modifier_groups WHERE id=?').bind(b.group_id).first();
+ if(!group)return json({error:'Modifier group not found'},404);
+ const menuRows=(await env.DB.prepare('SELECT id FROM menu').all()).results;
+ const valid=new Set(menuRows.map(m=>m.id));
+ if(b.menu_ids.some(id=>!valid.has(id)))return json({error:'Unknown dish'},400);
+ const selected=new Set(b.menu_ids);
+ const existing=(await env.DB.prepare('SELECT menu_id FROM menu_modifier_groups WHERE group_id=?').bind(b.group_id).all()).results.map(x=>x.menu_id);
+ const statements=[];
+ for(const id of existing)if(!selected.has(id))statements.push(env.DB.prepare('DELETE FROM menu_modifier_groups WHERE group_id=? AND menu_id=?').bind(b.group_id,id));
+ const already=new Set(existing);
+ for(const id of b.menu_ids)if(!already.has(id))statements.push(env.DB.prepare('INSERT INTO menu_modifier_groups(menu_id,group_id) VALUES(?,?)').bind(id,b.group_id));
+ if(statements.length)await env.DB.batch(statements);
+ await broadcast(env,'menu',{});
+ return json({ok:true,assigned:b.menu_ids.length,changed:statements.length});
+}
 if(path==='/api/modifiers/groups'&&req.method==='POST'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const b=await parse(req),name=String(b?.name||'').trim(),min=b?.min_select,max=b?.max_select;
