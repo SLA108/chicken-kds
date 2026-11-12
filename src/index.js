@@ -24,15 +24,12 @@ if(path==='/api/menu/images'&&req.method==='POST'){
  const length=Number(req.headers.get('content-length')||0);
  if(length>5*1024*1024)return json({error:'Image exceeds 5 MB'},413);
  const contentType=(req.headers.get('content-type')||'').split(';')[0].toLowerCase();
- if(!['image/jpeg','image/png','image/webp'].includes(contentType))return json({error:'Use JPEG, PNG or WebP'},415);
+ if(contentType!=='image/webp')return json({error:'Only converted WebP images are accepted'},415);
  const bytes=new Uint8Array(await req.arrayBuffer());
  if(!bytes.length||bytes.length>5*1024*1024)return json({error:'Image must be 5 MB or less'},413);
- const jpeg=bytes.length>3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
- const png=bytes.length>8&&[137,80,78,71,13,10,26,10].every((x,i)=>bytes[i]===x);
  const webp=bytes.length>12&&String.fromCharCode(...bytes.slice(0,4))==='RIFF'&&String.fromCharCode(...bytes.slice(8,12))==='WEBP';
- if(!(contentType==='image/jpeg'&&jpeg||contentType==='image/png'&&png||contentType==='image/webp'&&webp))return json({error:'Invalid image content'},415);
- const ext=contentType==='image/jpeg'?'jpg':contentType==='image/png'?'png':'webp';
- const key=uid()+'.'+ext;await env.MENU_IMAGES.put(key,bytes,{httpMetadata:{contentType}});
+ if(!webp)return json({error:'Invalid WebP content'},415);
+ const key=uid()+'.webp';await env.MENU_IMAGES.put(key,bytes,{httpMetadata:{contentType}});
  return json({image_url:'/images/'+key},201);
 }
 const menuMatch=path.match(/^\/api\/menu\/([^/]+)$/);
