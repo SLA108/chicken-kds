@@ -229,3 +229,9 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .kitchen .kds-dish-name{display:block;font-size:.94rem;font-weight:500;line-height:1.28;letter-spacing:0;overflow-wrap:anywhere}
 .kitchen .kds-dish.is-done .kds-dish-name{text-decoration:line-through}
 .kitchen .kds-dish{padding:10px 10px;line-height:1.28}
+
+/* Kitchen V2.2.3: instant tactile response, no sticky hover/focus on touchscreens. */
+.kitchen .kds-dish{transition:none!important;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;appearance:none;-webkit-appearance:none}
+.kitchen .kds-dish:focus:not(:focus-visible){outline:none;box-shadow:none}
+@media(hover:none){.kitchen .kds-dish:hover:not(.is-done){background:#fff;color:#202020;border-color:#ddd}.kitchen .kds-dish.is-done:hover{background:#dcece3;color:#365a47;border-color:#65ae7a}}
+.kitchen .kds-dish:active{transform:none;filter:none}
