@@ -207,3 +207,18 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .kitchen .kds-history-row summary{cursor:pointer;padding:5px 0}
 .kitchen .kds-history-row details div{padding:3px 0}
 @media(max-width:600px){.kitchen .kds-history-row{align-items:flex-start;flex-direction:column}.kitchen .kds-history-row button{width:100%}}
+
+/* Kitchen V2.2.1: compact, readable tickets; retain full-row wet-hand targets. */
+.kitchen .kds-active-grid{grid-template-columns:repeat(auto-fill,minmax(220px,250px));gap:12px;align-items:start;justify-content:start}
+.kitchen .kds-order{width:100%;min-width:0;padding:8px}
+.kitchen .kds-order-head{padding:11px 12px}
+.kitchen .kds-head-row h3{font-size:1.25rem}
+.kitchen .kds-age{font-size:1.3rem}
+.kitchen .kds-head-row span{font-size:.78rem}
+.kitchen .kds-complete{font-size:.87rem;min-height:70px;margin:10px 0 12px;padding:10px 7px}
+.kitchen .kds-dish{min-height:88px;padding:12px 10px;margin:9px 0;gap:8px;font-size:.94rem;line-height:1.25;overflow-wrap:anywhere}
+.kitchen .kds-dish strong{font-size:.94rem;font-weight:750}
+.kitchen .kds-dish small{font-size:.76rem;line-height:1.3}
+.kitchen .kds-dish>span:first-child{min-width:0;flex:1}
+.kitchen .kds-check{min-width:48px;width:48px;min-height:48px;height:48px;flex-shrink:0;font-size:1.8rem}
+@media(max-width:540px){.kitchen .kds-active-grid{grid-template-columns:minmax(0,1fr)}.kitchen .kds-order{max-width:100%}}
