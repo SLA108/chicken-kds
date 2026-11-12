@@ -17,6 +17,40 @@ if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typ
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
 if(path==='/ws'){if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);return room(env).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':role,'sec-websocket-protocol':req.headers.get('sec-websocket-protocol')||''}}));}
+if(path==='/api/categories'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ return json((await env.DB.prepare('SELECT c.*, (SELECT COUNT(*) FROM menu m WHERE m.category=c.name) item_count FROM menu_categories c ORDER BY c.sort_order,c.name').all()).results);
+}
+if(path==='/api/categories'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),name=String(b?.name||'').trim();
+ if(!name||name.length>50||!Number.isInteger(b?.sort_order)||Math.abs(b.sort_order)>100000)return json({error:'Invalid category'},400);
+ try{const id=uid();await env.DB.prepare('INSERT INTO menu_categories(id,name,sort_order) VALUES(?,?,?)').bind(id,name,b.sort_order).run();await broadcast(env,'menu',{});return json({id},201);}
+ catch(e){if(String(e).includes('UNIQUE'))return json({error:'Category already exists'},409);throw e;}
+}
+const catMatch=path.match(/^\/api\/categories\/([^/]+)$/);
+if(catMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),name=String(b?.name||'').trim();
+ if(!name||name.length>50||!Number.isInteger(b?.sort_order)||Math.abs(b.sort_order)>100000)return json({error:'Invalid category'},400);
+ const old=await env.DB.prepare('SELECT * FROM menu_categories WHERE id=?').bind(catMatch[1]).first();
+ if(!old)return json({error:'Category not found'},404);
+ try{
+  await env.DB.batch([
+   env.DB.prepare('UPDATE menu_categories SET name=?,sort_order=? WHERE id=?').bind(name,b.sort_order,catMatch[1]),
+   env.DB.prepare('UPDATE menu SET category=? WHERE category=?').bind(name,old.name)
+  ]);
+ }catch(e){if(String(e).includes('UNIQUE'))return json({error:'Category already exists'},409);throw e;}
+ await broadcast(env,'menu',{});return json({ok:true});
+}
+if(catMatch&&req.method==='DELETE'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const old=await env.DB.prepare('SELECT name FROM menu_categories WHERE id=?').bind(catMatch[1]).first();
+ if(!old)return json({error:'Category not found'},404);
+ const used=await env.DB.prepare('SELECT COUNT(*) n FROM menu WHERE category=?').bind(old.name).first();
+ if(used.n)return json({error:'Move or remove dishes in this category first'},409);
+ await env.DB.prepare('DELETE FROM menu_categories WHERE id=?').bind(catMatch[1]).run();await broadcast(env,'menu',{});return json({ok:true});
+}
 if(path==='/api/menu/all'&&req.method==='GET'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);return json((await env.DB.prepare('SELECT * FROM menu ORDER BY sort_order,category,name').all()).results);}
 if(path==='/api/menu/images'&&req.method==='POST'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
