@@ -171,3 +171,6 @@ body:has(.foh-head) .item-dialog input,body:has(.foh-head) .item-dialog textarea
 body:has(.foh-head) .item-dialog-backdrop{background:#07101cc9}
 .foh-modal-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:15px 0}
 .foh-modal-tabs button{font-size:12px;padding:10px 5px}
+
+/* POS notifications: low-glare readable toast (appended to body outside POS root) */
+body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6b839b;box-shadow:0 12px 34px #0007;border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;line-height:1.5;max-width:min(380px,calc(100vw - 30px));overflow-wrap:anywhere}
