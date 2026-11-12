@@ -42,3 +42,15 @@
 
 /* Completed kitchen orders remain directly tappable for quick undo */
 .completed-section{margin-top:20px}.completed-section h3{margin-top:0}.completed-section .ticket{border-color:#65ae7a}
+
+/* Phase 2 menu management */
+.menu-admin-row{border-bottom:1px solid #e2e8f0;padding:12px 0;align-items:center}
+.menu-admin-row:last-child{border-bottom:0}
+.menu-admin-row button{flex-shrink:0}
+.admin-thumb{width:64px;height:64px;object-fit:cover;border-radius:10px}
+.menu-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.menu-form-grid label,.menu-upload label{display:flex;flex-direction:column;gap:6px;font-weight:600}
+.menu-upload{margin:18px 0;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.admin-preview{max-width:220px;max-height:180px;object-fit:contain;border:1px solid #e2e8f0;border-radius:10px}
+[hidden]{display:none!important}
+@media(max-width:600px){.menu-form-grid{grid-template-columns:1fr}.menu-admin-row{align-items:flex-start}.menu-admin-row .toolbar{min-width:0;flex:1}}
