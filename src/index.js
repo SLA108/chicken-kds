@@ -67,6 +67,20 @@ if(path==='/api/menu/images'&&req.method==='POST'){
  return json({image_url:'/images/'+key},201);
 }
 const menuMatch=path.match(/^\/api\/menu\/([^/]+)$/);
+if(menuMatch&&req.method==='DELETE'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const dish=await env.DB.prepare('SELECT id FROM menu WHERE id=?').bind(menuMatch[1]).first();
+ if(!dish)return json({error:'Dish not found'},404);
+ const references=await env.DB.prepare('SELECT (SELECT COUNT(*) FROM order_items WHERE menu_id=?) + (SELECT COUNT(*) FROM menu_modifier_groups WHERE menu_id=?) AS n').bind(dish.id,dish.id).first();
+ if(references.n){
+  await env.DB.prepare('UPDATE menu SET active=0 WHERE id=?').bind(dish.id).run();
+  await broadcast(env,'menu',{});
+  return json({ok:true,archived:true,message:'Dish archived to preserve historical order references'});
+ }
+ await env.DB.prepare('DELETE FROM menu WHERE id=?').bind(dish.id).run();
+ await broadcast(env,'menu',{});
+ return json({ok:true,deleted:true});
+}
 if(menuMatch&&req.method==='PATCH'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const b=await parse(req);
