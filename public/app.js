@@ -9,7 +9,14 @@ function login(){
  app.innerHTML=`<div class="role-login-screen"><section class="role-login-box"><div class="role-brand"><div class="role-brand-mark">C<span>&</span>K</div><h1>Chicken i Kimchi</h1><p>RESTAURANT MANAGEMENT SYSTEM</p></div><h2>${selected?selected.name:'Select your role'}</h2><p class="role-subtitle">${selected?'Enter your PIN to continue':'Select a role to sign in'}</p><div class="role-selection">${choices.map(r=>`<a class="role-choice ${selected?.id===r.id?'role-selected':''}" href="/${r.id}"><span class="role-icon">${r.icon}</span><span class="role-info"><strong>${r.name}</strong><small>${r.desc}</small></span></a>`).join('')}</div>${selected?`<form id="role-login-form" class="role-pin-section"><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN" required><button id="enter" type="submit">Sign in</button><p id="loginerr" class="role-login-error" role="alert"></p></form>`:'<p class="role-login-hint">Each role has its own PIN.</p>'}<div class="role-login-footer">Chicken i Kimchi · Staff Access</div></section></div>`;
  if(!selected)return;const form=document.querySelector('#role-login-form');form.onsubmit=async e=>{e.preventDefault();const btn=document.querySelector('#enter');btn.disabled=true;btn.textContent='Signing in…';try{const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value})});const b=await r.json();if(!r.ok)throw Error(b.error||'Sign-in failed');token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start()}catch(err){document.querySelector('#loginerr').textContent=err.message}finally{btn.disabled=false;btn.textContent='Sign in'}};
 }
-async function refresh(initial=false){try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();lastIds=current;lastItemIds=currentItemIds;orders=o;if(page==='pos'){try{tableState=await api('/tables')}catch(e){console.warn('Table sync failed',e)}}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(e.message==='Unauthorized'){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+async function refresh(initial=false){const serial=++kitchenRefreshSerial;try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}if(page==='kitchen'){
+  // Ignore stale overlapping responses and preserve optimistic dish states until save settles.
+  if(serial!==kitchenRefreshSerial)return;
+  for(const order of o)for(const item of order.items||[]){
+   if(kitchenPending.has(item.id))item.is_done=kitchenPending.get(item.id)?1:0;
+  }
+ }
+ const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();lastIds=current;lastItemIds=currentItemIds;orders=o;if(page==='pos'){try{tableState=await api('/tables')}catch(e){console.warn('Table sync failed',e)}}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(e.message==='Unauthorized'){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let reconnectTimer=null,wsGeneration=0;
 function disconnect(){wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
 function connect(){
@@ -70,7 +77,7 @@ async function submit(){if(busy)return;saveFields();const items=configuredCart.m
 function ticket(o,controls=false){const age=Math.max(0,Math.floor((Date.now()-Date.parse(o.created_at))/60000));return `<article class="ticket ${o.status}"><div class="row"><h3>${esc(o.table_no||sourceName[o.source]||o.source)}</h3><span class="tag ${o.status}">${statusName[o.status]}</span></div><p class="muted small">#${esc(o.id.slice(0,8))} · ${new Date(o.created_at).toLocaleTimeString('pl-PL',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit'})} · ${age} min</p><hr>${o.items.map(i=>`<p class="items">${i.quantity} × ${esc(i.name)} ${(i.modifiers||[]).length?`<small> · ${esc(i.modifiers.map(m=>m.name).join(', '))}</small>`:''}${i.note?`<small>(${esc(i.note)})</small>`:''}</p>`).join('')} ${o.note?`<p class="warning">Note: ${esc(o.note)}</p>`:''}${controls&&o.status!=='done'&&o.status!=='cancelled'&&page==='admin'?`<button class="danger" data-status="${o.id}" data-next="cancelled">Admin cancel</button>`:''}</article>`;}
 function stats(){return `<div class="stats">${['new','cooking','done'].map(s=>`<div class="stat"><b>${orders.filter(o=>o.status===s).length}</b>${statusName[s]}</div>`).join('')}</div>`;}
 
-let kitchenCategories=[],historyOpen=false,historyRange='today',historyQuery='',historyPage=1,historyResult={orders:[],total:0,page:1,size:15},historyBusy=false,kitchenClock=null,kitchenBusy=new Set();
+let kitchenCategories=[],historyOpen=false,historyRange='today',historyQuery='',historyPage=1,historyResult={orders:[],total:0,page:1,size:15},historyBusy=false,kitchenClock=null,kitchenBusy=new Set(),kitchenPending=new Map(),kitchenRefreshSerial=0;
 const warsawClock=iso=>new Date(iso).toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function kitchenAge(iso){return Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/1000)||0)}
 function kitchenDuration(seconds){return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
@@ -150,21 +157,34 @@ function kitchen(){
   const item=order?.items.find(i=>i.id===id);
   if(!item)return;
   kitchenBusy.add(id);
-  // Optimistic local feedback: no network round trip before the visual change.
-  const previous=!!item.is_done;
-  item.is_done=previous?0:1;
-  btn.classList.toggle('is-done',!!item.is_done);
+  const previous=!!item.is_done, next=!previous;
+  kitchenPending.set(id,next);
+  item.is_done=next?1:0;
+  btn.classList.toggle('is-done',next);
   const check=btn.querySelector('.kds-check');
-  if(check)check.textContent=item.is_done?'✓':'○';
+  if(check)check.textContent=next?'✓':'○';
   const head=btn.closest('.kds-order')?.querySelector('.kds-head-row:nth-child(2) span:last-child');
   const count=order.items.filter(i=>i.is_done).length;
   if(head)head.textContent=count+'/'+order.items.length+' Done';
   const complete=btn.closest('.kds-order')?.querySelector('[data-kitchen-complete]');
   if(complete){const ready=count===order.items.length;complete.disabled=!ready;complete.textContent=ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+count+'/'+order.items.length}
   btn.blur();
-  try{await api('/order-items/'+id+'/done','PATCH',{});}
-  catch(e){item.is_done=previous;notify('Could not save dish: '+e.message);}
-  finally{kitchenBusy.delete(id);await refresh();}
+  try{
+   await api('/order-items/'+id+'/done','PATCH',{});
+   // Fetch confirmed server state before releasing the optimistic override.
+   const confirmed=await api('/orders');
+   const saved=confirmed.flatMap(o=>o.items||[]).find(i=>i.id===id);
+   if(saved&&!!saved.is_done===next){
+    kitchenPending.delete(id);
+    // A later refresh uses the server value, never an older in-flight response.
+    await refresh();
+   }else{await refresh();}
+  }catch(e){
+   kitchenPending.delete(id);
+   item.is_done=previous?1:0;
+   notify('Could not save dish: '+e.message);
+   await refresh();
+  }finally{kitchenBusy.delete(id)}
  });
  document.querySelectorAll('[data-kitchen-complete]').forEach(btn=>btn.onclick=async()=>{
   if(btn.disabled)return;btn.disabled=true;btn.textContent='Completing...';
