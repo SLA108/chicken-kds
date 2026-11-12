@@ -9,7 +9,7 @@ async function broadcast(env,type,data){try{const response=await room(env).fetch
 async function parse(req){try{return await req.json();}catch{return null;}}
 function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
-async function getOrders(env,limit=120){const orders=(await env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT ?').bind(limit).all()).results;const ids=orders.map(o=>o.id);if(!ids.length)return [];const items=(await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at ASC`).bind(...ids).all()).results;const itemIds=items.map(i=>i.id);const modifiers=itemIds.length?(await env.DB.prepare(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(...itemIds).all()).results:[];return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));}
+async function getOrders(env,limit=120){const orders=(await env.DB.prepare("SELECT * FROM orders WHERE status!='cancelled' AND kitchen_completed_at IS NULL ORDER BY created_at DESC LIMIT ?").bind(limit).all()).results;const ids=orders.map(o=>o.id);if(!ids.length)return [];const items=(await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at ASC`).bind(...ids).all()).results;const itemIds=items.map(i=>i.id);const modifiers=itemIds.length?(await env.DB.prepare(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(...itemIds).all()).results:[];return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));}
 
 async function prepareOrderItems(env,items,orderId,now){
  const unique=[...new Set(items.map(x=>x.menu_id))];
@@ -198,6 +198,56 @@ if(menuMatch&&req.method==='PATCH'){
 if(path==='/api/menu'&&req.method==='GET')return json((await env.DB.prepare('SELECT * FROM menu WHERE active=1 ORDER BY sort_order,category,name').all()).results);
 if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate) VALUES(?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8).run();await broadcast(env,'menu',{});return json({id},201);}
 if(path==='/api/orders'&&req.method==='GET')return json(await getOrders(env));
+if(path==='/api/kitchen/categories'&&req.method==='GET'){
+ if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
+ return json((await env.DB.prepare('SELECT name,sort_order FROM menu_categories ORDER BY sort_order,name').all()).results);
+}
+if(path==='/api/kitchen/history'&&req.method==='GET'){
+ if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
+ const u=new URL(req.url),range=u.searchParams.get('range')||'today',query=(u.searchParams.get('q')||'').trim().slice(0,80),page=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page')||'1',10)||1)),size=15;
+ if(!['today','yesterday','all'].includes(range))return json({error:'Invalid range'},400);
+ const now=new Date(),warsawDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ const dayOffset=range==='yesterday'?-1:0;
+ const localDay=new Date(warsawDate+'T12:00:00Z');localDay.setUTCDate(localDay.getUTCDate()+dayOffset);
+ const day=localDay.toISOString().slice(0,10);
+ const dateClause=range==='all'?'':" AND date(kitchen_completed_at, '+1 hour')= ?"; 
+ // Date filtering uses the actual Warsaw calendar boundaries, including DST.
+ const fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'});
+ const matchDate=range==='all'?null:day;
+ const searchClause=query?" AND (table_no LIKE ? OR id LIKE ?)":"";
+ const where="kitchen_completed_at IS NOT NULL AND status!='cancelled'"+searchClause;
+ const args=query?['%'+query+'%','%'+query+'%']:[];
+ // Fetch a bounded recent window and filter Warsaw dates in JS to avoid fixed-offset DST errors.
+ const scanLimit=range==='all'?500:1500;
+ const rows=(await env.DB.prepare('SELECT id,source,table_no,created_at,kitchen_completed_at,paid_at FROM orders WHERE '+where+' ORDER BY kitchen_completed_at DESC LIMIT ?').bind(...args,scanLimit).all()).results;
+ const filtered=matchDate?rows.filter(o=>fmt.format(new Date(o.kitchen_completed_at))===matchDate):rows;
+ const total=filtered.length,selected=filtered.slice((page-1)*size,page*size);
+ const ids=selected.map(o=>o.id);
+ const items=ids.length?(await env.DB.prepare('SELECT id,order_id,name,quantity,is_done FROM order_items WHERE order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY created_at').bind(...ids).all()).results:[];
+ return json({page,size,total,has_more:page*size<total,limited:rows.length===scanLimit,orders:selected.map(o=>({...o,items:items.filter(i=>i.order_id===o.id)}))});
+}
+const kitchenCompleteMatch=path.match(/^\/api\/kitchen\/orders\/([^/]+)\/(complete|reopen)$/);
+if(kitchenCompleteMatch&&req.method==='POST'){
+ if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
+ const [_,id,action]=kitchenCompleteMatch;
+ const order=await env.DB.prepare('SELECT id,status,kitchen_completed_at FROM orders WHERE id=?').bind(id).first();
+ if(!order)return json({error:'Order not found'},404);
+ if(order.status==='cancelled')return json({error:'Cancelled order'},409);
+ const now=new Date().toISOString();
+ if(action==='complete'){
+  if(order.kitchen_completed_at)return json({ok:true,already_completed:true});
+  const result=await env.DB.prepare("UPDATE orders SET kitchen_completed_at=?,updated_at=? WHERE id=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_items WHERE order_id=?) AND NOT EXISTS(SELECT 1 FROM order_items WHERE order_id=? AND is_done=0)").bind(now,now,id,id,id).run();
+  if(result.meta.changes!==1)return json({error:'All dishes must be done before completing this order'},409);
+ }else{
+  if(!order.kitchen_completed_at)return json({ok:true,already_open:true});
+  const result=await env.DB.prepare("UPDATE orders SET kitchen_completed_at=NULL,updated_at=? WHERE id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'").bind(now,id).run();
+  if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
+ }
+ await event(env,id,action==='complete'?'kitchen_completed':'kitchen_reopened',role,{});
+ await broadcast(env,'orders',{id});
+ return json({ok:true});
+}
+
 if(path==='/api/tables'&&req.method==='GET'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
  const active=(await env.DB.prepare("SELECT id,table_no,status,created_at FROM orders WHERE source='dinein' AND paid_at IS NULL AND status!='cancelled' AND table_no IN ("+Array.from({length:20},(_,i)=>"'"+String(i+1).padStart(2,'0')+"'").join(',')+") ORDER BY created_at DESC").all()).results;
@@ -238,9 +288,9 @@ const id=uid(),now=new Date().toISOString();const statements=[env.DB.prepare('IN
 const itemMatch=path.match(/^\/api\/order-items\/([^/]+)\/done$/);
 if(itemMatch&&req.method==='PATCH'){
  if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
-   const item=await env.DB.prepare('SELECT oi.id,oi.order_id,o.status,o.paid_at FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.id=?').bind(itemMatch[1]).first();
+   const item=await env.DB.prepare('SELECT oi.id,oi.order_id,o.status,o.paid_at,o.kitchen_completed_at FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.id=?').bind(itemMatch[1]).first();
   if(!item)return json({error:'Item not found'},404);
-  if(item.status==='cancelled')return json({error:'Cancelled order'},409);
+  if(item.status==='cancelled')return json({error:'Cancelled order'},409);if(item.kitchen_completed_at)return json({error:'Reopen the completed order first'},409);
   const now=new Date().toISOString();
   const updated=await env.DB.prepare('UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END WHERE id=? RETURNING is_done').bind(now,item.id).first();
   if(!updated)return json({error:'Item not found'},404);
@@ -254,7 +304,7 @@ if(itemMatch&&req.method==='PATCH'){
 const statusMatch=path.match(/^\/api\/orders\/([^/]+)\/status$/);
 if(statusMatch&&req.method==='PATCH'){if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!['cooking','done','cancelled'].includes(b.status))return json({error:'Invalid status'},400);if(b.status==='cancelled'&&role!=='admin')return json({error:'Admin only'},403);const id=statusMatch[1],old=await env.DB.prepare('SELECT status,paid_at FROM orders WHERE id=?').bind(id).first();if(!old)return json({error:'Not found'},404);if(old.paid_at&&b.status==='cancelled')return json({error:'Paid ticket cannot be cancelled'},409);if(old.status===b.status)return json({ok:true});const transitions={new:['cooking','cancelled'],cooking:['done','cancelled'],done:[],cancelled:[]};if(!transitions[old.status]?.includes(b.status))return json({error:'Invalid transition'},409);const now=new Date().toISOString();const result=await env.DB.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND status=?').bind(b.status,now,id,old.status).run();if(result.meta.changes!==1)return json({error:'Order changed, refresh'},409);if(b.status==='cancelled')await env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=?').bind(id).run();await event(env,id,'status',role,{from:old.status,to:b.status});await broadcast(env,'orders',{id});return json({ok:true});}
 const addMatch=path.match(/^\/api\/orders\/([^/]+)\/items$/);
-if(addMatch&&req.method==='POST'){if(!allowed(role,'pos'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!Array.isArray(b.items)||!b.items.length||b.items.length>30)return json({error:'Invalid items'},400);const o=await env.DB.prepare('SELECT status,paid_at FROM orders WHERE id=?').bind(addMatch[1]).first();if(!o||o.status==='cancelled'||o.paid_at)return json({error:'Order closed'},409);const keys=[...new Set(b.items.map(x=>x.menu_id))];if(keys.some(x=>typeof x!=='string'))return json({error:'Invalid menu'},400);const rows=(await env.DB.prepare(`SELECT * FROM menu WHERE active=1 AND id IN (${keys.map(()=>'?').join(',')})`).bind(...keys).all()).results;const map=new Map(rows.map(x=>[x.id,x]));if(keys.some(x=>!map.has(x))||b.items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))return json({error:'Invalid items'},400);const now=new Date().toISOString();let stmts;try{stmts=await prepareOrderItems(env,b.items,addMatch[1],now)}catch(e){return json({error:e.message},400)};stmts.push(env.DB.prepare("UPDATE orders SET status='new',updated_at=? WHERE id=?").bind(now,addMatch[1]));stmts.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),addMatch[1],'items_added',role,JSON.stringify({count:b.items.length}),now));await env.DB.batch(stmts);await broadcast(env,'orders',{id:addMatch[1]});return json({ok:true});}
+if(addMatch&&req.method==='POST'){if(!allowed(role,'pos'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!Array.isArray(b.items)||!b.items.length||b.items.length>30)return json({error:'Invalid items'},400);const o=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=?').bind(addMatch[1]).first();if(!o||o.status==='cancelled'||o.paid_at||o.kitchen_completed_at)return json({error:'Order closed'},409);const keys=[...new Set(b.items.map(x=>x.menu_id))];if(keys.some(x=>typeof x!=='string'))return json({error:'Invalid menu'},400);const rows=(await env.DB.prepare(`SELECT * FROM menu WHERE active=1 AND id IN (${keys.map(()=>'?').join(',')})`).bind(...keys).all()).results;const map=new Map(rows.map(x=>[x.id,x]));if(keys.some(x=>!map.has(x))||b.items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))return json({error:'Invalid items'},400);const now=new Date().toISOString();let stmts;try{stmts=await prepareOrderItems(env,b.items,addMatch[1],now)}catch(e){return json({error:e.message},400)};stmts.push(env.DB.prepare("UPDATE orders SET status='new',updated_at=? WHERE id=?").bind(now,addMatch[1]));stmts.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),addMatch[1],'items_added',role,JSON.stringify({count:b.items.length}),now));await env.DB.batch(stmts);await broadcast(env,'orders',{id:addMatch[1]});return json({ok:true});}
 if(path==='/api/events'&&req.method==='GET'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);return json((await env.DB.prepare('SELECT * FROM events ORDER BY created_at DESC LIMIT 200').all()).results);}
 if(path==='/api/ws-diagnostics'&&req.method==='GET'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const response=await room(env).fetch('https://room.internal/diagnostics',{headers:{'x-room-secret':env.AUTH_SECRET}});return json(await response.json(),response.status);}
 if(path==='/api/health'&&req.method==='GET')return json({ok:true,time:new Date().toISOString()});
