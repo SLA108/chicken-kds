@@ -22,7 +22,7 @@ function connect(){
  ws=socket;
  const current=()=>generation===wsGeneration&&ws===socket;
  socket.onopen=()=>{if(!current())return;connected=true;render();refresh();};
- socket.onmessage=e=>{if(!current())return;try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();refresh()}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
+ socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();refresh()}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
  socket.onclose=()=>{if(!current())return;ws=null;connected=false;render();reconnectTimer=setTimeout(()=>{if(token&&generation===wsGeneration)connect()},2500)};
  socket.onerror=()=>{if(!current())return;console.warn('Kitchen WebSocket connection error');};
 }
