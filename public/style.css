@@ -235,3 +235,6 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .kitchen .kds-dish:focus:not(:focus-visible){outline:none;box-shadow:none}
 @media(hover:none){.kitchen .kds-dish:hover:not(.is-done){background:#fff;color:#202020;border-color:#ddd}.kitchen .kds-dish.is-done:hover{background:#dcece3;color:#365a47;border-color:#65ae7a}}
 .kitchen .kds-dish:active{transform:none;filter:none}
+
+/* FOH V2.3 */
+.foh-kitchen-state{font-size:.8rem;font-weight:800;padding:6px 9px;border-radius:7px;background:#dce8fa;color:#214a80}.foh-kitchen-state.cooking{background:#fff1c8;color:#755100}.foh-kitchen-state.ready{background:#d7f4e3;color:#126337}.foh-kitchen-state.waiting{background:#ffe0dd;color:#922b22}.foh-progress{height:8px;background:#e5e7eb;border-radius:20px;overflow:hidden;margin:10px 0 5px}.foh-progress span{display:block;height:100%;background:#37a46b}.foh-ticket details{margin:9px 0}.foh-ticket summary{cursor:pointer;font-weight:600}.foh-payment{font-weight:750}.foh-history-row{padding:12px 4px;border-bottom:1px solid #ddd}.foh-history-row small{display:block;opacity:.75;margin-top:5px}
