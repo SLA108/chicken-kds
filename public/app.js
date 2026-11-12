@@ -9,7 +9,7 @@ function login(){
  app.innerHTML=`<div class="role-login-screen"><section class="role-login-box"><div class="role-brand"><div class="role-brand-mark">C<span>&</span>K</div><h1>Chicken i Kimchi</h1><p>RESTAURANT MANAGEMENT SYSTEM</p></div><h2>${selected?selected.name:'Select your role'}</h2><p class="role-subtitle">${selected?'Enter your PIN to continue':'Select a role to sign in'}</p><div class="role-selection">${choices.map(r=>`<a class="role-choice ${selected?.id===r.id?'role-selected':''}" href="/${r.id}"><span class="role-icon">${r.icon}</span><span class="role-info"><strong>${r.name}</strong><small>${r.desc}</small></span></a>`).join('')}</div>${selected?`<form id="role-login-form" class="role-pin-section"><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN" required><button id="enter" type="submit">Sign in</button><p id="loginerr" class="role-login-error" role="alert"></p></form>`:'<p class="role-login-hint">Each role has its own PIN.</p>'}<div class="role-login-footer">Chicken i Kimchi · Staff Access</div></section></div>`;
  if(!selected)return;const form=document.querySelector('#role-login-form');form.onsubmit=async e=>{e.preventDefault();const btn=document.querySelector('#enter');btn.disabled=true;btn.textContent='Signing in…';try{const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value})});const b=await r.json();if(!r.ok)throw Error(b.error||'Sign-in failed');token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start()}catch(err){document.querySelector('#loginerr').textContent=err.message}finally{btn.disabled=false;btn.textContent='Sign in'}};
 }
-async function refresh(initial=false){try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);menu=m;if(mods)modifierCatalog=mods;if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();lastIds=current;lastItemIds=currentItemIds;orders=o;if(page==='pos'){try{tableState=await api('/tables')}catch(e){console.warn('Table sync failed',e)}}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(e.message==='Unauthorized'){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+async function refresh(initial=false){try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();lastIds=current;lastItemIds=currentItemIds;orders=o;if(page==='pos'){try{tableState=await api('/tables')}catch(e){console.warn('Table sync failed',e)}}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(e.message==='Unauthorized'){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let reconnectTimer=null,wsGeneration=0;
 function disconnect(){wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
 function connect(){
@@ -69,7 +69,89 @@ function saveFields(){const a=document.querySelector('#note'),b=document.querySe
 async function submit(){if(busy)return;saveFields();const items=configuredCart.map(x=>({menu_id:x.menu_id,quantity:x.quantity,option_ids:x.option_ids,note:x.note}));if(!items.length)return;busy=true;try{if(editingOrder){await api('/orders/'+editingOrder+'/items','POST',{items});notify('Additional items sent')}else{await api('/orders','POST',{source:type,table_no:type==='dinein'?table:'',note,items,client_key:pendingKey});notify('Order sent to kitchen')}configuredCart=[];note='';editingOrder='';pendingKey=crypto.randomUUID();fohTab='tickets';await refresh()}catch(e){notify('Submission failed: '+e.message+'. Check open tickets before retrying.')}finally{busy=false}}
 function ticket(o,controls=false){const age=Math.max(0,Math.floor((Date.now()-Date.parse(o.created_at))/60000));return `<article class="ticket ${o.status}"><div class="row"><h3>${esc(o.table_no||sourceName[o.source]||o.source)}</h3><span class="tag ${o.status}">${statusName[o.status]}</span></div><p class="muted small">#${esc(o.id.slice(0,8))} · ${new Date(o.created_at).toLocaleTimeString('pl-PL',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit'})} · ${age} min</p><hr>${o.items.map(i=>`<p class="items">${i.quantity} × ${esc(i.name)} ${(i.modifiers||[]).length?`<small> · ${esc(i.modifiers.map(m=>m.name).join(', '))}</small>`:''}${i.note?`<small>(${esc(i.note)})</small>`:''}</p>`).join('')} ${o.note?`<p class="warning">Note: ${esc(o.note)}</p>`:''}${controls&&o.status!=='done'&&o.status!=='cancelled'&&page==='admin'?`<button class="danger" data-status="${o.id}" data-next="cancelled">Admin cancel</button>`:''}</article>`;}
 function stats(){return `<div class="stats">${['new','cooking','done'].map(s=>`<div class="stat"><b>${orders.filter(o=>o.status===s).length}</b>${statusName[s]}</div>`).join('')}</div>`;}
-function kitchen(){const active=orders.filter(o=>o.status!=='cancelled'&&o.items.some(i=>!i.is_done)).sort((a,b)=>a.created_at.localeCompare(b.created_at));shell(`<div class="panel toolbar"><button id="sound">${beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound'}</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to mark it done. Tap again to undo.</span></div><h2>Kitchen Orders</h2><div class="grid">${active.map(o=>`<article class="ticket"><div class="row"><h3>${esc(o.table_no||sourceName[o.source])}</h3><span class="tag">${o.items.filter(i=>i.is_done).length}/${o.items.length} Done</span></div><p class="muted small">#${esc(o.id.slice(0,8))} · ${new Date(o.created_at).toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit'})}</p>${o.items.map(i=>`<button class="kds-dish ${i.is_done?'is-done':''}" data-item-done="${esc(i.id)}"><span><strong>${i.quantity} × ${esc(i.name)}</strong>${(i.modifiers||[]).length?`<small>${esc(i.modifiers.map(m=>m.name).join(', '))}</small>`:''}${i.note?`<small>${esc(i.note)}</small>`:''}</span><span class="kds-check">${i.is_done?'✓':'○'}</span></button>`).join('')}${o.note?`<p class="warning">Note: ${esc(o.note)}</p>`:''}</article>`).join('')}</div>${active.length?'':'<div class="empty">All dishes completed</div>'}<section class="panel completed-section"><h3>Completed orders · Tap a dish to undo</h3><div class="grid">${orders.filter(o=>o.status!=='cancelled'&&o.items.length&&o.items.every(i=>i.is_done)).slice(0,30).map(o=>`<article class="ticket"><h3>${esc(o.table_no||sourceName[o.source])} · Done</h3>${o.items.map(i=>`<button class="kds-dish is-done" data-item-done="${esc(i.id)}"><strong>${i.quantity} × ${esc(i.name)}</strong><span>✓</span></button>`).join('')}</article>`).join('')||'<p class="muted">No completed orders</p>'}</div></section>`);document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};document.querySelector('#sync').onclick=()=>refresh();document.querySelectorAll('[data-item-done]').forEach(b=>b.onclick=async()=>{if(b.disabled)return;b.disabled=true;try{await api('/order-items/'+b.dataset.itemDone+'/done','PATCH',{});await refresh()}catch(e){notify(e.message);b.disabled=false}})}
+
+let kitchenCategories=[],historyOpen=false,historyRange='today',historyQuery='',historyPage=1,historyResult={orders:[],total:0,page:1,size:15},historyBusy=false,kitchenClock=null,kitchenBusy=new Set();
+const warsawClock=iso=>new Date(iso).toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+function kitchenAge(iso){return Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/1000)||0)}
+function kitchenDuration(seconds){return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
+function kitchenAgeBand(seconds){return seconds<120?'blue':seconds<600?'green':seconds<900?'yellow':'red'}
+function kitchenSortItems(items){
+ const categories=new Map(kitchenCategories.map(c=>[c.name,Number(c.sort_order)]));
+ const dishes=new Map(menu.map(m=>[m.id,m]));
+ return [...items].sort((a,b)=>{
+  const am=dishes.get(a.menu_id),bm=dishes.get(b.menu_id);
+  const ac=categories.get(am?.category)??999999,bc=categories.get(bm?.category)??999999;
+  return ac-bc||(am?.sort_order??999999)-(bm?.sort_order??999999)||String(a.created_at).localeCompare(String(b.created_at))||String(a.id).localeCompare(String(b.id));
+ });
+}
+async function loadKitchenHistory(){
+ if(!historyOpen||historyBusy)return;
+ historyBusy=true;
+ try{historyResult=await api('/kitchen/history?range='+encodeURIComponent(historyRange)+'&page='+historyPage+'&q='+encodeURIComponent(historyQuery));}
+ catch(e){notify('History: '+e.message)}finally{historyBusy=false}
+ kitchen();
+}
+function updateKitchenClock(){
+ document.querySelectorAll('[data-kitchen-age]').forEach(el=>{
+  const age=kitchenAge(el.dataset.kitchenAge);
+  el.textContent=kitchenDuration(age);
+  const head=el.closest('.kds-order-head');if(head)head.dataset.ageBand=kitchenAgeBand(age);
+ });
+}
+function kitchen(){
+ const active=orders.filter(o=>o.status!=='cancelled'&&!o.kitchen_completed_at&&o.items.length).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+ const card=o=>{
+  const done=o.items.filter(i=>i.is_done).length,ready=done===o.items.length;
+  const items=kitchenSortItems(o.items);
+  return '<article class="ticket kds-order" data-order-id="'+esc(o.id)+'">'+
+   '<div class="kds-order-head" data-age-band="'+kitchenAgeBand(kitchenAge(o.created_at))+'">'+
+    '<div class="kds-head-row"><h3>'+esc(o.table_no||sourceName[o.source])+'</h3><strong class="kds-age" data-kitchen-age="'+esc(o.created_at)+'">'+kitchenDuration(kitchenAge(o.created_at))+'</strong></div>'+
+    '<div class="kds-head-row"><span>Received '+warsawClock(o.created_at)+'</span><span>'+done+'/'+o.items.length+' Done</span></div>'+
+    '<div class="kds-head-id">#'+esc(o.id.slice(0,8))+(o.paid_at?' · Paid':'')+'</div>'+
+   '</div>'+
+   '<button class="kds-complete" data-kitchen-complete="'+esc(o.id)+'" '+(ready?'':'disabled')+'>'+(ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+done+'/'+o.items.length)+'</button>'+
+   items.map(i=>'<button class="kds-dish '+(i.is_done?'is-done':'')+'" data-item-done="'+esc(i.id)+'"><span><strong>'+i.quantity+' × '+esc(i.name)+'</strong>'+
+     ((i.modifiers||[]).length?'<small>'+esc(i.modifiers.map(m=>m.name).join(', '))+'</small>':'')+
+     (i.note?'<small>'+esc(i.note)+'</small>':'')+
+     (new Date(i.created_at).getTime()>new Date(o.created_at).getTime()+30000?'<small class="kds-added">ADDED '+warsawClock(i.created_at)+'</small>':'')+
+    '</span><span class="kds-check">'+(i.is_done?'✓':'○')+'</span></button>').join('')+
+   (o.note?'<p class="warning">Note: '+esc(o.note)+'</p>':'')+'</article>';
+ };
+ shell('<div class="panel toolbar"><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
+ '<h2>Active Orders · '+active.length+'</h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')+
+ '<section class="panel completed-section kds-history"><div class="row"><h3>Completed Orders</h3><button class="alt" id="kds-history-toggle">'+(historyOpen?'Hide history':'View history')+'</button></div>'+
+ (historyOpen?'<div class="toolbar"><select id="kds-history-range"><option value="today" '+(historyRange==='today'?'selected':'')+'>Today</option><option value="yesterday" '+(historyRange==='yesterday'?'selected':'')+'>Yesterday</option><option value="all" '+(historyRange==='all'?'selected':'')+'>All</option></select><input id="kds-history-search" placeholder="Table / order ID" value="'+esc(historyQuery)+'"><button class="alt" id="kds-history-search-button">Search</button></div>'+
+ '<p class="muted small">'+historyResult.total+' completed'+(historyResult.limited?' (recent history limit)':'')+'</p>'+
+ '<div class="kds-history-list">'+historyResult.orders.map(o=>'<div class="kds-history-row"><div><strong>'+esc(o.table_no||sourceName[o.source])+'</strong><small>#'+esc(o.id.slice(0,8))+' · '+warsawClock(o.kitchen_completed_at)+' · '+o.items.length+' dishes</small><details><summary>View dishes</summary>'+o.items.map(i=>'<div>'+i.quantity+' × '+esc(i.name)+'</div>').join('')+'</details></div><button class="alt" data-kitchen-reopen="'+esc(o.id)+'">Reopen</button></div>').join('')+
+ (historyResult.orders.length?'':'<p class="muted">No completed orders found</p>')+'</div>'+
+ '<div class="toolbar"><button class="alt" id="kds-history-prev" '+(historyPage<=1?'disabled':'')+'>Previous</button><span>Page '+historyPage+'</span><button class="alt" id="kds-history-next" '+(!historyResult.has_more?'disabled':'')+'>Next</button></div>':'<p class="muted small">Completed orders are archived here. Open only when needed.</p>')+'</section>');
+ if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);
+ document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
+ document.querySelector('#sync').onclick=()=>refresh();
+ document.querySelectorAll('[data-item-done]').forEach(btn=>btn.onclick=async()=>{
+  if(btn.disabled)return;btn.disabled=true;
+  try{await api('/order-items/'+btn.dataset.itemDone+'/done','PATCH',{});await refresh()}catch(e){notify(e.message);btn.disabled=false}
+ });
+ document.querySelectorAll('[data-kitchen-complete]').forEach(btn=>btn.onclick=async()=>{
+  if(btn.disabled)return;btn.disabled=true;btn.textContent='Completing...';
+  try{await api('/kitchen/orders/'+btn.dataset.kitchenComplete+'/complete','POST',{});await refresh();if(historyOpen)await loadKitchenHistory()}
+  catch(e){notify(e.message);btn.disabled=false;btn.textContent='✓ COMPLETE ORDER'}
+ });
+ document.querySelector('#kds-history-toggle').onclick=()=>{historyOpen=!historyOpen;kitchen();if(historyOpen)loadKitchenHistory()};
+ if(historyOpen){
+  document.querySelector('#kds-history-range').onchange=e=>{historyRange=e.target.value;historyPage=1;loadKitchenHistory()};
+  document.querySelector('#kds-history-search-button').onclick=()=>{historyQuery=document.querySelector('#kds-history-search').value.trim();historyPage=1;loadKitchenHistory()};
+  document.querySelector('#kds-history-search').onkeydown=e=>{if(e.key==='Enter')document.querySelector('#kds-history-search-button').click()};
+  document.querySelector('#kds-history-prev').onclick=()=>{historyPage=Math.max(1,historyPage-1);loadKitchenHistory()};
+  document.querySelector('#kds-history-next').onclick=()=>{historyPage++;loadKitchenHistory()};
+  document.querySelectorAll('[data-kitchen-reopen]').forEach(btn=>btn.onclick=async()=>{
+   if(!confirm('Reopen this completed order in the kitchen?'))return;
+   btn.disabled=true;
+   try{await api('/kitchen/orders/'+btn.dataset.kitchenReopen+'/reopen','POST',{});await refresh();await loadKitchenHistory()}
+   catch(e){notify(e.message);btn.disabled=false}
+  });
+ }
+}
 function bindStatus(){document.querySelectorAll('[data-status]').forEach(b=>b.onclick=async()=>{const id=b.dataset.status,next=b.dataset.next;if(next==='cancelled'&&!confirm('Cancel this order?'))return;try{await api('/orders/'+id+'/status','PATCH',{status:next});await refresh()}catch(e){notify(e.message)}});}
 let adminModifiers={groups:[],options:[],links:[]},adminMenu=[],adminCategories=[],adminEditing=null,adminImage='',adminTab='menu',adminFilter='',adminUploadBusy=false;
 async function loadAdminMenu(){const [items,cats,mods]=await Promise.all([api('/menu/all'),api('/categories'),api('/modifiers')]);adminMenu=items;adminCategories=cats;adminModifiers=mods;}
