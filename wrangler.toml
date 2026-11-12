@@ -19,3 +19,7 @@ new_sqlite_classes = ["OrderRoom"]
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+[[r2_buckets]]
+binding = "MENU_IMAGES"
+bucket_name = "chicken-kds-images"
