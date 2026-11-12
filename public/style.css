@@ -112,3 +112,5 @@ body:has(.admin-head){background:#f5f6f8}
 .modifier-choice span{flex:1}
 .modifier-choice b{white-space:nowrap}
 @media(max-width:600px){.item-dialog-backdrop{align-items:flex-end;padding:0}.item-dialog{width:100%;max-height:94dvh;border-radius:18px 18px 0 0}}
+
+.modifier-dish-list{max-height:380px;overflow:auto;border:1px solid #dbe3ef;border-radius:10px;background:white;margin:10px 0}.modifier-dish-list .modifier-link{margin:0}.modifier-dish-list .modifier-link span{flex:1}.modifier-dish-list .modifier-link small{margin-left:auto}.modifier-dish-list .modifier-link:hover{background:#f8fafc}
