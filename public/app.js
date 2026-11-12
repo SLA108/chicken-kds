@@ -76,12 +76,21 @@ function kitchenAge(iso){return Math.max(0,Math.floor((Date.now()-new Date(iso).
 function kitchenDuration(seconds){return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
 function kitchenAgeBand(seconds){return seconds<120?'blue':seconds<600?'green':seconds<900?'yellow':'red'}
 function kitchenSortItems(items){
- const categories=new Map(kitchenCategories.map(c=>[c.name,Number(c.sort_order)]));
+ const normalized=s=>String(s||'').trim().toLocaleLowerCase();
+ const categories=new Map(kitchenCategories.map(c=>[normalized(c.name),Number(c.sort_order)]));
  const dishes=new Map(menu.map(m=>[m.id,m]));
+ // Category order is controlled by Back Office; keep a stable fallback for legacy items.
+ const fallback=new Map(['sałatki','salatki','przystawki','bokkeum'].map((name,i)=>[name,i]));
+ const rank=m=>{
+  const category=normalized(m?.category);
+  const configured=categories.get(category);
+  return Number.isFinite(configured)?configured:100000+(fallback.get(category)??1000);
+ };
+ const order=m=>Number.isFinite(Number(m?.sort_order))?Number(m.sort_order):999999;
  return [...items].sort((a,b)=>{
   const am=dishes.get(a.menu_id),bm=dishes.get(b.menu_id);
-  const ac=categories.get(am?.category)??999999,bc=categories.get(bm?.category)??999999;
-  return ac-bc||(am?.sort_order??999999)-(bm?.sort_order??999999)||String(a.created_at).localeCompare(String(b.created_at))||String(a.id).localeCompare(String(b.id));
+  return rank(am)-rank(bm)||order(am)-order(bm)||
+   String(a.created_at).localeCompare(String(b.created_at))||String(a.id).localeCompare(String(b.id));
  });
 }
 async function loadKitchenHistory(){
