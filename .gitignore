@@ -1,0 +1,11 @@
+
+# macOS
+.DS_Store
+
+# Cloudflare Wrangler
+.wrangler/
+
+# Local environment secrets
+.dev.vars
+.env
+.env.*
