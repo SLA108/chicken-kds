@@ -134,4 +134,10 @@ function admin(){
 }
 function scanner(){shell(`<div class="panel"><h2>Delivery Scanner (coming soon)</h2><p>Future support for delivery-platform order scanning.</p><div class="warning"><strong>Not available: </strong>Scanning and AI recognition are not enabled in this version.</div><p class="muted">Enter delivery orders manually in the POS for now.</p><a href="/pos">Go to POS</a></div>`);}
 async function start(){try{await refresh(true);connect()}catch(e){notify(e.message)}}
-if(token)start();else login();setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);setInterval(()=>{if(token)refresh()},60000);
+if(token)start();else login();setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
+// Poll every 5s as a fallback; WebSocket still refreshes immediately.
+let kitchenSyncBusy=false;
+setInterval(async()=>{if(!token||page!=='kitchen'||document.hidden||kitchenSyncBusy)return;kitchenSyncBusy=true;try{await refresh()}finally{kitchenSyncBusy=false}},5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&token&&page==='kitchen')refresh()});
+window.addEventListener('focus',()=>{if(token&&page==='kitchen')refresh()});
+setInterval(()=>{if(token&&page!=='kitchen')refresh()},60000);
