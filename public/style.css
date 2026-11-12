@@ -126,3 +126,36 @@ body:has(.foh-head){background:#f6f7f9}
 .foh-cart-panel{position:sticky;top:15px}.foh-cart-line{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e9edf2;padding:12px 0}.foh-cart-line small{display:block;color:#7b8490;font-size:11px;margin-top:5px}.foh-cart-line>div:last-child{text-align:right}.foh-cart-line button{display:block;margin:6px 0 0 auto;padding:6px 9px;font-size:11px}.foh-cart-panel>button{width:100%;margin-top:9px}.foh-cart-panel label{display:block;margin-top:15px;margin-bottom:6px;font-size:13px}.foh-checkout h1{font-size:38px;margin:15px 0}.foh-checkout select{margin:10px 0 16px}.foh-checkout>button{width:100%}
 @media(max-width:850px){.foh-table-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.foh-cart-panel{position:static}}
 @media(max-width:560px){.foh-head{align-items:flex-start}.foh-count{font-size:10px;padding:8px}.foh-workspace{padding:14px}.foh-table-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.foh-table{min-height:94px;padding:11px}.foh-table strong{font-size:23px}.foh-tabs button{padding:12px 10px;font-size:12px}.foh-ticket-grid{grid-template-columns:1fr}}
+
+/* POS V2.2: low-glare, staff-friendly slate palette; isolated from Kitchen/Admin */
+body:has(.foh-head){background:#17212d;color:#e6edf4}
+body:has(.foh-head) .panel{background:#243141;border-color:#394a5d;color:#e6edf4}
+body:has(.foh-head) .foh-head p,body:has(.foh-head) .foh-title p,body:has(.foh-head) .muted{color:#b5c2d0}
+body:has(.foh-head) .foh-head small{color:#e3a77c}
+body:has(.foh-head) .foh-count{background:#29394a;color:#e0e8f1;border-color:#44576a}
+body:has(.foh-head) .foh-tabs{border-color:#405164}
+body:has(.foh-head) .foh-tabs button{color:#b9c7d6}
+body:has(.foh-head) .foh-tabs button.active{color:#fff;border-color:#e5a26e;background:#2d3b4c}
+body:has(.foh-head) .foh-table{background:#2e3e50;color:#eef3f8;border-color:#506275}
+body:has(.foh-head) .foh-table small{color:#b6c4d2}
+body:has(.foh-head) .foh-table span{color:#9ed4b2}
+body:has(.foh-head) .foh-table.occupied{background:#514133;border-color:#a7774f}
+body:has(.foh-head) .foh-table.occupied span{color:#f4c18e}
+body:has(.foh-head) .foh-ticket{background:#2c3a4b;border-color:#495c6e;color:#eaf1f8}
+body:has(.foh-head) .foh-ticket>small,body:has(.foh-head) .foh-ticket-item small{color:#b9c6d3}
+body:has(.foh-head) .menu button{background:#304154;border-color:#526478;color:#f1f5f9}
+body:has(.foh-head) .chips button{background:#3a4b5e;color:#e6edf4}
+body:has(.foh-head) .chips button.selected{background:#3864b3;color:#fff}
+body:has(.foh-head) input,body:has(.foh-head) select,body:has(.foh-head) textarea{background:#334558;color:#f4f7fb;border-color:#586b80}
+body:has(.foh-head) .foh-cart-line{border-color:#405265}
+body:has(.foh-head) .foh-cart-line small{color:#b8c5d2}
+body:has(.foh-head) button.alt{background:#42556a;color:#f3f7fa}
+body:has(.foh-head) .foh-ticket h3{margin:14px 0}
+.foh-ticket-items{margin:15px 0 4px;border-top:1px solid #4a5b6e}
+.foh-ticket-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #46576a;font-size:13px}
+.foh-ticket-item strong{font-weight:650}
+.foh-ticket-item small{display:block;margin-top:4px;line-height:1.4}
+.foh-item-status{flex:none;font-size:11px;color:#c9d3df}
+.foh-ticket-note{font-size:12px;color:#f1c9a2}
+.foh-back-top{white-space:nowrap}
+@media(max-width:650px){.foh-title{align-items:flex-start;flex-wrap:wrap}.foh-back-top{width:100%}}
