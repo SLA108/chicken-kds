@@ -119,11 +119,17 @@ function kitchen(){
     '<div class="kds-head-id">#'+esc(o.id.slice(0,8))+(o.paid_at?' · Paid':'')+'</div>'+
    '</div>'+
    '<button class="kds-complete" data-kitchen-complete="'+esc(o.id)+'" '+(ready?'':'disabled')+'>'+(ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+done+'/'+o.items.length)+'</button>'+
-   items.map(i=>'<button class="kds-dish '+(i.is_done?'is-done':'')+'" data-item-done="'+esc(i.id)+'"><span><strong>'+i.quantity+' × '+esc(i.name)+'</strong>'+
+   items.map((i,index)=>{const dish=menu.find(m=>m.id===i.menu_id);
+    const category=String(dish?.category||'Other').trim()||'Other';
+    const previous=index?menu.find(m=>m.id===items[index-1].menu_id):null;
+    const previousCategory=String(previous?.category||'Other').trim()||'Other';
+    const categoryHeading=index===0||category!==previousCategory?'<div class="kds-category">'+esc(category)+'</div>':'';
+    return categoryHeading+'<button class="kds-dish '+(i.is_done?'is-done':'')+'" data-item-done="'+esc(i.id)+'"><span><span class="kds-dish-name">'+i.quantity+' × '+esc(i.name)+'</span>'+
      ((i.modifiers||[]).length?'<small>'+esc(i.modifiers.map(m=>m.name).join(', '))+'</small>':'')+
      (i.note?'<small>'+esc(i.note)+'</small>':'')+
      (new Date(i.created_at).getTime()>new Date(o.created_at).getTime()+30000?'<small class="kds-added">ADDED '+warsawClock(i.created_at)+'</small>':'')+
-    '</span><span class="kds-check">'+(i.is_done?'✓':'○')+'</span></button>').join('')+
+    '</span><span class="kds-check">'+(i.is_done?'✓':'○')+'</span></button>';
+   }).join('')+
    (o.note?'<p class="warning">Note: '+esc(o.note)+'</p>':'')+'</article>';
  };
  shell('<div class="panel toolbar"><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
