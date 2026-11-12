@@ -174,3 +174,36 @@ body:has(.foh-head) .item-dialog-backdrop{background:#07101cc9}
 
 /* POS notifications: low-glare readable toast (appended to body outside POS root) */
 body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6b839b;box-shadow:0 12px 34px #0007;border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;line-height:1.5;max-width:min(380px,calc(100vw - 30px));overflow-wrap:anywhere}
+
+/* Kitchen V2.2: high-contrast low-glare header, wet-hand touch targets */
+.kitchen .kds-order{background:#202b3a;border:1px solid #405064;padding:10px;color:#f1f5f9}
+.kitchen .kds-order-head{border-radius:11px;padding:14px 15px;color:#f8fafc;background:#24446a;transition:background-color .35s}
+.kitchen .kds-order-head[data-age-band=blue]{background:#24446a}
+.kitchen .kds-order-head[data-age-band=green]{background:#205344}
+.kitchen .kds-order-head[data-age-band=yellow]{background:#635122}
+.kitchen .kds-order-head[data-age-band=red]{background:#642d34}
+.kitchen .kds-head-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}
+.kitchen .kds-head-row h3{font-size:1.45rem;margin:0}
+.kitchen .kds-age{font-size:1.55rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kitchen .kds-head-row span{font-size:.9rem;font-weight:600}
+.kitchen .kds-head-id{font-size:.78rem;opacity:.82}
+.kitchen .kds-complete{display:block;width:100%;min-height:70px;margin:12px 0 14px;background:#176c46;color:white;font-size:1.1rem;font-weight:800;border-radius:12px;touch-action:manipulation}
+.kitchen .kds-complete:disabled{background:#3e4a59;color:#d1d5db;opacity:1}
+.kitchen .kds-dish{min-height:88px;margin:12px 0;padding:17px 16px;gap:12px;border-radius:12px;touch-action:manipulation}
+.kitchen .kds-dish.is-done{background:#dcece3;color:#365a47;border-color:#65ae7a}
+.kitchen .kds-check{min-width:52px;min-height:52px;display:grid;place-items:center;background:#cbd5e1;color:#334155;border-radius:12px;font-size:2rem;margin-left:0}
+.kitchen .kds-dish.is-done .kds-check{background:#176c46;color:#fff}
+.kitchen .kds-added{color:#a34b18;font-weight:800}
+.kitchen .kds-history{background:#202b3a;color:#f1f5f9;border-color:#405064}
+.kitchen .kds-history .row{justify-content:space-between;align-items:center;gap:12px}
+.kitchen .kds-history .row button{width:auto;margin:0;min-height:52px}
+.kitchen .kds-history input{background:#334155;color:#fff;border-color:#64748b;max-width:240px}
+.kitchen .kds-history select{background:#334155;color:#fff;border-color:#64748b}
+.kitchen .kds-history-list{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.kitchen .kds-history-row{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#2b3a4d;padding:12px;border-radius:10px}
+.kitchen .kds-history-row small{display:block;color:#cbd5e1;margin:4px 0}
+.kitchen .kds-history-row button{width:auto;min-height:52px;min-width:100px}
+.kitchen .kds-history-row details{font-size:.9rem;margin-top:8px}
+.kitchen .kds-history-row summary{cursor:pointer;padding:5px 0}
+.kitchen .kds-history-row details div{padding:3px 0}
+@media(max-width:600px){.kitchen .kds-history-row{align-items:flex-start;flex-direction:column}.kitchen .kds-history-row button{width:100%}}
