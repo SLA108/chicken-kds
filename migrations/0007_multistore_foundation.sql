@@ -3,7 +3,7 @@
 -- BACK UP D1 BEFORE RUNNING. Run this migration ONCE.
 -- This migration does NOT enable multi-store operation: API, WebSocket, table
 -- occupancy and role authorization remain single-store until phase 2.
--- Existing data is assigned to the legacy store, never silently reassigned.
+-- Existing historical orders belong to Test Store, confirmed by operator.
 CREATE TABLE IF NOT EXISTS stores (
   id TEXT PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
@@ -12,7 +12,12 @@ CREATE TABLE IF NOT EXISTS stores (
   created_at TEXT NOT NULL
 );
 INSERT OR IGNORE INTO stores(id,code,name,active,created_at)
-VALUES ('legacy-primary','LEGACY','Existing Store - verify before activation',1,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+VALUES ('legacy-primary','TEST','Test Store',1,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+-- These are planned stores only; they are inactive until store-aware API isolation is complete.
+INSERT OR IGNORE INTO stores(id,code,name,active,created_at) VALUES
+ ('store-slow','SLOW','Słowackiego',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ ('store-srod','SROD','Śródmieście',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ ('store-gdy','GDY','Gdynia',0,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 
 ALTER TABLE orders ADD COLUMN store_id TEXT NOT NULL DEFAULT 'legacy-primary' REFERENCES stores(id);
 ALTER TABLE payments ADD COLUMN store_id TEXT NOT NULL DEFAULT 'legacy-primary' REFERENCES stores(id);
