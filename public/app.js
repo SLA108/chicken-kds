@@ -64,7 +64,7 @@ if(fohTab==='history'){
  document.querySelector('#pos-history-prev').onclick=()=>{posHistoryPage--;loadPosHistory()};
  document.querySelector('#pos-history-next').onclick=()=>{posHistoryPage++;loadPosHistory()};
 }
-document.querySelectorAll('[data-release-table]').forEach(btn=>btn.onclick=async()=>{if(!confirm('Release table? This keeps the order and payment.'))return;btn.disabled=true;try{await api('/orders/'+btn.dataset.releaseTable+'/release-table','POST',{});await refresh()}catch(e){notify(e.message);btn.disabled=false}});
+document.querySelectorAll('[data-release-table]').forEach(btn=>btn.onclick=()=>showReleaseTable(btn.dataset.releaseTable));
 document.querySelectorAll('[data-table-no]').forEach(b=>b.onclick=()=>{const o=tableTicket(b.dataset.tableNo);if(o?.paid_at){fohTab='tickets';pos();return}selectTable(b.dataset.tableNo)});
 document.querySelectorAll('[data-open-ticket]').forEach(b=>b.onclick=()=>selectTicket(b.dataset.openTicket));
 document.querySelectorAll('[data-checkout]').forEach(b=>b.onclick=()=>showCheckout(b.dataset.checkout));
@@ -78,6 +78,46 @@ const leaveOrder=()=>{if(configuredCart.length&&!confirm('Discard the current un
 document.querySelector('#submit').onclick=submit;
 document.querySelector('#checkout-selected')?.addEventListener('click',()=>showCheckout(editingOrder));
 updateCartView();if(itemDialog)showItemDialog();
+}
+function showReleaseTable(id){
+ const o=activeTickets().find(x=>x.id===id&&x.source==='dinein'&&x.table_occupied);
+ if(!o)return notify('Table is no longer occupied. Refresh the page.');
+ document.querySelector('#foh-release-modal')?.remove();
+ const paid=!!o.paid_at,ready=!!o.kitchen_completed_at;
+ const modal=document.createElement('div');
+ modal.id='foh-release-modal';
+ modal.className='foh-release-backdrop';
+ modal.innerHTML='<section class="foh-release-dialog" role="dialog" aria-modal="true" aria-labelledby="foh-release-title">'+
+  '<div class="foh-release-header"><div class="foh-release-symbol" aria-hidden="true">✓</div><div><h2 id="foh-release-title">Release Table '+esc(o.table_no)+'?</h2><p>Confirm this table is ready for the next guest.</p></div></div>'+
+  '<div class="foh-release-details"><div><span>Payment status</span><strong class="'+(paid?'foh-release-paid':'foh-release-unpaid')+'">'+(paid?'PAID':'UNPAID')+'</strong></div>'+
+  '<div><span>Order total</span><strong>'+money(ticketTotal(o))+'</strong></div>'+
+  '<div><span>Kitchen status</span><strong>'+(ready?'READY':(o.items||[]).some(i=>i.is_done)?'COOKING':'NOT READY')+'</strong></div></div>'+
+  (!paid?'<div class="foh-release-warning">⚠ This order has not been paid. Releasing the table does not collect payment or close the order.</div>':'')+
+  '<p class="foh-release-note">The table will become available. The order and payment history will be preserved.</p>'+
+  '<p class="foh-release-error" id="foh-release-error" role="alert" hidden></p>'+
+  '<div class="foh-release-actions"><button type="button" class="foh-release-cancel" id="foh-release-cancel">Cancel</button><button type="button" class="foh-release-confirm" id="foh-release-confirm">✓ Release Table</button></div>'+
+  '</section>';
+ document.body.appendChild(modal);
+ const cancel=modal.querySelector('#foh-release-cancel'),confirmButton=modal.querySelector('#foh-release-confirm'),error=modal.querySelector('#foh-release-error');
+ const close=()=>{modal.remove();document.removeEventListener('keydown',onKey)};
+ const onKey=e=>{if(e.key==='Escape'&&!confirmButton.disabled)close()};
+ document.addEventListener('keydown',onKey);
+ cancel.onclick=close;
+ modal.onclick=e=>{if(e.target===modal&&!confirmButton.disabled)close()};
+ confirmButton.onclick=async()=>{
+  if(confirmButton.disabled)return;
+  confirmButton.disabled=true;cancel.disabled=true;confirmButton.textContent='Releasing…';error.hidden=true;
+  try{
+   await api('/orders/'+id+'/release-table','POST',{});
+   close();
+   notify('Table '+o.table_no+' released · Now available');
+   await refresh();
+  }catch(e){
+   error.textContent='Unable to release table: '+e.message;error.hidden=false;
+   confirmButton.disabled=false;cancel.disabled=false;confirmButton.textContent='✓ Release Table';
+  }
+ };
+ cancel.focus();
 }
 function showCheckout(id){const o=activeTickets().find(x=>x.id===id);if(!o)return notify('Ticket already closed');checkoutId=id;document.querySelector('#foh-checkout-modal')?.remove();const modal=document.createElement('div');modal.id='foh-checkout-modal';modal.className='item-dialog-backdrop';modal.innerHTML='<section class="item-dialog foh-checkout" role="dialog" aria-modal="true"><div class="row"><h2>Checkout</h2><button class="alt" id="checkout-cancel">✕</button></div><p>'+(o.source==='dinein'?'Table '+esc(o.table_no):esc(sourceName[o.source]))+'</p><h1>'+money(ticketTotal(o))+'</h1><p class="muted">Confirm payment received. Table remains occupied until Release Table is clicked.</p><label>Payment method</label><select id="checkout-method"><option value="card">Card</option><option value="cash">Cash</option><option value="other">Other</option></select><button id="checkout-confirm">Confirm payment</button></section>';document.body.append(modal);document.querySelector('#checkout-cancel').onclick=()=>modal.remove();document.querySelector('#checkout-confirm').onclick=async()=>{const btn=document.querySelector('#checkout-confirm');btn.disabled=true;try{await api('/orders/'+id+'/checkout','POST',{method:document.querySelector('#checkout-method').value});modal.remove();notify('Payment recorded · Table not released');if(editingOrder===id){editingOrder='';configuredCart=[];fohTab='tickets'}await refresh()}catch(e){notify('Checkout failed: '+e.message);btn.disabled=false}}}
 
