@@ -355,6 +355,20 @@ if(path==='/api/orders'&&req.method==='POST'){if(!allowed(role,'pos'))return jso
  if(occupied)return json({error:'Table already has an open ticket',order_id:occupied.id},409);
 }
 const id=uid(),now=new Date().toISOString();const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,b.source,String(b.table_no||'').slice(0,30),'new',String(b.note||'').slice(0,500),now,now,role,b.client_key)];if(b.source==='dinein')statements.push(env.DB.prepare('INSERT INTO table_occupancy(table_no,order_id,created_at) VALUES(?,?,?)').bind(b.table_no,id,now));try{statements.push(...await prepareOrderItems(env,b.items,id,now));}catch(e){return json({error:e.message},400);}statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',role,'{}',now));statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created','{}',now));try{await env.DB.batch(statements);}catch(e){console.error('ORDER_CREATE_D1_ERROR:',e?.message,e?.stack);const dup=await env.DB.prepare('SELECT id FROM orders WHERE client_key=?').bind(b.client_key).first();if(dup)return json({id:dup.id,duplicate:true});if(b.source==='dinein'&&String(e).includes('UNIQUE'))return json({error:'Table already occupied; refresh'},409);throw e;}await broadcast(env,'orders',{id});return json({id},201);}
+if(path==='/api/pos/pickups'&&req.method==='GET'){
+ if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
+ const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").all()).results;
+ return json({items:rows});
+}
+const pickupMatch=path.match(/^\/api\/pos\/pickups\/([^/]+)\/ack$/);
+if(pickupMatch&&req.method==='POST'){
+ if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
+ const now=new Date().toISOString();
+ const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE id=? AND is_done=1 AND picked_up_at IS NULL AND order_id IN (SELECT id FROM orders WHERE status!='cancelled')").bind(now,pickupMatch[1]).run();
+ if(!result.meta.changes)return json({error:'Dish is already picked up or no longer ready'},409);
+ await broadcast(env,'pickup',{item_id:pickupMatch[1]});
+ return json({ok:true});
+}
 const itemMatch=path.match(/^\/api\/order-items\/([^/]+)\/done$/);
 if(itemMatch&&req.method==='PATCH'){
  if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
@@ -362,14 +376,14 @@ if(itemMatch&&req.method==='PATCH'){
   if(!item)return json({error:'Item not found'},404);
   if(item.status==='cancelled')return json({error:'Cancelled order'},409);if(item.kitchen_completed_at)return json({error:'Reopen the completed order first'},409);
   const now=new Date().toISOString();
-  const updated=await env.DB.prepare('UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END WHERE id=? RETURNING is_done').bind(now,item.id).first();
+  const updated=await env.DB.prepare('UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END,picked_up_at=NULL WHERE id=? RETURNING is_done').bind(now,item.id).first();
   if(!updated)return json({error:'Item not found'},404);
   const next=updated.is_done;
   await env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),item.order_id,next?'item_done':'item_undone',role,JSON.stringify({item_id:item.id}),now).run();
   const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) done FROM order_items WHERE order_id=?').bind(item.order_id).first();
   const newStatus=summary.total===summary.done?'done':'new';
   await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=? AND status!='cancelled'").bind(newStatus,now,item.order_id).run();
-  await broadcast(env,'orders',{id:item.order_id,item_id:item.id});return json({ok:true,is_done:next,order_status:newStatus});
+  await broadcast(env,'orders',{id:item.order_id,item_id:item.id});await broadcast(env,'pickup',{item_id:item.id,ready:!!next});return json({ok:true,is_done:next,order_status:newStatus});
 }
 const statusMatch=path.match(/^\/api\/orders\/([^/]+)\/status$/);
 if(statusMatch&&req.method==='PATCH'){if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!['cooking','done','cancelled'].includes(b.status))return json({error:'Invalid status'},400);if(b.status==='cancelled'&&role!=='admin')return json({error:'Admin only'},403);const id=statusMatch[1],old=await env.DB.prepare('SELECT status,paid_at FROM orders WHERE id=?').bind(id).first();if(!old)return json({error:'Not found'},404);if(old.paid_at&&b.status==='cancelled')return json({error:'Paid ticket cannot be cancelled'},409);if(old.status===b.status)return json({ok:true});const transitions={new:['cooking','cancelled'],cooking:['done','cancelled'],done:[],cancelled:[]};if(!transitions[old.status]?.includes(b.status))return json({error:'Invalid transition'},409);const now=new Date().toISOString();const result=await env.DB.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND status=?').bind(b.status,now,id,old.status).run();if(result.meta.changes!==1)return json({error:'Order changed, refresh'},409);if(b.status==='cancelled')await env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=?').bind(id).run();await event(env,id,'status',role,{from:old.status,to:b.status});await broadcast(env,'orders',{id});return json({ok:true});}
