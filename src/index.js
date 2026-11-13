@@ -289,17 +289,40 @@ if(posDetailMatch&&req.method==='GET'){
 }
 if(path==='/api/pos/history'&&req.method==='GET'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const u=new URL(req.url),range=u.searchParams.get('range')||'today',q=(u.searchParams.get('q')||'').trim().slice(0,80),page=Math.max(1,parseInt(u.searchParams.get('page')||'1',10)||1),size=15;
- if(!['today','yesterday','all'].includes(range))return json({error:'Invalid range'},400);
- const fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'});
- const today=fmt.format(new Date()),base=new Date(today+'T12:00:00Z');
- if(range==='yesterday')base.setUTCDate(base.getUTCDate()-1);
- const day=base.toISOString().slice(0,10);
+ const u=new URL(req.url),range=u.searchParams.get('range')||'today',method=u.searchParams.get('method')||'all',q=(u.searchParams.get('q')||'').trim().slice(0,80);
+ const page=Math.max(1,Math.min(100000,Number.parseInt(u.searchParams.get('page')||'1',10)||1)),size=15;
+ if(!['today','yesterday','custom','all'].includes(range)||!['all','cash','card','other'].includes(method))return json({error:'Invalid filters'},400);
+ const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T12:00:00Z'))&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;
+ const dateFmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'});
+ const warsawDay=d=>{const parts=Object.fromEntries(dateFmt.formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return parts.year+'-'+parts.month+'-'+parts.day};
+ const shiftDay=(day,days)=>{const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)};
+ // Convert a Warsaw midnight to UTC using the timezone's actual offset (including DST).
+ const midnightUtc=day=>{
+  const target=Date.parse(day+'T00:00:00Z');
+  const partsFmt=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  let t=target;
+  for(let i=0;i<3;i++){
+   const p=Object.fromEntries(partsFmt.formatToParts(new Date(t)).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
+   const local=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
+   t+=target-local;
+  }
+  return new Date(t).toISOString();
+ };
+ let from=null,to=null;
+ if(range!=='all'){
+  const today=warsawDay(new Date());
+  from=range==='custom'?u.searchParams.get('from'):range==='today'?today:shiftDay(today,-1);
+  to=range==='custom'?u.searchParams.get('to'):from;
+  if(!validDate(from)||!validDate(to)||from>to)return json({error:'Invalid date range'},400);
+ }
  const filters=["o.paid_at IS NOT NULL"],params=[];
- if(q){filters.push("(o.id LIKE ? OR o.table_no LIKE ?)");params.push('%'+q+'%','%'+q+'%')}
- const all=(await env.DB.prepare("SELECT o.id,o.source,o.table_no,o.paid_at,o.kitchen_completed_at,p.method,p.amount_cents FROM orders o LEFT JOIN payments p ON p.id=(SELECT id FROM payments WHERE order_id=o.id ORDER BY created_at DESC LIMIT 1) WHERE "+filters.join(' AND ')+" ORDER BY o.paid_at DESC LIMIT 2000").bind(...params).all()).results;
- const filtered=range==='all'?all:all.filter(x=>fmt.format(new Date(x.paid_at))===day);
- return json({orders:filtered.slice((page-1)*size,page*size),total:filtered.length,page,size});
+ if(from){filters.push('o.paid_at >= ? AND o.paid_at < ?');params.push(midnightUtc(from),midnightUtc(shiftDay(to,1)))}
+ if(q){filters.push('(o.id LIKE ? OR o.table_no LIKE ?)');params.push('%'+q+'%','%'+q+'%')}
+ if(method!=='all'){filters.push('p.method=?');params.push(method)}
+ const joined=" FROM orders o LEFT JOIN payments p ON p.id=(SELECT p2.id FROM payments p2 WHERE p2.order_id=o.id ORDER BY p2.created_at DESC,p2.id DESC LIMIT 1) WHERE "+filters.join(' AND ');
+ const summary=(await env.DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(p.amount_cents),0) AS total_cents,COALESCE(SUM(CASE WHEN p.method='cash' THEN p.amount_cents ELSE 0 END),0) AS cash_cents,COALESCE(SUM(CASE WHEN p.method='card' THEN p.amount_cents ELSE 0 END),0) AS card_cents,COALESCE(SUM(CASE WHEN p.method='other' THEN p.amount_cents ELSE 0 END),0) AS other_cents"+joined).bind(...params).first());
+ const orders=(await env.DB.prepare("SELECT o.id,o.source,o.table_no,o.paid_at,o.kitchen_completed_at,p.method,p.amount_cents"+joined+" ORDER BY o.paid_at DESC,o.id DESC LIMIT ? OFFSET ?").bind(...params,size,(page-1)*size).all()).results;
+ return json({orders,total:Number(summary.total),page,size,summary:{total_cents:Number(summary.total_cents),cash_cents:Number(summary.cash_cents),card_cents:Number(summary.card_cents),other_cents:Number(summary.other_cents)},filters:{range,method,from,to}});
 }
 const checkoutMatch=path.match(/^\/api\/orders\/([^/]+)\/checkout$/);
 if(checkoutMatch&&req.method==='POST'){
