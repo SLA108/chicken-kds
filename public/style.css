@@ -248,3 +248,12 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .kitchen .kds-complete:active{transform:none;filter:none}
 .kitchen .kds-order.kds-completing{opacity:.65;pointer-events:none}
 @media(hover:none){.kitchen .kds-complete:not(:disabled):hover{background:#176c46;color:#fff;filter:none;transform:none}}
+
+/* V2.3.3 — POS release confirmation */
+.foh-release-backdrop{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px;background:rgba(2,6,12,.76)}
+.foh-release-dialog{width:min(100%,460px);max-height:calc(100dvh - 36px);overflow:auto;background:#141d28;color:#f4f6f8;border:1px solid #344353;border-radius:20px;padding:24px;box-shadow:0 24px 70px #0008}
+.foh-release-header{display:flex;align-items:flex-start;gap:14px}.foh-release-symbol{width:50px;height:50px;flex:0 0 50px;border-radius:14px;display:grid;place-items:center;background:#263c34;color:#70d6a0;font-size:28px;font-weight:800}.foh-release-header h2{margin:0 0 6px;font-size:1.3rem;line-height:1.25;color:#f4f6f8}.foh-release-header p{margin:0;color:#aab4c0;font-size:.9rem;line-height:1.5}
+.foh-release-details{margin:22px 0 16px;border-top:1px solid #344353;border-bottom:1px solid #344353}.foh-release-details>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0}.foh-release-details span{color:#aab4c0}.foh-release-details strong{color:#f4f6f8}.foh-release-details .foh-release-paid{color:#70d6a0}.foh-release-details .foh-release-unpaid{color:#ffbf77}
+.foh-release-note{font-size:.86rem;color:#aab4c0;line-height:1.5}.foh-release-warning{padding:12px;border:1px solid #9c6c32;background:#3b2b1d;color:#ffce90;border-radius:10px;font-size:.88rem;line-height:1.5}.foh-release-error{padding:10px;border-radius:9px;background:#4b2428;color:#ffb8be;font-size:.88rem}
+.foh-release-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}.foh-release-actions button{min-height:50px;border-radius:11px;font-weight:750}.foh-release-actions .foh-release-cancel{background:#29333f;color:#e8edf3}.foh-release-actions .foh-release-confirm{background:#208456;color:white}.foh-release-actions button:disabled{opacity:.55}
+@media(max-width:480px){.foh-release-dialog{padding:18px;border-radius:16px}.foh-release-header h2{font-size:1.15rem}}
