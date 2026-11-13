@@ -15,7 +15,7 @@ INSERT OR IGNORE INTO stores(id,code,name,active,created_at)
 VALUES ('legacy-primary','TEST','Test Store',1,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 -- These are planned stores only; they are inactive until store-aware API isolation is complete.
 INSERT OR IGNORE INTO stores(id,code,name,active,created_at) VALUES
- ('store-slow','SLOW','Słowackiego',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ ('store-slow','SLO','Słowackiego',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  ('store-srod','SROD','Śródmieście',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  ('store-gdy','GDY','Gdynia',0,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 
