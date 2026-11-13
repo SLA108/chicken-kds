@@ -113,7 +113,7 @@ async function openPosHistoryDetail(id){
 }
 let posHistoryRange='today',posHistoryQuery='',posHistoryPage=1,posHistoryResult={orders:[],total:0};
 async function loadPosHistory(){try{posHistoryResult=await api('/pos/history?range='+posHistoryRange+'&q='+encodeURIComponent(posHistoryQuery)+'&page='+posHistoryPage);if(page==='pos'&&fohTab==='history')pos()}catch(e){notify('History: '+e.message)}}
-let kitchenCategories=[],historyOpen=false,historyRange='today',historyQuery='',historyPage=1,historyResult={orders:[],total:0,page:1,size:15},historyBusy=false,kitchenClock=null,kitchenBusy=new Set(),kitchenPending=new Map(),kitchenRefreshSerial=0;
+let kitchenCategories=[],historyOpen=false,historyRange='today',historyQuery='',historyPage=1,historyResult={orders:[],total:0,page:1,size:15},historyBusy=false,kitchenClock=null,kitchenBusy=new Set(),kitchenPending=new Map(),kitchenCompleting=new Set(),kitchenRefreshSerial=0;
 const warsawClock=iso=>new Date(iso).toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function kitchenAge(iso){return Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/1000)||0)}
 function kitchenDuration(seconds){return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
@@ -151,7 +151,7 @@ function updateKitchenClock(){
  });
 }
 function kitchen(){
- const active=orders.filter(o=>o.status!=='cancelled'&&!o.kitchen_completed_at&&o.items.length).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+ const active=orders.filter(o=>o.status!=='cancelled'&&!o.kitchen_completed_at&&!kitchenCompleting.has(o.id)&&o.items.length).sort((a,b)=>a.created_at.localeCompare(b.created_at));
  const card=o=>{
   const done=o.items.filter(i=>i.is_done).length,ready=done===o.items.length;
   const items=kitchenSortItems(o.items);
@@ -176,7 +176,7 @@ function kitchen(){
    (o.note?'<p class="warning">Note: '+esc(o.note)+'</p>':'')+'</article>';
  };
  shell('<div class="panel toolbar"><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
- '<h2>Active Orders · '+active.length+'</h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')+
+ '<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')+
  '<section class="panel completed-section kds-history"><div class="row"><h3>Completed Orders</h3><button class="alt" id="kds-history-toggle">'+(historyOpen?'Hide history':'View history')+'</button></div>'+
  (historyOpen?'<div class="toolbar"><select id="kds-history-range"><option value="today" '+(historyRange==='today'?'selected':'')+'>Today</option><option value="yesterday" '+(historyRange==='yesterday'?'selected':'')+'>Yesterday</option><option value="all" '+(historyRange==='all'?'selected':'')+'>All</option></select><input id="kds-history-search" placeholder="Table / order ID" value="'+esc(historyQuery)+'"><button class="alt" id="kds-history-search-button">Search</button></div>'+
  '<p class="muted small">'+historyResult.total+' completed'+(historyResult.limited?' (recent history limit)':'')+'</p>'+
@@ -223,9 +223,30 @@ function kitchen(){
   }finally{kitchenBusy.delete(id)}
  });
  document.querySelectorAll('[data-kitchen-complete]').forEach(btn=>btn.onclick=async()=>{
-  if(btn.disabled)return;btn.disabled=true;btn.textContent='Completing...';
-  try{await api('/kitchen/orders/'+btn.dataset.kitchenComplete+'/complete','POST',{});await refresh();if(historyOpen)await loadKitchenHistory()}
-  catch(e){notify(e.message);btn.disabled=false;btn.textContent='✓ COMPLETE ORDER'}
+  const id=btn.dataset.kitchenComplete;
+  if(btn.disabled||kitchenCompleting.has(id))return;
+  const order=orders.find(o=>o.id===id);
+  if(!order||order.kitchen_completed_at||!(order.items||[]).length||order.items.some(i=>!i.is_done))return;
+  kitchenCompleting.add(id);
+  btn.blur();
+  // Immediate tactile feedback; hide only this ticket, not the whole kitchen.
+  const card=btn.closest('.kds-order');
+  if(card){card.classList.add('kds-completing');card.setAttribute('aria-busy','true')}
+  btn.disabled=true;
+  btn.textContent='✓ COMPLETING…';
+  try{
+   await api('/kitchen/orders/'+id+'/complete','POST',{});
+   order.kitchen_completed_at=new Date().toISOString();
+   card?.remove();
+   const count=document.querySelector('.kds-active-count');
+   if(count)count.textContent=String(Math.max(0,Number(count.textContent)-1));
+   await refresh();
+   if(historyOpen)await loadKitchenHistory();
+  }catch(e){
+   notify('Complete order failed: '+e.message);
+   if(card){card.classList.remove('kds-completing');card.removeAttribute('aria-busy')}
+   btn.disabled=false;btn.textContent='✓ COMPLETE ORDER';
+  }finally{kitchenCompleting.delete(id)}
  });
  document.querySelector('#kds-history-toggle').onclick=()=>{historyOpen=!historyOpen;kitchen();if(historyOpen)loadKitchenHistory()};
  if(historyOpen){
