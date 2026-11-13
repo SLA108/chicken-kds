@@ -24,8 +24,12 @@ function pickupToast(items){
  setTimeout(()=>{if(el.isConnected)el.remove()},8500);
 }
 function pickupQueueHtml(){
- return '<aside class="pickup-panel" id="pickup-queue"><div class="pickup-panel-head"><h2>🔔 Pickup Queue</h2><span>'+pickupItems.length+'</span></div>'+
- (pickupItems.length?pickupItems.map(i=>'<div class="pickup-card"><strong>'+esc(pickupLabel(i))+'</strong><p>'+Number(i.quantity)+' × '+esc(i.name)+'</p><small>Ready '+(i.done_at?warsawClock(i.done_at):'now')+'</small><button type="button" data-pickup-ack="'+esc(i.item_id)+'">✓ Picked Up</button></div>').join(''):'<p class="muted">No dishes waiting for pickup.</p>')+'</aside>';
+ const groups=new Map();
+ for(const i of pickupItems){if(!groups.has(i.order_id))groups.set(i.order_id,[]);groups.get(i.order_id).push(i)}
+ return '<aside class="pickup-panel" id="pickup-queue"><div class="pickup-panel-head"><h2>🔔 Pickup Queue</h2><span>'+pickupItems.length+' dishes</span></div>'+
+ (groups.size?[...groups.entries()].map(([id,items])=>'<section class="pickup-order-card"><div class="pickup-order-head"><strong>'+esc(pickupLabel(items[0]))+'</strong><span>'+items.length+' Ready</span></div>'+
+ '<div class="pickup-order-items">'+items.map(i=>'<div class="pickup-mini-card"><div><strong>'+Number(i.quantity)+' × '+esc(i.name)+'</strong><small>Ready '+(i.done_at?warsawClock(i.done_at):'now')+'</small></div><button type="button" data-pickup-ack="'+esc(i.item_id)+'" aria-label="Pick up '+esc(i.name)+'">✓</button></div>').join('')+'</div>'+
+ '<button type="button" class="pickup-all" data-pickup-all="'+esc(id)+'">✓ Pick Up All · '+items.length+' dishes</button></section>').join(''):'<p class="muted">No dishes waiting for pickup.</p>')+'</aside>';
 }
 async function loadPickups(announce=false){
  if(page!=='pos'||!token)return;
@@ -46,6 +50,15 @@ async function acknowledgePickup(id){
  if(b)b.disabled=true;
  try{await api('/pos/pickups/'+encodeURIComponent(id)+'/ack','POST',{});pickupItems=pickupItems.filter(i=>i.item_id!==id);pos();await loadPickups(false)}
  catch(e){notify('Pickup: '+e.message);await loadPickups(false)}
+}
+async function acknowledgePickupAll(orderId){
+ const btn=[...document.querySelectorAll('[data-pickup-all]')].find(x=>x.dataset.pickupAll===orderId);
+ if(btn){btn.disabled=true;btn.textContent='Confirming…'}
+ try{
+  await api('/pos/pickups/orders/'+encodeURIComponent(orderId)+'/ack-all','POST',{});
+  pickupItems=pickupItems.filter(i=>i.order_id!==orderId);
+  pos();await loadPickups(false);
+ }catch(e){notify('Pick Up All: '+e.message);await loadPickups(false)}
 }
 function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${connected?'online':'offline'}">● ${connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=()=>{sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};}
 function login(){
@@ -112,6 +125,7 @@ shell('<div class="foh-head"><div><small>FRONT OF HOUSE</small><h1>Restaurant PO
 document.querySelector('#pickup-sound').onclick=enablePickupSound;
 document.querySelector('#pickup-nav').onclick=openPickupQueue;
 document.querySelectorAll('[data-pickup-ack]').forEach(b=>b.onclick=()=>acknowledgePickup(b.dataset.pickupAck));
+document.querySelectorAll('[data-pickup-all]').forEach(b=>b.onclick=()=>acknowledgePickupAll(b.dataset.pickupAll));
 document.querySelectorAll('[data-foh-tab]').forEach(b=>b.onclick=()=>{saveFields();const next=b.dataset.fohTab;if(next===fohTab&&!(next==='order'&&editingOrder))return;if(configuredCart.length&&!confirm('Discard the current unsent items?'))return;editingOrder='';configuredCart=[];note='';itemDialog=null;pendingKey=crypto.randomUUID();fohTab=next;pos();if(next==='history')loadPosHistory()});
 if(fohTab==='history'){
  document.querySelectorAll('[data-pos-history-detail]').forEach(btn=>btn.onclick=()=>openPosHistoryDetail(btn.dataset.posHistoryDetail));
