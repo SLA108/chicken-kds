@@ -13,7 +13,7 @@ Status: **schema migration committed, not applied, not deployed**. Do not regist
 `migrations/0007_multistore_foundation.sql` creates `stores`, `store_menu_overrides`, `pos_devices`; adds `store_id` to existing `orders` and `payments`; and adds store-aware indexes. All historical rows are assigned `legacy-primary` pending confirmation of the correct original location. Existing endpoints remain unchanged.
 
 ## Before applying migration
-1. Confirm which physical store owns existing production orders; the migration does **not** infer this.
+1. Historical orders are confirmed to be test-only. Verify that the target database contains only those test orders before migration.
 2. Back up remote D1 and verify backup/restoration.
 3. Verify schema and previously applied migrations; apply `0007` only once in staging first.
 4. Confirm there are no externally managed consumers depending on old table shapes.
