@@ -279,3 +279,17 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .pickup-toast strong{font-size:1.08rem}.pickup-toast p{margin:9px 0 14px}.pickup-toast>div{display:flex;gap:8px}.pickup-toast button{flex:1;background:#168258}.pickup-toast button.alt{background:#304b46;color:#fff}
 @media(min-width:1000px){.foh-workspace:has(.pickup-panel){display:grid;grid-template-columns:minmax(0,1.75fr) minmax(270px,1fr);column-gap:18px;align-items:start}.foh-workspace:has(.pickup-panel)>.foh-title{grid-column:1/-1}.foh-workspace:has(.pickup-panel)>.foh-ticket-grid{grid-column:1;min-width:0}.foh-workspace:has(.pickup-panel)>.pickup-panel{grid-column:2;grid-row:2;margin-top:0;position:sticky;top:14px}}
 @media(max-width:600px){.pickup-top-actions{width:100%}.pickup-top-actions button{flex:1}.pickup-toast{top:12px}}
+
+/* V2.4.1 — nested pickup cards: each order has its own compact scroll region */
+.pickup-order-card{background:#233942;border:1px solid #46646a;border-radius:14px;padding:12px;margin-bottom:12px;min-width:0}
+.pickup-order-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pickup-order-head strong{font-size:1.06rem;color:#a4f1c8}
+.pickup-order-head span{font-size:.77rem;color:#d7f9e5;background:#27664f;border-radius:99px;padding:4px 9px;white-space:nowrap}
+.pickup-order-items{display:flex;flex-direction:column;gap:7px;max-height:230px;overflow-y:auto;overscroll-behavior:contain;padding:2px 5px 3px 1px;scrollbar-width:thin;scrollbar-color:#5c8c84 transparent}
+.pickup-mini-card{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#142d35;border:1px solid #38565c;border-radius:10px;padding:10px 10px 10px 12px}
+.pickup-mini-card>div{min-width:0;display:flex;flex-direction:column;gap:3px}
+.pickup-mini-card strong{font-size:.9rem;color:#fff;overflow-wrap:anywhere}
+.pickup-mini-card small{color:#b8cbd0;font-size:.75rem}
+.pickup-mini-card button{flex:0 0 38px;width:38px;min-height:38px;border-radius:9px;background:#167c58;font-weight:800}
+.pickup-order-card>.pickup-all{display:block;width:100%;margin-top:10px;min-height:43px;background:#17875d;color:white;font-weight:750;border-radius:10px}
+.pickup-order-card button:disabled{opacity:.6;cursor:wait}
