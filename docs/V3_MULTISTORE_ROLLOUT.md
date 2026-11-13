@@ -19,10 +19,10 @@ Status: **schema migration committed, not applied, not deployed**. Do not regist
 4. Confirm there are no externally managed consumers depending on old table shapes.
 5. Test existing POS/KDS end-to-end in staging.
 
-## Next required implementation (not yet done)
+## Phase 2 schema committed (not applied)\n\n`migrations/0008_multistore_tables.sql` replaces the global table-number primary key with `(store_id, table_no)` and copies existing occupancy rows using their owning order's store. Apply only after 0007, in staging first. Existing application SQL still assumes globally unique table numbers, so this migration must NOT be applied independently to production.\n\n## Next required implementation (not yet done)
 1. Replace role-only login with authenticated user/device context including `store_id`; bind devices in Back Office with administrative approval and revoke support.
 2. Require server-derived store context on **all** order/table/payment/menu operations; never trust a client-supplied `store_id` without authorization.
-3. Rebuild `table_occupancy` with composite `(store_id,table_no)` uniqueness; migrate existing occupancy safely.
+3. Update all occupancy queries and writes to use the new composite `(store_id,table_no)` key; migration 0008 has been drafted, but application integration remains outstanding.
 4. Scope every query, mutation, idempotency key and history/report endpoint to authorized store(s), including kitchen pickups and table release.
 5. Partition Durable Object rooms by store and authorize the WebSocket handshake; prevent cross-store broadcast.
 6. Implement central menu with store-specific price, visibility and sold-out state; use server-side effective price during checkout.
