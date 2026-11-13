@@ -260,3 +260,22 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 
 /* V2.3.4 — Payment History filters and financial summary */
 .foh-history-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;align-items:end;margin:16px 0}.foh-history-filters label{display:flex;flex-direction:column;gap:6px;font-size:.83rem;font-weight:650}.foh-history-filters button{min-height:42px}.foh-history-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.foh-history-summary>div{background:rgba(128,128,128,.08);border:1px solid rgba(128,128,128,.18);padding:13px;border-radius:12px}.foh-history-summary small{display:block;opacity:.75;margin-bottom:7px}.foh-history-summary strong{font-size:1.1rem;overflow-wrap:anywhere}
+
+/* V2.4 Food pickup queue and global notifications */
+.pickup-top-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pickup-top-actions button{background:#243b49;color:#e8f8f1;border:1px solid #466274}
+#pickup-nav{background:#166c52;color:#fff}
+#pickup-count,.pickup-panel-head span{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 7px;border-radius:99px;background:#f6bd60;color:#202b31;font-weight:800}
+.pickup-panel{margin-top:20px;padding:18px;background:#182b32;border:1px solid #45616a;border-radius:16px;color:#f5fbfc}
+.pickup-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.pickup-panel-head h2{margin:0;color:#f5fbfc;font-size:1.12rem}
+.pickup-panel .muted{color:#b7c7ce}
+.pickup-card{padding:13px 14px;border-radius:12px;background:#233942;border:1px solid #3d5b61;margin-bottom:10px;display:flex;flex-direction:column;gap:7px}
+.pickup-card strong{color:#9cebc4;font-size:1.03rem}
+.pickup-card p{margin:0;color:#fff;font-weight:650}
+.pickup-card small{color:#b9cbd0}
+.pickup-card button{background:#19875d;min-height:43px}
+.pickup-toast{position:fixed;z-index:3500;top:82px;right:18px;width:min(380px,calc(100vw - 36px));padding:18px;background:#193a34;color:#f5fff9;border:1px solid #52a47d;border-radius:16px;box-shadow:0 16px 55px #0008}
+.pickup-toast strong{font-size:1.08rem}.pickup-toast p{margin:9px 0 14px}.pickup-toast>div{display:flex;gap:8px}.pickup-toast button{flex:1;background:#168258}.pickup-toast button.alt{background:#304b46;color:#fff}
+@media(min-width:1000px){.foh-workspace:has(.pickup-panel){display:grid;grid-template-columns:minmax(0,1.75fr) minmax(270px,1fr);column-gap:18px;align-items:start}.foh-workspace:has(.pickup-panel)>.foh-title{grid-column:1/-1}.foh-workspace:has(.pickup-panel)>.foh-ticket-grid{grid-column:1;min-width:0}.foh-workspace:has(.pickup-panel)>.pickup-panel{grid-column:2;grid-row:2;margin-top:0;position:sticky;top:14px}}
+@media(max-width:600px){.pickup-top-actions{width:100%}.pickup-top-actions button{flex:1}.pickup-toast{top:12px}}
