@@ -360,6 +360,14 @@ if(path==='/api/pos/pickups'&&req.method==='GET'){
  const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").all()).results;
  return json({items:rows});
 }
+const pickupAllMatch=path.match(/^\/api\/pos\/pickups\/orders\/([^/]+)\/ack-all$/);
+if(pickupAllMatch&&req.method==='POST'){
+ if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
+ const id=pickupAllMatch[1],now=new Date().toISOString();
+ const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS (SELECT 1 FROM orders WHERE id=? AND status!='cancelled')").bind(now,id,id).run();
+ if(result.meta.changes)await broadcast(env,'pickup',{order_id:id,acknowledged:result.meta.changes});
+ return json({ok:true,count:result.meta.changes||0});
+}
 const pickupMatch=path.match(/^\/api\/pos\/pickups\/([^/]+)\/ack$/);
 if(pickupMatch&&req.method==='POST'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
