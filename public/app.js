@@ -52,11 +52,11 @@ function updateCartView(){const root=document.querySelector('#pos-cart');if(!roo
 function showItemDialog(){document.querySelector('.item-dialog-backdrop')?.remove();if(!itemDialog)return;document.body.insertAdjacentHTML('beforeend',itemModal());const close=()=>{itemDialog=null;document.querySelector('.item-dialog-backdrop')?.remove()};const rerender=()=>{itemDialog.note=document.querySelector('#item-note')?.value||'';showItemDialog()};document.querySelector('#item-close').onclick=close;document.querySelector('.item-dialog-backdrop').addEventListener('click',e=>{if(e.target.classList.contains('item-dialog-backdrop'))close()});document.querySelector('#item-dec').onclick=()=>{itemDialog.quantity=Math.max(1,itemDialog.quantity-1);rerender()};document.querySelector('#item-inc').onclick=()=>{itemDialog.quantity=Math.min(99,itemDialog.quantity+1);rerender()};document.querySelectorAll('.modifier-choice input').forEach(input=>input.onchange=()=>{itemDialog.note=document.querySelector('#item-note').value;const o=modifierCatalog.options.find(x=>x.id===input.value),g=itemGroups(itemDialog.menu_id).find(x=>x.id===o?.group_id);if(!g)return;const ids=itemDialog.option_ids.filter(id=>modifierCatalog.options.find(x=>x.id===id)?.group_id!==g.id);const current=itemDialog.option_ids.filter(id=>modifierCatalog.options.find(x=>x.id===id)?.group_id===g.id);if(g.max_select===1)itemDialog.option_ids=[...ids,...(input.checked?[input.value]:[])];else{const next=input.checked?[...current,input.value]:current.filter(id=>id!==input.value);if(next.length>g.max_select){notify('Maximum '+g.max_select+' selections');input.checked=false;return}itemDialog.option_ids=[...ids,...next]}showItemDialog()});document.querySelector('#item-confirm').onclick=()=>{const groups=itemGroups(itemDialog.menu_id);if(groups.some(g=>{const n=itemDialog.option_ids.filter(id=>modifierCatalog.options.find(o=>o.id===id&&o.group_id===g.id)).length;return n<g.min_select||n>g.max_select})){notify('Please complete required selections');return}itemDialog.note=document.querySelector('#item-note').value;configuredCart.push({...itemDialog});close();updateCartView()}}
 function pos(){const active=activeTickets(),selected=active.find(o=>o.id===editingOrder),occupied=new Set(tableState.filter(t=>t.occupied).map(t=>t.number));const tabs='<div class="foh-tabs">'+[['order','New Order'],['tickets','Open Tickets ('+active.length+')'],['tables','Tables'],['history','History']].map(([id,label])=>'<button class="'+(fohTab===id?'active':'')+'" data-foh-tab="'+id+'">'+label+'</button>').join('')+'</div>';
 const history='<section class="panel foh-workspace"><h2>Payment History</h2>'+
-'<div class="foh-history-filters"><label>Period<select id="pos-history-range">'+[['today','Today'],['yesterday','Yesterday'],['custom','Custom date range'],['all','All dates']].map(([v,n])=>'<option value="'+v+'" '+(posHistoryRange===v?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
-(posHistoryRange==='custom'?'<label>From<input id="pos-history-from" type="date" value="'+esc(posHistoryFrom)+'"></label><label>To<input id="pos-history-to" type="date" value="'+esc(posHistoryTo)+'"></label>':'')+
+'<div class="foh-history-filters"><label>Period<select id="pos-history-range">'+[['today','Today'],['yesterday','Yesterday'],['two_days','2 Days Ago']].map(([v,n])=>'<option value="'+v+'" '+(posHistoryRange===v?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
+
 '<label>Payment method<select id="pos-history-method">'+[['all','All methods'],['card','Card'],['cash','Cash'],['other','Other']].map(([v,n])=>'<option value="'+v+'" '+(posHistoryMethod===v?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
 '<label>Search<input id="pos-history-search" placeholder="Table / order ID" value="'+esc(posHistoryQuery)+'"></label><button id="pos-history-find">Apply filters</button></div>'+
-'<div class="foh-history-summary"><div><small>Paid orders</small><strong>'+Number(posHistoryResult.total||0)+'</strong></div><div><small>Total sales</small><strong>'+money(posHistoryResult.summary?.total_cents||0)+'</strong></div><div><small>Card</small><strong>'+money(posHistoryResult.summary?.card_cents||0)+'</strong></div><div><small>Cash</small><strong>'+money(posHistoryResult.summary?.cash_cents||0)+'</strong></div><div><small>Other</small><strong>'+money(posHistoryResult.summary?.other_cents||0)+'</strong></div></div>'+
+
 (posHistoryResult.orders.length?posHistoryResult.orders.map(o=>'<button type="button" class="foh-history-row" data-pos-history-detail="'+esc(o.id)+'"><b>'+(o.source==='dinein'?'Table '+esc(o.table_no):esc(sourceName[o.source]||o.source))+'</b> #'+esc(o.id.slice(0,8))+' · '+money(o.amount_cents||0)+' · '+esc(o.method||'Unknown')+'<small>Paid '+posDetailTime(o.paid_at)+' · Kitchen '+(o.kitchen_completed_at?posDetailTime(o.kitchen_completed_at):'Pending')+'</small><span class="foh-history-open">View order details →</span></button>').join(''):'<p class="muted">No payments match these filters.</p>')+
 '<div class="toolbar"><button id="pos-history-prev" '+(posHistoryPage<=1?'disabled':'')+'>Previous</button><span>Page '+posHistoryPage+' / '+Math.max(1,Math.ceil(posHistoryResult.total/15))+'</span><button id="pos-history-next" '+(posHistoryPage*15>=posHistoryResult.total?'disabled':'')+'>Next</button></div></section>';
 const tables='<section class="panel foh-workspace"><div class="foh-title"><div><h2>Tables</h2><p>Tap an available table to start an order, or an occupied table to continue.</p></div><span class="foh-count">'+occupied.size+' / 20 occupied</span></div><div class="foh-table-grid">'+Array.from({length:20},(_,i)=>{const no=String(i+1).padStart(2,'0'),o=tableTicket(no),conflict=tableState.find(t=>t.number===no)?.conflict;return '<button class="foh-table '+(o?'occupied':'available')+'" data-table-no="'+no+'"><small>TABLE</small><strong>'+no+'</strong><span>'+(conflict?'Check duplicates':o?(o.paid_at?'PAID · ':'Open · ')+money(ticketTotal(o)):'Available')+'</span></button>'+(o&&o.paid_at?'<button class="foh-table-release" data-release-table="'+esc(o.id)+'">Release Table '+no+'</button>':'')}).join('')+'</div></section>';
@@ -67,16 +67,12 @@ document.querySelectorAll('[data-foh-tab]').forEach(b=>b.onclick=()=>{saveFields
 if(fohTab==='history'){
  document.querySelectorAll('[data-pos-history-detail]').forEach(btn=>btn.onclick=()=>openPosHistoryDetail(btn.dataset.posHistoryDetail));
  const apply=()=>{
-  const range=document.querySelector('#pos-history-range').value,method=document.querySelector('#pos-history-method').value;
-  const from=document.querySelector('#pos-history-from')?.value||posHistoryFrom,to=document.querySelector('#pos-history-to')?.value||posHistoryTo;
-  if(range==='custom'&&(!from||!to||from>to))return notify('Select a valid date range (From ≤ To)');
-  posHistoryRange=range;posHistoryMethod=method;posHistoryFrom=from;posHistoryTo=to;
-  posHistoryQuery=document.querySelector('#pos-history-search').value.trim();posHistoryPage=1;loadPosHistory();
+  posHistoryRange=document.querySelector('#pos-history-range').value;
+  posHistoryMethod=document.querySelector('#pos-history-method').value;
+  posHistoryQuery=document.querySelector('#pos-history-search').value.trim();
+  posHistoryPage=1;loadPosHistory();
  };
- document.querySelector('#pos-history-range').onchange=e=>{
-  if(e.target.value==='custom'&&posHistoryRange!=='custom'){posHistoryRange='custom';pos();return}
-  apply();
- };
+ document.querySelector('#pos-history-range').onchange=apply;
  document.querySelector('#pos-history-method').onchange=apply;
  document.querySelector('#pos-history-find').onclick=apply;
  document.querySelector('#pos-history-search').onkeydown=e=>{if(e.key==='Enter')apply()};
@@ -154,6 +150,8 @@ function posDetailHtml(data){
  return '<div class="foh-detail-backdrop" id="pos-detail-backdrop"><aside class="foh-detail-panel" role="dialog" aria-modal="true" aria-label="Order details"><div class="foh-detail-head"><div><small>PAYMENT HISTORY · ORDER DETAILS</small><h2>'+(o.source==='dinein'?'Table '+esc(o.table_no):esc(sourceName[o.source]||o.source))+'</h2><small>Order #'+esc(o.id)+'</small></div><button class="alt" id="pos-detail-close" aria-label="Close details">✕</button></div><div class="foh-detail-summary"><div><small>Payment</small><strong>'+esc((data.payments||[]).map(p=>({cash:'Cash',card:'Card',other:'Other'}[p.method]||p.method)).join(', ')||'Unknown')+'</strong></div><div><small>Paid total</small><strong>'+money(paid)+'</strong></div></div><h3>Order items</h3>'+itemRows+(o.note?'<p>Order note: '+esc(o.note)+'</p>':'')+'<h3>Payments</h3>'+(data.payments||[]).map(p=>'<div class="foh-detail-line"><span>'+esc(p.method)+' · '+posDetailTime(p.created_at)+'</span><strong>'+money(p.amount_cents)+'</strong></div>').join('')+'<h3>Order timeline</h3>'+events.map(e=>'<div class="foh-detail-line"><span>'+esc(eventLabels[e.event])+'</span><span>'+posDetailTime(e.created_at)+'</span></div>').join('')+'<h3>Current status</h3><p>Kitchen: '+(o.kitchen_completed_at?'Completed '+posDetailTime(o.kitchen_completed_at):'Pending')+'</p><p>Table: '+(o.source!=='dinein'?'Not applicable':o.table_occupied?'Occupied':'Released / not occupied')+'</p><p class="muted small">Read-only history. No changes to payments or dishes.</p></aside></div>';
 }
 async function openPosHistoryDetail(id){
+ if(!posHistoryResult.orders.some(o=>o.id===id))return notify('Order is outside the current history selection.');
+
  const old=document.querySelector('#pos-detail-backdrop');if(old)old.remove();
  const overlay=document.createElement('div');overlay.id='pos-detail-backdrop';overlay.className='foh-detail-backdrop';overlay.innerHTML='<aside class="foh-detail-panel" role="dialog" aria-modal="true"><p>Loading order details…</p><button class="alt" id="pos-detail-close">Close</button></aside>';
  document.body.appendChild(overlay);
@@ -170,11 +168,19 @@ async function openPosHistoryDetail(id){
   panel.querySelector('#pos-detail-close').onclick=()=>panel.remove();
  }catch(e){if(overlay.isConnected){overlay.querySelector('p').textContent='Unable to load order: '+e.message}}
 }
-let posHistoryRange='today',posHistoryMethod='all',posHistoryFrom='',posHistoryTo='',posHistoryQuery='',posHistoryPage=1,posHistoryResult={orders:[],total:0,summary:{}},posHistoryRequest=0;
+let posHistoryRange='today',posHistoryMethod='all',posHistoryQuery='',posHistoryPage=1,posHistoryResult={orders:[],total:0,summary:{}},posHistoryRequest=0;
+function posWarsawDateDaysAgo(days){
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+ const date=new Date(Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day)-days,12));
+ return date.toISOString().slice(0,10);
+}
 async function loadPosHistory(){
  const request=++posHistoryRequest;
  const params=new URLSearchParams({range:posHistoryRange,method:posHistoryMethod,q:posHistoryQuery,page:String(posHistoryPage)});
- if(posHistoryRange==='custom'){params.set('from',posHistoryFrom);params.set('to',posHistoryTo)}
+ if(posHistoryRange==='two_days'){
+  const day=posWarsawDateDaysAgo(2);
+  params.set('range','custom');params.set('from',day);params.set('to',day);
+ }
  try{
   const result=await api('/pos/history?'+params.toString());
   if(request!==posHistoryRequest)return;
