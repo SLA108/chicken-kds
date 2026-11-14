@@ -40,3 +40,11 @@ Admin-only endpoints added to `src/index.js`:
 
 ## Safety
 **Do not run `0007` on production yet.** Its additive schema is not sufficient for multi-store isolation. Never deploy a multi-store UI until server-side isolation is complete.
+
+## Device session exchange (code committed; not deployed)
+
+- `POST /api/device/session` accepts `{role,pin,device_id,enrollment_secret}`, verifies both the role PIN and the SHA-256 device secret, checks active device and active store, then returns an HMAC-signed eight-hour store-scoped session.
+- `GET /api/device/me` validates the signed session and checks revocation against D1 on every request.
+- Store sessions **fail closed** with `STORE_API_NOT_READY` for all other endpoints. No legacy order API is accessible with a store session. Legacy shared-PIN tokens still use legacy global APIs and therefore **must not be used in a multi-store production deployment**.
+- Device enrollment and login need brute-force protection and stronger admin authentication before production.
+- Required next: update ALL order, payment, table, kitchen history, menu, and WS routes to require verified store context; replace legacy tokens before multi-store activation. Integration tests and staging D1 migrations have NOT been run.
