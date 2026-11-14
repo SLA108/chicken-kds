@@ -249,6 +249,11 @@ function storeBanner(){
  document.querySelector('#v3-current-store')?.remove();
  if(!['pos','kitchen'].includes(page))return;
  if(!deviceMode()||!currentDeviceStore){
+  if(page==='pos'&&deviceMode()){
+   const warning=document.createElement('div');warning.id='v3-current-store';warning.className='v3-current-store v3-current-store-unverified';warning.setAttribute('role','status');
+   warning.innerHTML='<div><small>CURRENT RESTAURANT</small><strong>STORE SESSION NOT VERIFIED</strong><small>Reconnecting device authorization. Do not submit orders until the restaurant is verified.</small></div><button type="button" id="v3-store-retry">Retry connection</button>';
+   app.prepend(warning);warning.querySelector('#v3-store-retry').onclick=async()=>{if(await renewDeviceSession())render();else notify('Unable to verify restaurant. Check device access in Back Office.')};
+  }
   if(page==='kitchen'){
    const warning=document.createElement('div');
    warning.id='v3-current-store';warning.className='v3-current-store v3-current-store-unverified';
