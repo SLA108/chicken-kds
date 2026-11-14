@@ -1,5 +1,5 @@
 import {isPairingCode,isDeviceRole,pairingExpired,approvalAttemptPolicy,parseDeviceCookie} from './device-pairing.js';
-import {issueStoreSession,verifyStoreSession,sha256Hex,activeDeviceStore} from './store-auth.js';
+import {issueStoreSession,verifyStoreSession,sha256Hex,activeDeviceStore,allowedDeviceStore,listAllowedDeviceStores} from './store-auth.js';
 const json=(x,status=200,extra={})=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',...extra}});
 const uid=()=>crypto.randomUUID();
 const roles={pos:['pos','admin'],kitchen:['kitchen','admin'],admin:['admin'],scanner:['scanner','pos','admin']};
@@ -135,7 +135,7 @@ const sessionToken=bearer.startsWith('cks1.')?bearer:wsProtocol.startsWith('ckau
 if(sessionToken){
  const session=await verifyStoreSession(env.AUTH_SECRET,sessionToken);
  if(!session)return json({error:'Invalid or expired device session'},401);
- const device=await activeDeviceStore(env,session.deviceId,session.storeId);
+ const device=await allowedDeviceStore(env,session.deviceId,session.storeId);
  if(!device)return json({error:'Device revoked or store inactive'},403);
  const boundRole=await env.DB.prepare('SELECT role FROM pos_devices WHERE id=?').bind(session.deviceId).first();
  if(boundRole?.role!==session.role)return json({error:'Device role mismatch'},403);
@@ -512,6 +512,30 @@ if(path==='/api/admin/store-sales'&&req.method==='GET'){
 // V3 device enrollment foundation: admin-only; credentials are stored hashed.
 // Device credentials do not authorize any POS/KDS endpoint until the
 // store-scoped session and authorization rollout is complete.
+// V3.1 device store permissions. Requires migration 0012 before deployment.
+if(/^\/api\/admin\/devices\/[^/]+\/stores$/.test(path)&&['GET','PUT'].includes(req.method)){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const deviceId=decodeURIComponent(path.split('/')[4]);
+ const device=await env.DB.prepare('SELECT id,active FROM pos_devices WHERE id=?').bind(deviceId).first();
+ if(!device)return json({error:'Device not found'},404);
+ if(req.method==='GET'){
+  const stores=(await env.DB.prepare('SELECT s.id,s.code,s.name,s.active FROM device_store_access a JOIN stores s ON s.id=a.store_id WHERE a.device_id=? ORDER BY s.name').bind(deviceId).all()).results;
+  return json({device_id:deviceId,stores});
+ }
+ if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
+ const body=await parse(req);
+ const ids=body?.store_ids;
+ if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||id.length>64)||new Set(ids).size!==ids.length)return json({error:'Select one or more distinct stores'},400);
+ const activeStores=(await env.DB.prepare('SELECT id FROM stores WHERE active=1').all()).results;
+ const activeIds=new Set(activeStores.map(x=>x.id));
+ if(ids.some(id=>!activeIds.has(id)))return json({error:'Unknown or inactive store'},400);
+ const now=new Date().toISOString();
+ await env.DB.batch([
+  env.DB.prepare('DELETE FROM device_store_access WHERE device_id=?').bind(deviceId),
+  ...ids.map(id=>env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,id,now))
+ ]);
+ return json({ok:true,device_id:deviceId,store_ids:ids});
+}
 if(path==='/api/admin/device-pairings'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const rows=(await env.DB.prepare("SELECT code,created_at,expires_at FROM device_pair_requests WHERE status='pending' AND expires_at>? ORDER BY created_at DESC LIMIT 30").bind(new Date().toISOString()).all()).results;
