@@ -877,6 +877,19 @@ async function loadSuperMenu(){
  }
 }
 let superCategory='All',superSearch='';
+let superReservationRows=[],superReservationError='',superReservationLoading=false;
+async function loadSuperReservations(){
+ if(!superStore||superReservationLoading)return;
+ const store=superStore;superReservationLoading=true;
+ try{const data=await api('/admin/reservations?store_id='+encodeURIComponent(store));if(store!==superStore)return;superReservationRows=data.reservations||[];superReservationError=''}
+ catch(e){if(store===superStore)superReservationError=e.message}
+ finally{superReservationLoading=false;if(adminTab==='superpos'&&store===superStore)admin()}
+}
+function superReservationPanel(){
+ const today=warsawDay(),rows=superReservationRows.filter(r=>r.status==='booked'&&r.starts_at.slice(0,10)>=today).sort((a,b)=>a.starts_at.localeCompare(b.starts_at));
+ return '<section class="panel super-reservation-panel"><div class="row"><h2>Restaurant reservations</h2><button type="button" class="alt" id="super-reservation-refresh">Refresh</button></div><p class="muted">Adjust a booking for the selected restaurant.</p>'+(superReservationError?'<p role="alert">'+esc(superReservationError)+'</p>':'')+
+ (rows.length?'<div class="reservation-table-wrap"><table class="reservation-table"><thead><tr><th>Date & time</th><th>Guest</th><th>Party</th><th>Change time</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.starts_at.replace('T',' '))+'</td><td>'+esc(r.guest_name||'Guest')+'</td><td>'+Number(r.party_size)+'</td><td><div class="super-reschedule-controls"><button type="button" class="alt" data-super-shift="'+esc(r.id)+'" data-shift-minutes="-60">−1 hour</button><input type="datetime-local" data-super-time="'+esc(r.id)+'" value="'+esc(r.starts_at.slice(0,16))+'"><button type="button" data-super-reschedule="'+esc(r.id)+'">Save time</button><button type="button" class="alt" data-super-shift="'+esc(r.id)+'" data-shift-minutes="60">+1 hour</button></div></td></tr>').join('')+'</tbody></table></div>':'<p>No upcoming booked reservations.</p>')+'</section>';
+}
 function superPosPanel(){
  const stores=v3Stores.filter(x=>x.active),selected=stores.find(x=>x.id===superStore);
  const storeOptions=stores.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===superStore?'selected':'')+'>'+esc(x.name)+'</option>').join('');
@@ -891,7 +904,7 @@ function superPosPanel(){
  return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Super POS</h2><p>Send orders to a restaurant’s Kitchen and Front of House.</p></div></div>'+
  '<div class="toolbar"><label>Restaurant <select id="super-store"><option value="">Select restaurant</option>'+storeOptions+'</select></label><label>Order type <select id="super-source">'+['takeaway','delivery','dinein'].map(x=>'<option value="'+x+'" '+(superSource===x?'selected':'')+'>'+esc(sourceName[x])+'</option>').join('')+'</select></label>'+(superSource==='dinein'?'<label>Table <select id="super-table">'+Array.from({length:20},(_,i)=>String(i+1).padStart(2,'0')).map(x=>'<option '+(superTable===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>':'')+'</div>'+
  '<div class="layout foh-order"><section><div class="panel"><div class="foh-title"><div><h2>New order'+(selected?' · '+esc(selected.name):'')+'</h2><p>Choose dishes to add to the ticket.</p></div></div><label>Search dishes <input id="super-search" placeholder="Search menu..." value="'+esc(superSearch)+'"></label>'+chips+'<div class="menu">'+(selected?(superLoaded?(superError?'':dishes):'<p>Loading menu…</p>'):'<p>Select a restaurant first.</p>')+'</div>'+(selected&&superError?'<p role="alert">'+esc(superError)+'</p><button type="button" class="alt" id="super-retry-menu">Retry loading menu</button>':'')+'</div></section>'+
- '<aside><div class="panel foh-cart-panel"><h3>Current order</h3><div class="foh-ticket-items">'+(lines||'<p class="muted">No dishes selected.</p>')+'</div><label>Customer name <input id="super-customer" maxlength="100" value="'+esc(superCustomer)+'"></label><label>Phone <input id="super-phone" maxlength="60" value="'+esc(superPhone)+'"></label><label>Order note <textarea id="super-note" rows="3" maxlength="300">'+esc(superNote)+'</textarea></label><div class="row"><b>Total</b><b>'+money(total)+'</b></div>'+(superError?'<p role="alert">'+esc(superError)+'</p>':'')+'<button type="button" id="super-submit" '+(!selected||!superCart.length||!!pending||superBusy?'disabled':'')+'>'+(superBusy?'Submitting…':'Send to kitchen')+'</button><button type="button" class="alt" id="super-clear">Clear order</button></div></aside></div>'+modifierForm+'</section>';
+ '<aside><div class="panel foh-cart-panel"><h3>Current order</h3><div class="foh-ticket-items">'+(lines||'<p class="muted">No dishes selected.</p>')+'</div><label>Customer name <input id="super-customer" maxlength="100" value="'+esc(superCustomer)+'"></label><label>Phone <input id="super-phone" maxlength="60" value="'+esc(superPhone)+'"></label><label>Order note <textarea id="super-note" rows="3" maxlength="300">'+esc(superNote)+'</textarea></label><div class="row"><b>Total</b><b>'+money(total)+'</b></div>'+(superError?'<p role="alert">'+esc(superError)+'</p>':'')+'<button type="button" id="super-submit" '+(!selected||!superCart.length||!!pending||superBusy?'disabled':'')+'>'+(superBusy?'Submitting…':'Send to kitchen')+'</button><button type="button" class="alt" id="super-clear">Clear order</button></div></aside></div>'+superReservationPanel()+modifierForm+'</section>';
 }
 function adminOrderPanel(){
  const count=k=>Number(adminOrdersSummary.find(x=>x.status===k)?.count||0);
