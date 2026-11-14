@@ -32,10 +32,16 @@ async function renewDeviceSession(){
    deviceStores=result.stores||[];currentDeviceStore=result.store||null;
    storeSelectionPending=!localStorage.getItem(lastStoreKey)&&deviceStores.length>1;
    if(oldStoreId&&currentDeviceStore?.id!==oldStoreId){
-    storeEpoch++;kitchenRefreshSerial++;
-    // Server changed the active store: invalidate the old socket and UI.
+    // Never silently enter another restaurant when the old grant is revoked.
     disconnect();
-    sessionStorage.removeItem('ck_token_'+page);
+    token='';sessionStorage.removeItem('ck_token_'+page);
+    if(deviceStores.length>1){
+     localStorage.removeItem(lastStoreKey);
+     storeSelectionPending=true;
+     chooseInitialStore();
+     return false;
+    }
+    if(!currentDeviceStore){login();return false}
     localStorage.setItem(lastStoreKey,currentDeviceStore.id);
     location.reload();
     return false;
