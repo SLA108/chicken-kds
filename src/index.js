@@ -83,15 +83,18 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  const request=await env.DB.prepare("SELECT id,status,device_id,expires_at FROM device_pair_requests WHERE secret_hash=? ORDER BY created_at DESC LIMIT 1").bind(await sha256Hex(pairSecret)).first();
  if(!request||pairingExpired(request.expires_at))return json({status:'expired'},410,{'set-cookie':clearPairCookie});
  if(request.status!=='approved')return json({status:'pending'});
- const device=await env.DB.prepare("SELECT d.id,d.store_id,d.role,d.token_hash,s.code,s.name FROM pos_devices d JOIN stores s ON s.id=d.store_id WHERE d.id=? AND d.active=1 AND s.active=1").bind(request.device_id).first();
+ const device=await env.DB.prepare("SELECT id,store_id,role,token_hash FROM pos_devices WHERE id=? AND active=1").bind(request.device_id).first();
  if(!device)return json({error:'Device unavailable'},403);
+ const allowedStores=await listAllowedDeviceStores(env,device.id);
+ if(!allowedStores.length)return json({error:'No authorized active stores'},403);
+ const initialStore=allowedStores.find(s=>s.id===device.store_id)||allowedStores[0];
  // Rotate the pairing secret into a long-lived credential only after approval.
  const credential=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
  const updated=await env.DB.prepare('UPDATE pos_devices SET token_hash=? WHERE id=? AND token_hash=? AND active=1').bind(await sha256Hex(credential),device.id,'pending:'+device.id).run();
  if(!updated.meta.changes)return json({error:'Pairing already claimed'},409);
  await env.DB.prepare("UPDATE device_pair_requests SET status='expired' WHERE id=?").bind(request.id).run();
- const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:device.store_id,deviceId:device.id});
- const response=json({status:'approved',token,role:device.role,store:{id:device.store_id,code:device.code,name:device.name}});response.headers.append('set-cookie',renewalCookie(device.id,credential));response.headers.append('set-cookie',clearPairCookie);return response;
+ const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:initialStore.id,deviceId:device.id});
+ const response=json({status:'approved',token,role:device.role,store:initialStore,stores:allowedStores});response.headers.append('set-cookie',renewalCookie(device.id,credential));response.headers.append('set-cookie',clearPairCookie);return response;
 }
 if(path==='/api/device/session'&&req.method==='POST'){
  const b=await parse(req);
