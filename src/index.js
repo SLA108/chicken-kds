@@ -53,7 +53,7 @@ async function prepareOrderItems(env,items,orderId,now,storeId=null){
   if(![0,20,50].includes(discount))throw Error('Invalid discount');
   const m=lookup.get(item.menu_id),itemId=uid(),extra=selected.reduce((v,id)=>v+opts.get(id).price_cents,0);
   const originalPrice=m.price_cents+extra;
-  const discountAmount=Math.round(originalPrice*discount/100);
+  const discountAmount=Math.round(m.price_cents*discount/100);
   const finalPrice=originalPrice-discountAmount;
   statements.push(env.DB.prepare('INSERT INTO order_items(id,order_id,menu_id,name,quantity,note,created_at,price_cents,vat_rate,original_price_cents,discount_percent,discount_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(itemId,orderId,m.id,m.name,item.quantity,String(item.note||'').slice(0,300),now,finalPrice,m.vat_rate??8,originalPrice,discount,discountAmount));
   for(const optionId of selected){const o=opts.get(optionId);statements.push(env.DB.prepare('INSERT INTO order_item_modifiers(id,order_item_id,option_id,name,price_cents) VALUES(?,?,?,?,?)').bind(uid(),itemId,o.id,o.name,o.price_cents));}
