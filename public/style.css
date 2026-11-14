@@ -699,3 +699,12 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-content .admin-filter{display:flex;flex-wrap:wrap;gap:8px}
  .bo-content .admin-filter>*{min-width:0;max-width:100%}
 }
+
+@media(max-width:760px){
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head h2{font-size:19px!important}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head h2:after{content:none!important}
+ .bo-mobile-payment-split{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:16px;padding-top:13px;border-top:1px solid #405471}
+ .bo-mobile-payment-split>div{display:grid;gap:5px;min-width:0}
+ .bo-mobile-payment-split small{font-size:11px;color:#b6c9e3}
+ .bo-mobile-payment-split strong{font-size:clamp(12px,3.6vw,17px);white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+}
