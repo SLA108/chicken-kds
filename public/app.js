@@ -53,9 +53,12 @@ async function api(path,method='GET',data){
  const request=()=>fetch('/api'+scopedApiPath(path),{method,headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});
  let r=await request();
  if(!valid())throw Error('Store changed; request discarded');
- if((r.status===401||r.status===403)&&deviceMode()&&await renewDeviceSession()){
+ // Only GET requests are safe to replay automatically. A write may have
+ // reached the server before a network/auth failure; replaying could duplicate it.
+ if((r.status===401||r.status===403)&&deviceMode()){
+  const renewed=await renewDeviceSession();
   if(!valid())throw Error('Store changed; request discarded');
-  r=await request();
+  if(renewed&&method==='GET')r=await request();
  }
  if(!valid())throw Error('Store changed; request discarded');
  const out=await r.json();if(!valid())throw Error('Store changed; request discarded');
