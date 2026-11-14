@@ -215,7 +215,7 @@ function queueSuperPosAlerts(incoming,initial){
  showSuperPosAlert();
 }
 let reconnectTimer=null,wsGeneration=0;
-function disconnect(){storeEpoch++;kitchenRefreshSerial++;document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();superPosPendingIds.clear();pickupInitialized=false;pickupItems=[];pickupSerial++;posReservations=[];posReservationLoaded=false;posReservationReloadPending=false;posReservationAlerts.clear();document.querySelectorAll('[id^="reservation-reminder-"]').forEach(el=>el.remove());document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
+function disconnect(){storeEpoch++;kitchenRefreshSerial++;document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();superPosPendingIds.clear();pickupInitialized=false;pickupItems=[];pickupSerial++;posReservations=[];posReservationLoaded=false;posReservationReloadPending=false;posReservationAlerts.clear();reservationEventQueue.length=0;reservationEventSeen.clear();document.querySelectorAll('[id^="reservation-reminder-"]').forEach(el=>el.remove());document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
 function connect(){
  if(!token)return;
  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
@@ -226,7 +226,7 @@ function connect(){
  ws=socket;
  const current=()=>generation===wsGeneration&&ws===socket;
  socket.onopen=()=>{if(!current())return;connected=true;if(page==='pos'){loadPosReservations();const status=document.querySelector('header .status');if(status){status.className='status online';status.textContent='● Live'}else render()}else render();refresh();};
- socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos')loadPosReservations()}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
+ socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
  socket.onclose=async event=>{if(!current())return;ws=null;connected=false;
  if(event.code===1008&&deviceMode()){
   const recovered=await renewDeviceSession();
@@ -309,6 +309,30 @@ function selectTicket(id){orderReturnTab='tickets';const o=activeTickets().find(
 function updateCartView(){const root=document.querySelector('#pos-cart');if(!root)return;root.innerHTML=configuredCart.map((line,i)=>{const m=menu.find(x=>x.id===line.menu_id);return '<div class="foh-cart-line"><div><strong>'+esc(m?.name||'Item')+' × '+line.quantity+'</strong><small>'+esc(line.option_ids.map(id=>modifierCatalog.options.find(o=>o.id===id)?.name||'').filter(Boolean).join(', '))+(line.discount_percent?' · '+line.discount_percent+'% discount':'')+(line.note?' · '+esc(line.note):'')+'</small></div><div><b>'+money(cartUnitPrice(line)*line.quantity)+'</b><button class="alt" data-remove-line="'+i+'">Remove</button></div></div>'}).join('')||'<p class="muted">Choose a dish to start the order.</p>';root.querySelectorAll('[data-remove-line]').forEach(b=>b.onclick=()=>{configuredCart.splice(Number(b.dataset.removeLine),1);updateCartView()});document.querySelector('#pos-total').textContent=money(configuredCart.reduce((n,line)=>n+cartUnitPrice(line)*line.quantity,0));document.querySelector('#submit').disabled=!configuredCart.length||busy}
 function showItemDialog(){document.querySelector('.item-dialog-backdrop')?.remove();if(!itemDialog)return;document.body.insertAdjacentHTML('beforeend',itemModal());const close=()=>{itemDialog=null;document.querySelector('.item-dialog-backdrop')?.remove()};const rerender=()=>{itemDialog.note=document.querySelector('#item-note')?.value||'';showItemDialog()};document.querySelector('#item-close').onclick=close;document.querySelectorAll('input[name="item-discount"]').forEach(input=>input.onchange=()=>{itemDialog.note=document.querySelector('#item-note')?.value||'';itemDialog.discount_percent=Number(input.value);showItemDialog()});document.querySelector('.item-dialog-backdrop').addEventListener('click',e=>{if(e.target.classList.contains('item-dialog-backdrop'))close()});document.querySelector('#item-dec').onclick=()=>{itemDialog.quantity=Math.max(1,itemDialog.quantity-1);rerender()};document.querySelector('#item-inc').onclick=()=>{itemDialog.quantity=Math.min(99,itemDialog.quantity+1);rerender()};document.querySelectorAll('.modifier-choice input[name^="group-"]').forEach(input=>input.onchange=()=>{itemDialog.note=document.querySelector('#item-note').value;const o=modifierCatalog.options.find(x=>x.id===input.value),g=itemGroups(itemDialog.menu_id).find(x=>x.id===o?.group_id);if(!g)return;const ids=itemDialog.option_ids.filter(id=>modifierCatalog.options.find(x=>x.id===id)?.group_id!==g.id);const current=itemDialog.option_ids.filter(id=>modifierCatalog.options.find(x=>x.id===id)?.group_id===g.id);if(g.max_select===1)itemDialog.option_ids=[...ids,...(input.checked?[input.value]:[])];else{const next=input.checked?[...current,input.value]:current.filter(id=>id!==input.value);if(next.length>g.max_select){notify('Maximum '+g.max_select+' selections');input.checked=false;return}itemDialog.option_ids=[...ids,...next]}showItemDialog()});document.querySelector('#item-confirm').onclick=()=>{const groups=itemGroups(itemDialog.menu_id);if(groups.some(g=>{const n=itemDialog.option_ids.filter(id=>modifierCatalog.options.find(o=>o.id===id&&o.group_id===g.id)).length;return n<g.min_select||n>g.max_select})){notify('Please complete required selections');return}itemDialog.note=document.querySelector('#item-note').value;configuredCart.push({...itemDialog});close();updateCartView()}}
 let posReservations=[],posReservationLoaded=false,posReservationLoading=false,posReservationReloadPending=false,posReservationAlerts=new Set();
+const reservationEventQueue=[],reservationEventSeen=new Set();
+function queueReservationEvent(data){
+ if(page!=='pos'||!currentDeviceStore||!data?.reservation||data.reservation.store_id!==currentDeviceStore.id)return;
+ const r=data.reservation,action=data.action;
+ if(!['created','updated','cancelled'].includes(action))return;
+ const key=currentDeviceStore.id+':'+r.id+':'+action+':'+r.starts_at+':'+r.status+':'+r.party_size+':'+r.guest_name+':'+r.phone+':'+r.note;
+ if(reservationEventSeen.has(key))return;
+ reservationEventSeen.add(key);reservationEventQueue.push({reservation:r,action});
+ if(reservationEventQueue.length>100)reservationEventQueue.shift();
+ showNextReservationEvent();
+}
+function showNextReservationEvent(){
+ if(page!=='pos'||document.hidden||document.querySelector('[id^="reservation-event-"]')||document.querySelector('[id^="reservation-reminder-"]'))return;
+ const event=reservationEventQueue.shift();if(!event)return;
+ const r=event.reservation;
+ const labels={created:'NEW RESERVATION',updated:'RESERVATION UPDATED',cancelled:'RESERVATION CANCELLED'};
+ const el=document.createElement('div');el.id='reservation-event-'+r.id;el.className='admin-modal-backdrop';
+ el.innerHTML='<section class="admin-modal" role="alertdialog" aria-modal="true" aria-label="'+labels[event.action]+'"><div class="admin-modal-head"><div><span class="admin-eyebrow">'+labels[event.action]+'</span><h2>'+esc(r.starts_at.replace('T',' '))+' · '+Number(r.party_size)+' guests</h2></div></div><p><strong>'+esc(r.guest_name||'Guest')+'</strong></p><p>Phone: '+esc(r.phone||'—')+'</p><p>'+esc(r.note||'No notes')+'</p><div class="admin-modal-actions"><button type="button" data-reservation-view>View reservations</button><button type="button" class="alt" data-reservation-dismiss>Dismiss</button></div></section>';
+ document.body.append(el);sound();
+ const close=()=>{el.remove();showNextReservationEvent()};
+ el.querySelector('[data-reservation-dismiss]').onclick=close;
+ el.querySelector('[data-reservation-view]').onclick=()=>{close();fohTab='reservations';pos()};
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)showNextReservationEvent()});
 function warsawDay(offset=0){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(Date.now()+offset*86400000));const v=k=>parts.find(p=>p.type===k).value;return v('year')+'-'+v('month')+'-'+v('day')}
 async function loadPosReservations(){
  if(page!=='pos'||!currentDeviceStore?.id)return;
