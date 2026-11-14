@@ -693,11 +693,25 @@ function overviewPanel(){
  '<p class="muted small">Sales reflect orders created today in Warsaw time. Paid amounts come from recorded payments; Unpaid is the outstanding order value. Payments for earlier orders are not included.</p></section>';
 }
 let superStore='',superMenu=[],superLinks=[],superOptions=[],superCart=[],superSource='takeaway',superTable='01',superCustomer='',superPhone='',superNote='',superBusy=false,superError='',superLoaded=false,superKey=crypto.randomUUID();
+let superMenuRequest=0;
+const superMenuCache=new Map();
 async function loadSuperMenu(){
- const storeId=superStore;
- if(!storeId){superMenu=[];superLoaded=false;return;}
- try{const data=await api('/admin/super-pos/menu?store_id='+encodeURIComponent(storeId));if(superStore!==storeId)return;superMenu=data.items||[];superLinks=data.links||[];superOptions=data.options||[];superError='';superLoaded=true;}
- catch(e){if(superStore===storeId){superError=e.message;superLoaded=true;}}
+ const storeId=superStore,request=++superMenuRequest;
+ superLoaded=false;superError='';superMenu=[];superLinks=[];superOptions=[];
+ if(!storeId)return;
+ const cached=superMenuCache.get(storeId);
+ if(cached){superMenu=cached.items;superLinks=cached.links;superOptions=cached.options;superLoaded=true;return;}
+ try{
+  const data=await api('/admin/super-pos/menu?store_id='+encodeURIComponent(storeId));
+  if(request!==superMenuRequest||superStore!==storeId)return;
+  const entry={items:data.items||[],links:data.links||[],options:data.options||[]};
+  superMenuCache.set(storeId,entry);
+  superMenu=entry.items;superLinks=entry.links;superOptions=entry.options;superLoaded=true;
+ }catch(e){
+  if(request!==superMenuRequest||superStore!==storeId)return;
+  superError=e.message==='Failed to fetch'?'Network unavailable. Check connection and retry loading the menu.':e.message;
+  superLoaded=true;
+ }
 }
 let superCategory='All',superSearch='';
 function superPosPanel(){
@@ -713,7 +727,7 @@ function superPosPanel(){
  const modifierForm=pendingItem?'<div class="item-dialog-backdrop"><section class="item-dialog" role="dialog" aria-modal="true"><div class="row"><h2>'+esc(pendingItem.name)+'</h2><button type="button" class="alt" id="super-config-cancel">✕</button></div><p class="muted">Base price '+money(pendingItem.price_cents)+'</p>'+superLinks.filter(x=>x.menu_id===pendingItem.id).map(g=>'<fieldset class="modifier-fieldset"><legend>'+esc(g.name)+' <small class="muted">'+g.min_select+'–'+g.max_select+'</small></legend>'+superOptions.filter(o=>o.group_id===g.group_id).map(o=>'<label class="modifier-choice"><input type="checkbox" data-super-option="'+esc(o.id)+'" '+(pending.option_ids.includes(o.id)?'checked':'')+'><span>'+esc(o.name)+'</span><b>'+(o.price_cents?'+'+money(o.price_cents):'Included')+'</b></label>').join('')+'</fieldset>').join('')+'<button type="button" id="super-config-done">Add to order</button></section></div>':'';
  return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Super POS</h2><p>Send orders to a restaurant’s Kitchen and Front of House.</p></div></div>'+
  '<div class="toolbar"><label>Restaurant <select id="super-store"><option value="">Select restaurant</option>'+storeOptions+'</select></label><label>Order type <select id="super-source">'+['takeaway','delivery','dinein'].map(x=>'<option value="'+x+'" '+(superSource===x?'selected':'')+'>'+esc(sourceName[x])+'</option>').join('')+'</select></label>'+(superSource==='dinein'?'<label>Table <select id="super-table">'+Array.from({length:20},(_,i)=>String(i+1).padStart(2,'0')).map(x=>'<option '+(superTable===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>':'')+'</div>'+
- '<div class="layout foh-order"><section><div class="panel"><div class="foh-title"><div><h2>New order'+(selected?' · '+esc(selected.name):'')+'</h2><p>Choose dishes to add to the ticket.</p></div></div><label>Search dishes <input id="super-search" placeholder="Search menu..." value="'+esc(superSearch)+'"></label>'+chips+'<div class="menu">'+(selected?(superLoaded?dishes:'<p>Loading menu…</p>'):'<p>Select a restaurant first.</p>')+'</div></div></section>'+
+ '<div class="layout foh-order"><section><div class="panel"><div class="foh-title"><div><h2>New order'+(selected?' · '+esc(selected.name):'')+'</h2><p>Choose dishes to add to the ticket.</p></div></div><label>Search dishes <input id="super-search" placeholder="Search menu..." value="'+esc(superSearch)+'"></label>'+chips+'<div class="menu">'+(selected?(superLoaded?(superError?'':dishes):'<p>Loading menu…</p>'):'<p>Select a restaurant first.</p>')+'</div>'+(selected&&superError?'<p role="alert">'+esc(superError)+'</p><button type="button" class="alt" id="super-retry-menu">Retry loading menu</button>':'')</div></section>'+
  '<aside><div class="panel foh-cart-panel"><h3>Current order</h3><div class="foh-ticket-items">'+(lines||'<p class="muted">No dishes selected.</p>')+'</div><label>Customer name <input id="super-customer" maxlength="100" value="'+esc(superCustomer)+'"></label><label>Phone <input id="super-phone" maxlength="60" value="'+esc(superPhone)+'"></label><label>Order note <textarea id="super-note" rows="3" maxlength="300">'+esc(superNote)+'</textarea></label><div class="row"><b>Total</b><b>'+money(total)+'</b></div>'+(superError?'<p role="alert">'+esc(superError)+'</p>':'')+'<button type="button" id="super-submit" '+(!selected||!superCart.length||!!pending||superBusy?'disabled':'')+'>'+(superBusy?'Submitting…':'Send to kitchen')+'</button><button type="button" class="alt" id="super-clear">Clear order</button></div></aside></div>'+modifierForm+'</section>';
 }
 function adminOrderPanel(){
@@ -744,7 +758,8 @@ function admin(){
  document.querySelector('#sync').onclick=()=>refresh();
  document.querySelectorAll('[data-admin-tab]').forEach(el=>el.onclick=()=>{adminTab=el.dataset.adminTab;if(['stores','devices','orders','overview','superpos'].includes(adminTab)&&!v3Loaded)loadV3Stores().then(()=>admin()).catch(e=>notify(e.message));if(adminTab==='orders')loadAdminOrders().then(()=>admin());if(adminTab==='superpos'){if(!superStore)superStore=v3Stores.find(x=>x.active)?.id||'';loadSuperMenu().then(()=>{if(adminTab==='superpos')admin()})}if(adminTab==='overview')loadOverview().then(()=>{if(adminTab==='overview')admin()});admin()});
  const superStoreEl=document.querySelector('#super-store');
- if(superStoreEl)superStoreEl.onchange=e=>{superStore=e.target.value;superCart=[];superCategory='All';superSearch='';superKey=crypto.randomUUID();superLoaded=false;loadSuperMenu().then(()=>admin());admin()};
+ if(superStoreEl)superStoreEl.onchange=e=>{superStore=e.target.value;superCart=[];superCategory='All';superSearch='';superKey=crypto.randomUUID();superLoaded=false;loadSuperMenu().then(()=>{if(adminTab==='superpos')admin()});admin()};
+ const superRetry=document.getElementById('super-retry-menu');if(superRetry)superRetry.onclick=()=>{superMenuCache.delete(superStore);loadSuperMenu().then(()=>{if(adminTab==='superpos')admin()});admin()};
  const superSourceEl=document.querySelector('#super-source');if(superSourceEl)superSourceEl.onchange=e=>{superSource=e.target.value;admin()};
  const superTableEl=document.querySelector('#super-table');if(superTableEl)superTableEl.onchange=e=>{superTable=e.target.value};
  for(const [id,set] of [['super-customer',v=>superCustomer=v],['super-phone',v=>superPhone=v],['super-note',v=>superNote=v]]){const el=document.getElementById(id);if(el)el.oninput=e=>set(e.target.value);}
