@@ -536,3 +536,22 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .reservation-table tr:has(.reservation-action-required){background:rgba(241,130,66,.065)}
 
 .super-reservation-panel{margin-top:22px}.super-reschedule-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.super-reschedule-controls input{min-width:185px;max-width:230px}.super-reschedule-controls button{white-space:nowrap}.super-reservation-panel .reservation-table{min-width:700px}
+
+/* Super POS: compact mobile sections, desktop remains unchanged */
+.super-mobile-tabs{display:none}
+@media(max-width:760px){
+ .super-mobile-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;position:sticky;top:0;z-index:25;background:#f2f5fa;border:1px solid #d9e1ec;padding:5px;border-radius:13px;margin:14px 0}
+ .super-mobile-tabs button{padding:12px 5px;font-size:12px;font-weight:800;border-radius:9px;color:#44546a;background:transparent;white-space:nowrap}
+ .super-mobile-tabs button.active{background:#345fe5;color:#fff;box-shadow:0 2px 8px #2345a333}
+ .super-mobile-layout{display:block!important}
+ .super-mobile-layout[data-super-active="order"] .super-mobile-cart,.super-mobile-layout[data-super-active="cart"] .super-mobile-order,.super-mobile-layout[data-super-active="reservations"] .super-mobile-order,.super-mobile-layout[data-super-active="reservations"] .super-mobile-cart{display:none!important}
+ .super-mobile-layout[data-super-active="cart"] .super-mobile-cart{display:block!important;width:100%;max-width:none}
+ .super-mobile-layout[data-super-active="order"] .super-mobile-order{display:block!important}
+ .super-mobile-reservations{display:none}
+ .admin-workspace:has(.super-mobile-layout[data-super-active="reservations"]) .super-mobile-reservations{display:block}
+ .admin-workspace:has(.super-mobile-layout:not([data-super-active="reservations"])) .super-mobile-reservations{display:none}
+ .super-mobile-reservations .super-reservation-panel{margin-top:12px}
+ .super-reschedule-controls{align-items:stretch}
+ .super-reschedule-controls input{min-width:170px;max-width:100%}
+}
+@media(min-width:761px){.super-mobile-reservations{display:block}}
