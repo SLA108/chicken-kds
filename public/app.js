@@ -342,10 +342,20 @@ function showReleaseTable(id){
   if(confirmButton.disabled)return;
   confirmButton.disabled=true;cancel.disabled=true;confirmButton.textContent='Releasing…';error.hidden=true;
   try{
+   const releaseStore=currentDeviceStore?.id,releaseEpoch=storeEpoch;
    await api('/orders/'+id+'/release-table','POST',{});
    close();
+   // Server has confirmed the release. Update the visible POS state immediately,
+   // without blocking on the next full menu/orders/tables network refresh.
+   if(releaseEpoch===storeEpoch&&releaseStore===currentDeviceStore?.id){
+    o.table_occupied=false;
+    const tableRow=tableState.find(t=>t.number===o.table_no);
+    if(tableRow){tableRow.occupied=false;tableRow.order_id=null;tableRow.conflict=false;}
+    if(editingOrder===id){editingOrder='';configuredCart=[];note='';}
+    pos();
+   }
    notify('Table '+o.table_no+' released · Now available');
-   await refresh();
+   refresh().catch(e=>console.warn('Post-release sync failed',e));
   }catch(e){
    error.textContent='Unable to release table: '+e.message;error.hidden=false;
    confirmButton.disabled=false;cancel.disabled=false;confirmButton.textContent='✓ Release Table';
