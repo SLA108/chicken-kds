@@ -435,3 +435,14 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 
 /* Distinct Back Office workspaces share stable form handlers. */
 .bo-restaurants-view .bo-device-section,.bo-devices-view .bo-restaurant-section{display:none}
+
+/* Back Office: detailed read-only order monitoring */
+.bo-order-card{border:1px solid #dce3eb;border-radius:14px;padding:15px;background:#fff;display:grid;gap:12px;min-width:0}
+.bo-order-head,.bo-order-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bo-order-head>div{display:grid;gap:4px}.bo-order-head small,.bo-order-foot small{color:#64748b}
+.bo-order-flags{display:flex;flex-wrap:wrap;gap:6px}
+.bo-flag{font-size:11px;font-weight:650;padding:5px 8px;border-radius:7px;background:#e2e8f0;color:#334155}
+.bo-red{background:#fee2e2;color:#991b1b}.bo-yellow{background:#fef3c7;color:#92400e}.bo-green{background:#dcfce7;color:#166534}.bo-gray{background:#e5e7eb;color:#475569}
+.bo-order-items{display:grid;gap:7px}.bo-order-item{display:flex;justify-content:space-between;align-items:start;gap:12px;border-bottom:1px solid #f1f5f9;padding-bottom:7px}
+.bo-order-item>span{min-width:0;overflow-wrap:anywhere}.bo-order-item>small{flex-shrink:0;color:#64748b}
+@media(max-width:650px){.bo-order-foot,.bo-order-item{flex-wrap:wrap}.bo-order-item>small{flex-basis:100%}}
