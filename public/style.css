@@ -357,3 +357,66 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .v3-device-id{font-size:11px;color:#64748b;overflow-wrap:anywhere}
 .v3-device-row>button{flex-shrink:0}
 @media(max-width:600px){.v3-grants-dialog{padding:18px}.v3-device-row>button{flex:1}}
+
+/* Stores V3 workspace redesign: scoped so other Back Office tabs remain unchanged. */
+.v3-management{display:grid;gap:22px;color:#172033}
+.v3-management-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:8px 0}
+.v3-management-head h2{margin:4px 0 8px;font-size:clamp(24px,3vw,32px)}
+.v3-management-head p{margin:0;color:#64748b}
+.v3-eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;color:#2563eb!important}
+.v3-management-section{border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:22px;min-width:0}
+.v3-section-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px}
+.v3-section-heading h3{margin:0 0 5px;font-size:19px}
+.v3-section-heading p{margin:0;color:#64748b;font-size:13px}
+.v3-section-count{flex-shrink:0;border-radius:20px;background:#f1f5f9;color:#475569;padding:7px 11px;font-size:12px;font-weight:700}
+.v3-store-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.v3-management .v3-store-tile{display:grid;text-align:left;gap:10px;min-width:0;padding:17px;border:2px solid #e2e8f0;border-radius:13px;background:#f8fafc;color:#172033;box-shadow:none}
+.v3-management .v3-store-tile.is-selected{background:#eff6ff;border-color:#2563eb}
+.v3-store-tile-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.v3-store-tile strong{font-size:15px;overflow-wrap:anywhere}
+.v3-store-tile small{color:#64748b;font-size:12px}
+.v3-state{display:inline-flex;align-items:center;width:max-content;white-space:nowrap;border-radius:20px;padding:4px 9px;font-size:11px;font-weight:800}
+.v3-state.is-active{background:#dcfce7;color:#166534}
+.v3-state.is-inactive{background:#f1f5f9;color:#64748b}
+.v3-store-select-fallback{display:none}
+.v3-selected-store{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0}
+.v3-selected-store>div{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.v3-selected-store small{font-size:10px;font-weight:800;letter-spacing:.08em;color:#64748b}
+.v3-selected-store strong{font-size:18px}
+.v3-inline-note{margin:12px 0 0;color:#9a3412;font-size:13px}
+.v3-management .v3-danger-action{border-color:#fecaca;color:#b91c1c}
+.v3-menu-disclosure,.v3-legacy-enrollment,.v3-revoked-devices{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.v3-menu-disclosure summary,.v3-legacy-enrollment summary,.v3-revoked-devices summary{cursor:pointer;padding:16px;font-weight:750;background:#f8fafc}
+.v3-menu-disclosure summary span{font-weight:400;color:#64748b;margin-left:12px;font-size:12px}
+.v3-menu-list{display:grid;gap:10px;padding:12px}
+.v3-menu-row{display:grid;grid-template-columns:minmax(150px,1.5fr) minmax(130px,1fr) minmax(135px,1fr) auto auto;align-items:end;gap:12px;border:1px solid #e2e8f0;border-radius:12px;padding:14px}
+.v3-menu-info{display:grid;gap:5px;min-width:0}
+.v3-menu-info strong{overflow-wrap:anywhere}
+.v3-menu-info small{color:#64748b}
+.v3-menu-row label,.v3-management-form label{display:grid;gap:7px;font-size:13px;font-weight:650;min-width:0}
+.v3-menu-row input[type=number],.v3-menu-row select,.v3-management-form input:not([type=checkbox]),.v3-management-form select{box-sizing:border-box;width:100%;min-width:0;min-height:42px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 11px;background:white;color:#172033}
+.v3-menu-row .v3-sold-field{display:flex;align-items:center;gap:8px;white-space:nowrap;padding-bottom:10px}
+.v3-sold-field input{width:18px;height:18px}
+.v3-management-form{display:grid;gap:16px}
+.v3-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.v3-management .v3-store-grants{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;border:1px solid #cbd5e1;border-radius:12px;padding:14px}
+.v3-management .v3-store-grants legend{padding:0 6px;font-weight:700}
+.v3-management .v3-store-grants label{display:flex;align-items:center;gap:10px;border:1px solid #e2e8f0;border-radius:9px;padding:11px;min-width:0}
+.v3-management .v3-store-grants input{flex:0 0 18px;width:18px;height:18px;margin:0}
+.v3-management .v3-store-grants span{overflow-wrap:anywhere}
+.v3-form-footer{display:flex;align-items:end;justify-content:space-between;gap:14px}
+.v3-form-footer label{flex:1;max-width:340px}
+.v3-form-footer button{min-height:42px}
+.v3-device-list{display:grid;gap:10px}
+.v3-device-card{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:15px;border:1px solid #e2e8f0;border-radius:12px}
+.v3-device-meta{font-size:12px;color:#64748b}
+.v3-device-actions{display:flex;gap:8px;flex-wrap:wrap}
+.v3-device-actions button{white-space:nowrap}
+.v3-management .v3-revoke-button{color:#b91c1c;border-color:#fecaca}
+.v3-legacy-enrollment,.v3-revoked-devices{margin-top:16px}
+.v3-legacy-enrollment>p,.v3-legacy-enrollment>form,.v3-legacy-enrollment>#v3-device-credential{margin:14px}
+.v3-revoked-devices>.v3-device-list{padding:12px}
+.v3-empty{padding:15px;color:#64748b}
+@media(max-width:1000px){.v3-menu-row{grid-template-columns:minmax(0,1fr) minmax(130px,1fr) minmax(130px,1fr)}.v3-menu-info{grid-column:1/-1}}
+@media(max-width:700px){.v3-management-section{padding:15px}.v3-management-head,.v3-selected-store,.v3-section-heading,.v3-device-card,.v3-form-footer{align-items:stretch;flex-direction:column}.v3-form-grid{grid-template-columns:1fr}.v3-menu-row{grid-template-columns:1fr 1fr}.v3-menu-row .v3-menu-info{grid-column:1/-1}.v3-menu-row button{grid-column:2}.v3-store-tiles{grid-template-columns:1fr 1fr}.v3-section-count{align-self:flex-start}.v3-form-footer label{max-width:none}.v3-management-form input:not([type=checkbox]),.v3-management-form select,.v3-menu-row input[type=number],.v3-menu-row select{font-size:16px}}
+@media(max-width:420px){.v3-store-tiles{grid-template-columns:1fr}.v3-menu-row{grid-template-columns:1fr}.v3-menu-row button{grid-column:1}.v3-management-head>button{width:100%}}
