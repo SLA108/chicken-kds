@@ -473,3 +473,17 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .v3-current-store:not(.v3-current-store-unverified) button:not(:disabled):active{transform:translateY(1px)}
 .v3-current-store:not(.v3-current-store-unverified) button:disabled{opacity:.45}
 @media(max-width:540px){.v3-current-store:not(.v3-current-store-unverified){margin:8px 10px 10px;padding:10px 12px;gap:8px;min-height:56px}.v3-current-store:not(.v3-current-store-unverified) strong{font-size:17px}.v3-current-store:not(.v3-current-store-unverified) button{padding:8px 10px;font-size:12px}}
+
+/* POS empty-state and brand polish */
+body:not(.kitchen):has(.foh-tabs){background:#17212c;min-height:100vh;color:#e2e8f0}
+body:not(.kitchen):has(.foh-tabs) main{padding-bottom:36px}
+.foh-workspace:has(.foh-empty-tickets){min-height:0}
+.foh-empty-tickets{min-height:148px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;color:#cbd5e1;padding:20px 12px}
+.foh-empty-tickets strong{font-size:17px;color:#f1f5f9}
+.foh-empty-tickets p{margin:0;color:#94a3b8;font-size:13px;max-width:360px;line-height:1.5}
+.foh-empty-symbol{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#14532d;color:#bbf7d0;font-size:20px;font-weight:800}
+.ck-header-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.ck-header-logo{display:block;width:70px;height:40px;object-fit:contain;flex:none}
+.ck-header-logo[hidden]{display:none}
+.ck-header-brand>span{white-space:nowrap}
+@media(max-width:650px){.ck-header-logo{width:52px;height:32px}.ck-header-brand>span{font-size:12px}}
