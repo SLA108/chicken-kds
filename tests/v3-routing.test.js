@@ -82,3 +82,11 @@ test('dish completion trigger race returns conflict instead of server error',()=
  assert.ok(section.includes("current.status==='cancelled'||current.kitchen_completed_at"));
  assert.ok(section.includes("return json({error:'Order changed; refresh'},409)"));
 });
+
+test('kitchen status transition cannot overwrite completed order',()=>{
+ const start=api.indexOf('const scopedStatus='),end=api.indexOf('const scopedPickup=',start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes("AND status=? AND kitchen_completed_at IS NULL"));
+ assert.ok(section.includes("result.meta.changes!==1"));
+});
