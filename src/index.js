@@ -538,6 +538,15 @@ if(/^\/api\/admin\/devices\/[^/]+\/stores$/.test(path)&&['GET','PUT'].includes(r
  }
  if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
  const body=await parse(req);
+ if(!env.DEVICE_APPROVAL_PIN||env.DEVICE_APPROVAL_PIN.length<8)return json({error:'Secondary approval password not configured'},503);
+ const attemptScope='grants:'+deviceId,nowMs=Date.now();
+ const attempt=await env.DB.prepare('SELECT attempts,window_started_at,blocked_until FROM device_approval_attempts WHERE scope=?').bind(attemptScope).first();
+ if(attempt?.blocked_until&&Date.parse(attempt.blocked_until)>nowMs)return json({error:'Too many attempts. Try again later.'},429);
+ if(typeof body?.secondary_pin!=='string'||await sha256Hex(body.secondary_pin)!==await sha256Hex(env.DEVICE_APPROVAL_PIN)){
+  const policy=approvalAttemptPolicy(attempt,nowMs);
+  await env.DB.prepare('INSERT INTO device_approval_attempts(scope,attempts,window_started_at,blocked_until) VALUES(?,?,?,?) ON CONFLICT(scope) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until').bind(attemptScope,policy.attempts,policy.windowStartedAt,policy.blockedUntil).run();
+  return json({error:'Incorrect secondary password'},403);
+ }
  const ids=body?.store_ids;
  if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||id.length>64)||new Set(ids).size!==ids.length)return json({error:'Select one or more distinct stores'},400);
  const activeStores=(await env.DB.prepare('SELECT id FROM stores WHERE active=1').all()).results;
