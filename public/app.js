@@ -819,7 +819,7 @@ function chooseInitialStore(){
  };
  return true;
 }
-async function start(){if(chooseInitialStore())return;try{await refresh(true);if(page!=='admin')connect()}catch(e){notify(e.message)}}
+async function start(){if(chooseInitialStore())return;try{await refresh(true);if(page==='admin'&&adminTab==='overview'){await loadOverview();admin();}if(page!=='admin')connect()}catch(e){notify(e.message)}}
 (async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(storeSelectionPending)chooseInitialStore();else if(token)start();else login()})();
 setInterval(async()=>{if(deviceMode()&&!storeSelectionPending)await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
