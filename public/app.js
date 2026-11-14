@@ -366,11 +366,13 @@ function showReleaseTable(id){
   '<div><span>Order total</span><strong>'+money(ticketTotal(o))+'</strong></div>'+
   '<div><span>Kitchen status</span><strong>'+(ready?'READY':(o.items||[]).some(i=>i.is_done)?'COOKING':'NOT READY')+'</strong></div></div>'+
   (!paid?'<div class="foh-release-warning">⚠ This order has not been paid. Releasing the table does not collect payment or close the order.</div>':'')+
-  '<p class="foh-release-note">The table will become available. The order and payment history will be preserved.</p>'+
+  '<div class="foh-release-tip"><label>Add tip (PLN)<input id="release-tip" type="number" min="0" step="0.01" inputmode="decimal" value="0.00"></label><label>Tip payment method<select id="release-tip-method"><option value="cash">Cash</option><option value="card">Card</option></select></label><p id="release-existing-tips" class="muted">Loading recorded tips…</p></div>'+'<p class="foh-release-note">The table will become available. The order and payment history will be preserved.</p>'+
   '<p class="foh-release-error" id="foh-release-error" role="alert" hidden></p>'+
   '<div class="foh-release-actions"><button type="button" class="foh-release-cancel" id="foh-release-cancel">Cancel</button><button type="button" class="foh-release-confirm" id="foh-release-confirm">✓ Release Table</button></div>'+
   '</section>';
  document.body.appendChild(modal);
+ api('/orders/'+id+'/tips').then(data=>{const el=modal.querySelector('#release-existing-tips');if(el)el.textContent='Tips already recorded: '+money(data.total_cents||0)}).catch(()=>{const el=modal.querySelector('#release-existing-tips');if(el)el.textContent='Existing tips unavailable';});
+ const releaseTipKey=crypto.randomUUID();
  const cancel=modal.querySelector('#foh-release-cancel'),confirmButton=modal.querySelector('#foh-release-confirm'),error=modal.querySelector('#foh-release-error');
  const close=()=>{modal.remove();document.removeEventListener('keydown',onKey)};
  const onKey=e=>{if(e.key==='Escape'&&!confirmButton.disabled)close()};
@@ -382,6 +384,7 @@ function showReleaseTable(id){
   confirmButton.disabled=true;cancel.disabled=true;confirmButton.textContent='Releasing…';error.hidden=true;
   try{
    const releaseStore=currentDeviceStore?.id,releaseEpoch=storeEpoch;
+   const rawTip=modal.querySelector('#release-tip').value.trim(),tipCents=Math.round(Number(rawTip)*100);if(!rawTip||!Number.isFinite(Number(rawTip))||tipCents<0||tipCents>10000000||Math.abs(Number(rawTip)*100-tipCents)>0.0001)throw Error('Enter a valid tip amount');if(tipCents>0){if(!paid)throw Error('Checkout the order before adding a tip');await api('/orders/'+id+'/tips','POST',{amount_cents:tipCents,method:modal.querySelector('#release-tip-method').value,stage:'release',request_key:releaseTipKey});}
    await api('/orders/'+id+'/release-table','POST',{});
    close();
    // Server has confirmed the release. Update the visible POS state immediately,
