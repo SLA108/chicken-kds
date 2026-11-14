@@ -1,0 +1,15 @@
+name: V3 code checks
+on:
+  push:
+    branches: [feature/v3-multistore-foundation]
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check:syntax
+      - run: npm test
