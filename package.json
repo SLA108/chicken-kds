@@ -1,1 +1,17 @@
-{"name":"chicken-kds","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"wrangler dev","deploy":"wrangler deploy","db:local":"wrangler d1 execute chicken_kds --local --file=./schema.sql","db:remote":"wrangler d1 execute chicken_kds --remote --file=./schema.sql"},"devDependencies":{"wrangler":"^4.0.0"}}
+{
+  "name": "chicken-kds",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute chicken_kds --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute chicken_kds --remote --file=./schema.sql",
+    "test": "node --test tests/*.test.js",
+    "check:syntax": "node --check src/index.js && node --check src/store-auth.js && node --check public/app.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
