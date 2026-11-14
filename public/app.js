@@ -312,9 +312,12 @@ async function loadPosReservations(){
  try{const from=warsawDay(),to=warsawDay(7),data=await api('/reservations?from='+from+'&to='+to);
  if(epoch!==storeEpoch||store!==currentDeviceStore?.id)return;
  posReservations=data.reservations||[];posReservationLoaded=true;
- const now=new Date(),warsawNow=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(now).replace(' ','T');
- const currentMs=Date.parse(warsawNow+':00');
- for(const r of posReservations){const diff=(Date.parse(r.starts_at+':00')-currentMs)/60000;if(r.status==='booked'&&diff>=-5&&diff<=30&&!document.hidden&&!posReservationAlerts.has(r.id)){posReservationAlerts.add(r.id);showReservationAlert(r);}}
+ const nowParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+ const value=k=>nowParts.find(p=>p.type===k).value;
+ const warsawNow=value('year')+'-'+value('month')+'-'+value('day')+'T'+value('hour')+':'+value('minute');
+ const minuteValue=stamp=>{const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(stamp);return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5])/60000:NaN};
+ const currentMinute=minuteValue(warsawNow);
+ for(const r of posReservations){const diff=minuteValue(r.starts_at)-currentMinute;if(r.status==='booked'&&diff>=-5&&diff<=30&&!document.hidden&&!posReservationAlerts.has(r.id)){posReservationAlerts.add(r.id);showReservationAlert(r);}}
  if(fohTab==='reservations')pos();
  }catch(e){console.warn('Reservations unavailable',e)}finally{posReservationLoading=false;if(posReservationReloadPending){posReservationReloadPending=false;loadPosReservations()}}
 }
