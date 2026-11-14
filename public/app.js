@@ -633,7 +633,6 @@ function v3StorePanel(){
  '<div class="v3-form-footer"><label>Secondary password<input name="secondary_pin" type="password" autocomplete="off" required></label><button type="submit">Approve device</button></div></form></section>'+
  '<section class="v3-management-section"><div class="v3-section-heading"><div><h3>Registered devices</h3><p>Manage existing devices and their restaurant access.</p></div><span class="v3-section-count">'+activeDevices.length+' active</span></div>'+
  '<div class="v3-device-list">'+(activeDevices.map(deviceRow).join('')||'<p class="v3-empty">No active devices.</p>')+'</div>'+
- '<details class="v3-legacy-enrollment"><summary>Legacy device registration</summary><p class="muted">For compatibility only. Use the pairing form above for new restaurant tablets.</p><form id="v3-device-form" class="v3-management-form"><label>New device label<input id="v3-device-label" maxlength="100" required placeholder="e.g. Kitchen tablet 1"></label><button type="submit" '+(!v3SelectedStore?'disabled':'')+'>Register device</button></form><div id="v3-device-credential" class="admin-inline-form" hidden></div></details>'+
  (revokedDevices.length?'<details class="v3-revoked-devices"><summary>Revoked devices ('+revokedDevices.length+')</summary><div class="v3-device-list">'+revokedDevices.map(deviceRow).join('')+'</div></details>':'')+
  '</section></section>';
 }
@@ -688,19 +687,6 @@ function admin(){
    };
   }catch(err){notify('Unable to load access: '+err.message)}
  });
- document.querySelector('#v3-device-form').onsubmit=async e=>{
-  e.preventDefault();const label=document.querySelector('#v3-device-label').value.trim();if(!label||!v3SelectedStore)return;
-  const btn=e.currentTarget.querySelector('[type=submit]');btn.disabled=true;
-  try{
-   const result=await api('/admin/devices','POST',{store_id:v3SelectedStore,label});
-   const target=document.querySelector('#v3-device-credential');target.hidden=false;target.replaceChildren();
-   const title=document.createElement('strong');title.textContent='Copy these credentials now; the secret is shown only once.';
-   const field=document.createElement('textarea');field.readOnly=true;field.rows=4;field.value='Device ID: '+result.id+String.fromCharCode(10)+'Enrollment secret: '+result.enrollment_secret;
-   const copy=document.createElement('button');copy.type='button';copy.textContent='Copy credentials';copy.onclick=()=>navigator.clipboard.writeText(field.value).then(()=>notify('Copied')).catch(()=>notify('Copy failed'));
-   target.append(title,field,copy);v3Devices=(await api('/admin/devices')).devices||[];
-   notify('Device registered. Save the secret before leaving this page.');
-  }catch(err){notify(err.message)}finally{btn.disabled=false}
- };
  document.querySelectorAll('[data-v3-revoke]').forEach(btn=>btn.onclick=async()=>{
   if(!confirm('Revoke this device? Existing sessions will stop working.'))return;
   btn.disabled=true;try{await api('/admin/devices/'+encodeURIComponent(btn.dataset.v3Revoke)+'/revoke','POST');v3Devices=(await api('/admin/devices')).devices||[];admin();notify('Device revoked')}catch(err){notify(err.message);btn.disabled=false}
