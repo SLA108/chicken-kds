@@ -218,7 +218,7 @@ if(sessionToken){
   const transitions={new:['cooking'],cooking:['done']};
   if(!transitions[old.status]?.includes(b.status))return json({error:'Invalid transition'},409);
   const now=new Date().toISOString();
-  const result=await env.DB.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status=?').bind(b.status,now,id,session.storeId,old.status).run();
+  const result=await env.DB.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status=? AND kitchen_completed_at IS NULL').bind(b.status,now,id,session.storeId,old.status).run();
   if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await event(env,id,'status',session.role,{from:old.status,to:b.status,store_id:session.storeId});
   await broadcastStore(env,session.storeId,'orders',{id});
