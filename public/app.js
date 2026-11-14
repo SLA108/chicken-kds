@@ -313,7 +313,7 @@ async function loadPosReservations(){
  posReservations=data.reservations||[];posReservationLoaded=true;
  const now=new Date(),warsawNow=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(now).replace(' ','T');
  const currentMs=Date.parse(warsawNow+':00');
- for(const r of posReservations){const diff=(Date.parse(r.starts_at+':00')-currentMs)/60000;if(r.status==='booked'&&diff>=-5&&diff<=30&&!posReservationAlerts.has(r.id)){posReservationAlerts.add(r.id);showReservationAlert(r);}}
+ for(const r of posReservations){const diff=(Date.parse(r.starts_at+':00')-currentMs)/60000;if(r.status==='booked'&&diff>=-5&&diff<=30&&!document.hidden&&!posReservationAlerts.has(r.id)){posReservationAlerts.add(r.id);showReservationAlert(r);}}
  if(fohTab==='reservations')pos();
  }catch(e){console.warn('Reservations unavailable',e)}finally{posReservationLoading=false}
 }
