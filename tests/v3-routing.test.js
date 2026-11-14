@@ -54,3 +54,14 @@ test('store-specific active override controls both menu visibility and order ite
  assert.ok(!api.includes('WHERE m.active=1 AND COALESCE(o.active,1)=1'));
  assert.ok(api.includes('COALESCE(o.sold_out,0)=0'));
 });
+
+test('admin store sales uses Warsaw calendar day boundaries',()=>{
+ const start=api.indexOf("if(path==='/api/admin/store-sales'");
+ const end=api.indexOf("// V3 admin-only store detail",start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes("timeZone:'Europe/Warsaw'"));
+ assert.ok(section.includes('args.push(midnightUtc(from))'));
+ assert.ok(section.includes("args.push(midnightUtc(next.toISOString().slice(0,10)))"));
+ assert.ok(section.includes("timezone:'Europe/Warsaw'"));
+});
