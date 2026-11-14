@@ -17,8 +17,6 @@ async function broadcastStore(env,storeId,type,data){try{const response=await ro
 async function parse(req){try{return await req.json();}catch{return null;}}
 function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
-async function getOrders(env,limit=120){const orders=(await env.DB.prepare("SELECT * FROM orders WHERE status!='cancelled' AND (kitchen_completed_at IS NULL OR paid_at IS NULL OR id IN (SELECT order_id FROM table_occupancy)) ORDER BY created_at DESC LIMIT ?").bind(limit).all()).results;const ids=orders.map(o=>o.id);if(!ids.length)return [];const items=(await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at ASC`).bind(...ids).all()).results;const itemIds=items.map(i=>i.id);const modifiers=itemIds.length?(await env.DB.prepare(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(...itemIds).all()).results:[];return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));}
-
 // Store-scoped read model. Store ID comes only from a verified signed session.
 async function getStoreOrders(env,storeId,limit=120){
  const orders=(await env.DB.prepare("SELECT * FROM orders WHERE store_id=? AND status!='cancelled' AND (kitchen_completed_at IS NULL OR paid_at IS NULL OR EXISTS (SELECT 1 FROM table_occupancy t WHERE t.order_id=orders.id AND t.store_id=orders.store_id)) ORDER BY created_at DESC LIMIT ?").bind(storeId,limit).all()).results;
@@ -54,7 +52,7 @@ async function prepareOrderItems(env,items,orderId,now,storeId=null){
 }
 export default {async fetch(req,env){const url=new URL(req.url);const path=url.pathname;if(path.startsWith('/images/')){if(req.method!=='GET')return new Response('Method not allowed',{status:405});const key=path.slice('/images/'.length);if(!/^[0-9a-f-]{36}\.(webp|png|jpg)$/.test(key))return new Response('Not found',{status:404});if(!env.MENU_IMAGES)return new Response('Image storage unavailable',{status:503});const object=await env.MENU_IMAGES.get(key);if(!object)return new Response('Not found',{status:404});return new Response(object.body,{headers:{'content-type':object.httpMetadata?.contentType||'image/webp','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'}});}
 if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitchen','/admin','/scanner','/'].includes(path))assetPath='/';return env.ASSETS.fetch(new Request(new URL(assetPath,url),req));}
-if(!env.AUTH_SECRET||!env.POS_PIN||!env.KITCHEN_PIN||!env.ADMIN_PIN||!env.SCANNER_PIN)return json({error:'Server secrets not configured'},503);
+if(!env.AUTH_SECRET||!env.ADMIN_PIN)return json({error:'Server secrets not configured'},503);
 if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||b.role!=='admin')return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
 // Pairing approval issues an HttpOnly device cookie used for scoped session renewal.
 const renewalCookie=(id,secret)=>'ck_device='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=31536000';
@@ -434,7 +432,7 @@ if(sessionToken){
   const modifiers=ids.length?(await env.DB.prepare('SELECT m.order_item_id,m.name,m.price_cents FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id=? AND m.order_item_id IN ('+ids.map(()=>'?').join(',')+')').bind(storeId,id,...ids).all()).results:[];
   return json({order:{...order,table_occupied:!!occupancy},items:items.map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)})),payments:paymentsResult.results,events:eventsResult.results});
  }
- // Fail closed: do not grant access to unscoped legacy APIs.
+ // Unknown store API routes are not forwarded to admin endpoints.
  return json({error:'Unknown store-scoped API endpoint'},404);
 }
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
@@ -761,7 +759,7 @@ if(menuMatch&&req.method==='PATCH'){
 if(path==='/api/menu'&&req.method==='GET')return json((await env.DB.prepare('SELECT * FROM menu WHERE active=1 ORDER BY sort_order,category,name').all()).results);
 if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate) VALUES(?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8).run();await broadcast(env,'menu',{});return json({id},201);}
 if(path==='/api/health'&&req.method==='GET')return json({ok:true,time:new Date().toISOString()});
-if(path==='/api/scanner/reserve'&&req.method==='GET')return json({ready:false,message:'Scanner OCR is reserved for a later release; no external orders are imported.'});
+
 return json({error:'Not found'},404);
 }catch(e){console.error(e);return json({error:'Server error'},500);}
 }};
