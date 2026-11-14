@@ -602,7 +602,7 @@ async function uploadAdminImage(file){
   const data=await r.json();if(!r.ok)throw Error(data.error||'Upload failed');return data.image_url;
  }finally{image.close();}
 }
-let v3Stores=[],v3SelectedStore='',v3StoreMenu=[],v3Devices=[],v3StoreError='',v3Loaded=false,v3PairAllowedStores=null;
+let v3Stores=[],v3SelectedStore='',v3StoreMenu=[],v3Devices=[],v3StoreError='',v3Loaded=false,v3PairAllowedStores=null,v3RevokedOpen=false;
 async function loadV3Stores(){
  try{const [stores,devices]=await Promise.all([api('/admin/stores'),api('/admin/devices')]);v3Stores=stores.stores||[];v3Devices=devices.devices||[];v3StoreError='';v3Loaded=true;if(!v3Stores.some(x=>x.id===v3SelectedStore))v3SelectedStore=v3Stores[0]?.id||'';if(v3SelectedStore)await loadV3StoreMenu();}
  catch(e){v3StoreError=e.message;v3Loaded=true;}
@@ -634,7 +634,7 @@ function v3StorePanel(){
  '<div class="v3-form-footer"><label>Secondary password<input name="secondary_pin" type="password" autocomplete="off" required></label><button type="submit">Approve device</button></div></form></section>'+
  '<section class="v3-management-section"><div class="v3-section-heading"><div><h3>Registered devices</h3><p>Manage existing devices and their restaurant access.</p></div><span class="v3-section-count">'+activeDevices.length+' active</span></div>'+
  '<div class="v3-device-list">'+(activeDevices.map(deviceRow).join('')||'<p class="v3-empty">No active devices.</p>')+'</div>'+
- (revokedDevices.length?'<details class="v3-revoked-devices"><summary>Revoked devices ('+revokedDevices.length+')</summary><div class="v3-device-list">'+revokedDevices.map(deviceRow).join('')+'</div></details>':'')+
+ (revokedDevices.length?'<details class="v3-revoked-devices" '+(v3RevokedOpen?'open':'')+'><summary>Revoked devices ('+revokedDevices.length+')</summary><div class="v3-device-list">'+revokedDevices.map(deviceRow).join('')+'</div></details>':'')+
  '</section></section>';
 }
 
@@ -657,6 +657,7 @@ function admin(){
   if(!confirm((store.active?'Deactivate ':'Activate ')+store.name+'?'))return;
   try{await api('/admin/stores/'+encodeURIComponent(store.id)+'/config','PATCH',{active:!store.active});await loadV3Stores();admin();notify('Store status updated')}catch(err){notify(err.message)}
  };
+ const revokedDisclosure=document.querySelector('.v3-revoked-devices');if(revokedDisclosure)revokedDisclosure.ontoggle=()=>{v3RevokedOpen=revokedDisclosure.open};
  document.querySelectorAll('#v3-pair-approve input[name="store_ids"]').forEach(box=>box.onchange=()=>{if(v3PairAllowedStores===null)v3PairAllowedStores=new Set(v3SelectedStore?[String(v3SelectedStore)]:[]);if(box.checked)v3PairAllowedStores.add(box.value);else v3PairAllowedStores.delete(box.value)});
  document.querySelector('#v3-pair-approve').onsubmit=async e=>{
   e.preventDefault();const f=e.currentTarget,btn=f.querySelector('button[type=submit]');btn.disabled=true;
