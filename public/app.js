@@ -9,7 +9,7 @@ function scopedApiPath(path){
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
  throw Error('Device mode does not permit this endpoint: '+path);
 }
-let deviceStores=[],currentDeviceStore=null,renewalPending=null;
+let deviceStores=[],currentDeviceStore=null,renewalPending=null,storeSelectionPending=false;
 const lastStoreKey='ck_last_store_'+page;
 async function renewDeviceSession(){
  if(!['pos','kitchen'].includes(page))return false;
@@ -30,6 +30,7 @@ async function renewDeviceSession(){
    if(result.role!==page)return false;
    const oldStoreId=currentDeviceStore?.id;
    deviceStores=result.stores||[];currentDeviceStore=result.store||null;
+   storeSelectionPending=!localStorage.getItem(lastStoreKey)&&deviceStores.length>1;
    if(oldStoreId&&currentDeviceStore?.id!==oldStoreId){
     // Server changed the active store: invalidate the old socket and UI.
     disconnect();
@@ -38,7 +39,7 @@ async function renewDeviceSession(){
     location.reload();
     return false;
    }
-   if(currentDeviceStore)localStorage.setItem(lastStoreKey,currentDeviceStore.id);
+   if(currentDeviceStore&&!storeSelectionPending)localStorage.setItem(lastStoreKey,currentDeviceStore.id);
    token=result.token;sessionStorage.setItem('ck_token_'+page,token);
    return true;
   }catch{return false;}
@@ -662,7 +663,21 @@ function admin(){
  document.querySelector('#menu-form').onsubmit=async e=>{e.preventDefault();if(adminUploadBusy)return;const btn=document.querySelector('#menu-save');btn.disabled=true;try{const price=Number(document.querySelector('#menu-price').value),sort=Number(document.querySelector('#menu-sort').value);if(!Number.isFinite(price)||price<0||!Number.isInteger(sort))throw Error('Invalid price or sort order');const data={name:document.querySelector('#menu-name').value.trim(),category:document.querySelector('#menu-category').value,price_cents:Math.round(price*100),vat_rate:Number(document.querySelector('#menu-vat').value),sort_order:sort,active:Number(document.querySelector('#menu-active').value),image_url:adminImage};if(!data.name||!data.category)throw Error('Name and category are required');await api(adminEditing?'/menu/'+adminEditing:'/menu',adminEditing?'PATCH':'POST',data);await loadAdminMenu();adminEditing=null;adminImage='';admin();notify('Dish saved')}catch(err){notify('Save failed: '+err.message)}finally{btn.disabled=false}};
 }
 function scanner(){shell(`<div class="panel"><h2>Delivery Scanner (coming soon)</h2><p>Future support for delivery-platform order scanning.</p><div class="warning"><strong>Not available: </strong>Scanning and AI recognition are not enabled in this version.</div><p class="muted">Enter delivery orders manually in the POS for now.</p><a href="/pos">Go to POS</a></div>`);}
-async function start(){try{await refresh(true);connect()}catch(e){notify(e.message)}}
+function chooseInitialStore(){
+ if(!storeSelectionPending||deviceStores.length<2)return false;
+ disconnect();
+ document.body.className='role-login-body';
+ app.innerHTML='<div class="role-login-screen"><section class="role-login-box"><div class="role-brand"><div class="role-brand-mark">C<span>&</span>K</div><h1>Chicken i Kimchi</h1></div><h2>Choose your store</h2><p class="role-subtitle">Select the restaurant for this device. You can switch later.</p><form id="v3-first-store-form"><label>Authorized store<select name="store_id" required><option value="">Select a store</option>'+deviceStores.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')+'</select></label><button type="submit">Continue</button></form></section></div>';
+ app.querySelector('#v3-first-store-form').onsubmit=e=>{
+  e.preventDefault();const selected=String(new FormData(e.currentTarget).get('store_id')||'');
+  if(!deviceStores.some(x=>x.id===selected))return;
+  localStorage.setItem(lastStoreKey,selected);
+  sessionStorage.removeItem('ck_token_'+page);
+  location.reload();
+ };
+ return true;
+}
+async function start(){if(chooseInitialStore())return;try{await refresh(true);connect()}catch(e){notify(e.message)}}
 (async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(token)start();else login()})();
 setInterval(async()=>{if(deviceMode())await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
