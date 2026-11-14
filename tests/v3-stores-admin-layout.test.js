@@ -16,3 +16,10 @@ test('responsive management styles and inactive store messaging exist',()=>{
  assert.match(css,/@media\(max-width:700px\)/);
  assert.match(app,/Inactive restaurants cannot be selected/);
 });
+
+test('device pairing form and menu editor remain in the rendered admin markup',()=>{
+ assert.match(app,/\x27<\/fieldset>\x27\s*\+\s*\x27<div class="v3-form-footer">/);
+ assert.match(app,/<form id="v3-pair-approve"/);
+ assert.match(app,/<form id="menu-form"/);
+ assert.match(app,/>Master Menu<\/button>/);
+});
