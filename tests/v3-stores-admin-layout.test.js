@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
 test('Stores V3 has clear restaurant, menu and device sections',()=>{
- for(const text of ['Stores & Devices','Restaurants','Store Menu','Approve a device','Registered devices','Revoked devices'])assert.ok(app.includes(text),text);
+ for(const text of ['Restaurants','Devices','Store Menu','Approve a device','Registered devices','Revoked devices'])assert.ok(app.includes(text),text);
 });
 test('existing admin actions and inputs remain wired',()=>{
  for(const id of ['v3-load-stores','v3-store-select','v3-toggle-store','v3-pair-approve'])assert.ok(app.includes(id),id);
