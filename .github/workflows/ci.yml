@@ -1,0 +1,19 @@
+name: Chicken KDS checks
+on:
+  push:
+    branches: [feature/v3-multistore-foundation]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:syntax
+      - run: npm test
