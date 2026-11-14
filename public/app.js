@@ -9,7 +9,28 @@ function scopedApiPath(path){
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
  throw Error('Device mode does not permit this endpoint: '+path);
 }
-async function api(path,method='GET',data){path=scopedApiPath(path);const r=await fetch('/api'+path,{method,headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const out=await r.json();if(!r.ok)throw Error(out.error||'Request failed');return out;}
+let renewalPending=null;
+async function renewDeviceSession(){
+ if(!['pos','kitchen'].includes(page))return false;
+ if(renewalPending)return renewalPending;
+ renewalPending=(async()=>{
+  try{
+   const r=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'}});
+   if(!r.ok)return false;
+   const result=await r.json();
+   if(result.role!==page)return false;
+   token=result.token;sessionStorage.setItem('ck_token_'+page,token);
+   return true;
+  }catch{return false;}
+ })();
+ try{return await renewalPending}finally{renewalPending=null;}
+}
+async function api(path,method='GET',data){
+ const request=()=>fetch('/api'+scopedApiPath(path),{method,headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});
+ let r=await request();
+ if(r.status===401&&deviceMode()&&await renewDeviceSession())r=await request();
+ const out=await r.json();if(!r.ok)throw Error(out.error||'Request failed');return out;
+}
 function notify(msg){const el=document.createElement('div');el.className='notice';el.style.cssText='position:fixed;bottom:15px;right:15px;z-index:99;box-shadow:0 8px 30px #0002;max-width:350px';el.textContent=msg;document.body.append(el);setTimeout(()=>el.remove(),3800)}
 function sound(){if(!beepEnabled||!audio)return;try{const t=audio.currentTime;const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.setValueAtTime(880,t);osc.frequency.setValueAtTime(660,t+.17);gain.gain.setValueAtTime(.15,t);gain.gain.exponentialRampToValueAtTime(.001,t+.4);osc.connect(gain).connect(audio.destination);osc.start(t);osc.stop(t+.4)}catch{}}
 let pickupItems=[],pickupInitialized=false,pickupSerial=0,pickupSoundReady=false,pickupBellAt=0;
@@ -70,7 +91,7 @@ async function acknowledgePickupAll(orderId){
   pos();await loadPickups(false);
  }catch(e){notify('Pick Up All: '+e.message);await loadPickups(false)}
 }
-function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${connected?'online':'offline'}">● ${connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=()=>{sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};}
+function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${connected?'online':'offline'}">● ${connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=async()=>{if(deviceMode())await fetch('/api/device/logout',{method:'POST',credentials:'same-origin'}).catch(()=>{});sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};}
 function login(){
  const choices=[{id:'pos',icon:'🧾',name:'Front of House POS',desc:'Sales and open tickets'},{id:'kitchen',icon:'👨‍🍳',name:'Kitchen Display',desc:'Orders and completed dishes'},{id:'admin',icon:'📊',name:'Back Office',desc:'Reports and menu'},{id:'scanner',icon:'📷',name:'Delivery Scanner',desc:'Coming soon'}];
  const selected=choices.find(x=>x.id===page);document.body.className='role-login-body';
@@ -537,7 +558,8 @@ function admin(){
 }
 function scanner(){shell(`<div class="panel"><h2>Delivery Scanner (coming soon)</h2><p>Future support for delivery-platform order scanning.</p><div class="warning"><strong>Not available: </strong>Scanning and AI recognition are not enabled in this version.</div><p class="muted">Enter delivery orders manually in the POS for now.</p><a href="/pos">Go to POS</a></div>`);}
 async function start(){try{await refresh(true);connect()}catch(e){notify(e.message)}}
-if(token)start();else login();setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
+(async()=>{if(!token)await renewDeviceSession();if(token)start();else login()})();
+setInterval(async()=>{if(deviceMode())await renewDeviceSession()},60*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
 let kitchenSyncBusy=false;
 setInterval(async()=>{if(!token||page!=='kitchen'||document.hidden||kitchenSyncBusy)return;kitchenSyncBusy=true;try{await refresh()}finally{kitchenSyncBusy=false}},5000);
