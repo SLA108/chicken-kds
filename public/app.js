@@ -49,7 +49,7 @@ async function renewDeviceSession(){
 async function api(path,method='GET',data){
  const request=()=>fetch('/api'+scopedApiPath(path),{method,headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});
  let r=await request();
- if(r.status===401&&deviceMode()&&await renewDeviceSession())r=await request();
+ if((r.status===401||r.status===403)&&deviceMode()&&await renewDeviceSession())r=await request();
  const out=await r.json();if(!r.ok)throw Error(out.error||'Request failed');return out;
 }
 function notify(msg){const el=document.createElement('div');el.className='notice';el.style.cssText='position:fixed;bottom:15px;right:15px;z-index:99;box-shadow:0 8px 30px #0002;max-width:350px';el.textContent=msg;document.body.append(el);setTimeout(()=>el.remove(),3800)}
