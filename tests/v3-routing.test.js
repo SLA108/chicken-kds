@@ -22,5 +22,5 @@ test('admin V3 store configuration requires explicit feature flag',()=>{
 
 test('store-specific paid order detail scopes all lookups',()=>{
  assert.match(api,/\/api\\\/store\\\/pos\\\/history/);
- assert.match(api,/Payment store mismatch/);
+ assert.match(api,/Paid order not found/);
 });
