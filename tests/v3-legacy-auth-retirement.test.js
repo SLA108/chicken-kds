@@ -20,5 +20,6 @@ test('pairing and store-scoped device sessions retained',()=>{
  assert.ok(server.includes("room(env,session.storeId)"));
 });
 test('shared legacy websocket no longer available to POS and Kitchen',()=>{
- assert.ok(server.includes("Use a paired device for store-scoped WebSocket access"));
+ assert.ok(!server.includes("Use a paired device for store-scoped WebSocket access"));
+ assert.match(server,/return room\(env,session\.storeId\)\.fetch/);
 });
