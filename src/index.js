@@ -447,6 +447,47 @@ if(path==='/ws'){
  if(req.headers.get('upgrade')!=='websocket'||req.headers.get('origin')!==url.origin)return json({error:'Invalid WebSocket request'},403);
  return room(env,'__admin__').fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'sec-websocket-protocol':wsProtocol}}));
 }
+// Super POS is admin-only and writes into the same store-scoped order pipeline as Front of House.
+if(path==='/api/admin/super-pos/menu'&&req.method==='GET'){
+ if(role!=='admin')return json({error:'Forbidden'},403);
+ const storeId=url.searchParams.get('store_id')||'';
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first();
+ if(!store)return json({error:'Active restaurant not found'},404);
+ const items=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(storeId).all()).results;
+ const links=(await env.DB.prepare('SELECT l.menu_id,g.id AS group_id,g.name,g.min_select,g.max_select FROM menu_modifier_groups l JOIN modifier_groups g ON g.id=l.group_id AND g.active=1').all()).results;
+ const options=(await env.DB.prepare('SELECT o.id,o.group_id,o.name,o.price_cents FROM modifier_options o JOIN modifier_groups g ON g.id=o.group_id WHERE o.active=1 AND g.active=1').all()).results;
+ return json({items,links,options});
+}
+if(path==='/api/admin/super-pos/orders'&&req.method==='POST'){
+ if(role!=='admin')return json({error:'Forbidden'},403);
+ const b=await parse(req);
+ if(!b||typeof b.store_id!=='string'||!Array.isArray(b.items)||!b.items.length||b.items.length>100||typeof b.client_key!=='string'||b.client_key.length<16||!['dinein','takeaway','delivery'].includes(b.source))return json({error:'Invalid order'},400);
+ if(b.items.some(x=>typeof x.menu_id!=='string'))return json({error:'Invalid menu IDs'},400);
+ const storeId=b.store_id;
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first();
+ if(!store)return json({error:'Active restaurant not found'},404);
+ const existing=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
+ if(existing)return existing.store_id===storeId?json({id:existing.id,duplicate:true}):json({error:'Client key already used'},409);
+ if(b.source==='dinein'){
+  if(!/^(0[1-9]|1[0-9]|20)$/.test(String(b.table_no||'')))return json({error:'Choose a table from 01 to 20'},400);
+  const occupied=await env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=? AND table_no=?').bind(storeId,b.table_no).first();
+  if(occupied)return json({error:'Table occupied'},409);
+ }
+ const id=uid(),now=new Date().toISOString(),detail=[String(b.note||'').trim(),b.customer_name?'Customer: '+String(b.customer_name).slice(0,100):'',b.customer_phone?'Phone: '+String(b.customer_phone).slice(0,60):''].filter(Boolean).join(' | ').slice(0,500);
+ const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key,store_id) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,b.source,b.source==='dinein'?b.table_no:'','new',detail,now,now,'admin',b.client_key,storeId)];
+ if(b.source==='dinein')statements.push(env.DB.prepare('INSERT INTO table_occupancy(store_id,table_no,order_id,created_at) VALUES(?,?,?,?)').bind(storeId,b.table_no,id,now));
+ try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId));}catch(e){return json({error:e.message},400);}
+ statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created','admin',JSON.stringify({store_id:storeId,origin:'super_pos'}),now));
+ statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created',JSON.stringify({store_id:storeId,origin:'super_pos'}),now));
+ try{await env.DB.batch(statements);}catch(e){
+  const duplicate=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
+  if(duplicate)return duplicate.store_id===storeId?json({id:duplicate.id,duplicate:true}):json({error:'Client key already used'},409);
+  if(b.source==='dinein'&&String(e).includes('UNIQUE'))return json({error:'Table already occupied'},409);
+  throw e;
+ }
+ await broadcastStore(env,storeId,'orders',{id});
+ return json({id},201);
+}
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'',period=params.get('period')||'current';
