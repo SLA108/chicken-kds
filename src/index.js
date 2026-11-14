@@ -491,6 +491,28 @@ if(sessionToken){
   const modifiers=ids.length?(await env.DB.prepare('SELECT m.order_item_id,m.name,m.price_cents FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id=? AND m.order_item_id IN ('+ids.map(()=>'?').join(',')+')').bind(storeId,id,...ids).all()).results:[];
   return json({order:{...order,table_occupied:!!occupancy},items:items.map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)})),payments:paymentsResult.results,events:eventsResult.results});
  }
+if(path==='/api/store/reservations'&&req.method==='GET'){
+ if(session.role!=='pos')return json({error:'Forbidden'},403);
+ const changedSince=new URL(req.url).searchParams.get('changed_since');
+ if(changedSince!==null){
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(changedSince))return json({error:'Invalid change cursor'},400);
+  const changes=(await env.DB.prepare('SELECT id,store_id,starts_at,party_size,guest_name,phone,note,status,created_at,updated_at FROM reservations WHERE store_id=? AND updated_at>? ORDER BY updated_at ASC,id ASC LIMIT 200').bind(session.storeId,changedSince).all()).results;
+  return json({changes});
+ }
+ const q=new URL(req.url).searchParams,from=q.get('from')||'',to=q.get('to')||'';
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)return json({error:'Invalid date range'},400);
+ const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? ORDER BY starts_at DESC LIMIT 500").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999999').all()).results;
+ return json({reservations:rows});
+}
+const storeReservation=path.match(/^\/api\/store\/reservations\/([^/]+)\/(arrived|no-show)$/);
+if(storeReservation&&req.method==='POST'){
+ if(session.role!=='pos')return json({error:'Forbidden'},403);
+ const status=storeReservation[2]==='arrived'?'arrived':'no_show';
+ const result=await env.DB.prepare("UPDATE reservations SET status=?,updated_at=? WHERE id=? AND store_id=? AND status='booked'").bind(status,new Date().toISOString(),storeReservation[1],session.storeId).run();
+ if(!result.meta.changes)return json({error:'Reservation not found or already handled'},409);
+ await broadcastStore(env,session.storeId,'reservations',{id:storeReservation[1]});
+ return json({ok:true});
+}
  // Unknown store API routes are not forwarded to admin endpoints.
  return json({error:'Unknown store-scoped API endpoint'},404);
 }
@@ -620,28 +642,6 @@ if(reservationMatch&&req.method==='PATCH'){
  if(storeId!==existing.store_id)await broadcastStore(env,existing.store_id,'reservations',{action:'cancelled',reservation:{...updatedReservation,store_id:existing.store_id,status:'cancelled'}});
  await broadcastStore(env,storeId,'reservations',{action:status==='cancelled'?'cancelled':existing.status==='cancelled'?'created':'updated',reservation:updatedReservation});
  return json({ok:true,id});
-}
-if(path==='/api/store/reservations'&&req.method==='GET'){
- if(session.role!=='pos')return json({error:'Forbidden'},403);
- const changedSince=new URL(req.url).searchParams.get('changed_since');
- if(changedSince!==null){
-  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(changedSince))return json({error:'Invalid change cursor'},400);
-  const changes=(await env.DB.prepare('SELECT id,store_id,starts_at,party_size,guest_name,phone,note,status,created_at,updated_at FROM reservations WHERE store_id=? AND updated_at>? ORDER BY updated_at ASC,id ASC LIMIT 200').bind(session.storeId,changedSince).all()).results;
-  return json({changes});
- }
- const q=new URL(req.url).searchParams,from=q.get('from')||'',to=q.get('to')||'';
- if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)return json({error:'Invalid date range'},400);
- const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? ORDER BY starts_at DESC LIMIT 500").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999999').all()).results;
- return json({reservations:rows});
-}
-const storeReservation=path.match(/^\/api\/store\/reservations\/([^/]+)\/(arrived|no-show)$/);
-if(storeReservation&&req.method==='POST'){
- if(session.role!=='pos')return json({error:'Forbidden'},403);
- const status=storeReservation[2]==='arrived'?'arrived':'no_show';
- const result=await env.DB.prepare("UPDATE reservations SET status=?,updated_at=? WHERE id=? AND store_id=? AND status='booked'").bind(status,new Date().toISOString(),storeReservation[1],session.storeId).run();
- if(!result.meta.changes)return json({error:'Reservation not found or already handled'},409);
- await broadcastStore(env,session.storeId,'reservations',{id:storeReservation[1]});
- return json({ok:true});
 }
 if(path==='/api/admin/stores'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
