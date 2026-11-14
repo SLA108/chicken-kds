@@ -13,6 +13,7 @@ function room(env,storeId=null){
  return env.ROOM.get(env.ROOM.idFromName(key));
 }
 async function broadcast(env,type,data){try{const response=await room(env).fetch('https://room.internal/broadcast',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({type,data})});if(!response.ok)console.error('broadcast failed',response.status,await response.text());}catch(e){console.error('broadcast error',e);}}
+async function broadcastStore(env,storeId,type,data){try{const response=await room(env,storeId).fetch('https://room.internal/broadcast',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({type,data})});if(!response.ok)console.error('store broadcast failed',response.status);}catch(e){console.error('store broadcast error',e);}}
 async function parse(req){try{return await req.json();}catch{return null;}}
 function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
@@ -109,6 +110,43 @@ if(sessionToken){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").bind(session.storeId).all()).results;
   return json({items:rows});
+ }
+
+ const scopedCheckout=path.match(/^\/api\/store\/orders\/([^/]+)\/checkout$/);
+ if(scopedCheckout&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const b=await parse(req);
+  if(!['cash','card','other'].includes(b?.method))return json({error:'Invalid payment method'},400);
+  const id=scopedCheckout[1],storeId=session.storeId;
+  const order=await env.DB.prepare('SELECT id,status,paid_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
+  if(!order)return json({error:'Ticket not found'},404);
+  if(order.paid_at||order.status==='cancelled')return json({error:'Ticket cannot be paid'},409);
+  const totalRow=await env.DB.prepare('SELECT COALESCE(SUM(i.quantity*i.price_cents),0) AS total,SUM(CASE WHEN i.price_cents IS NULL THEN 1 ELSE 0 END) AS unpriced FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.id=? AND o.store_id=?').bind(id,storeId).first();
+  if(totalRow.unpriced)return json({error:'Unpriced items'},409);
+  const total=Number(totalRow.total);
+  if(!Number.isSafeInteger(total)||total<0)return json({error:'Invalid total'},409);
+  const now=new Date().toISOString(),paymentId=uid();
+  // D1 batch is transactional; the unique paid_at update guards duplicate checkout.
+  const result=await env.DB.batch([
+   env.DB.prepare("UPDATE orders SET paid_at=?,updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND status!='cancelled'").bind(now,now,id,storeId),
+   env.DB.prepare("INSERT INTO payments(id,order_id,method,amount_cents,created_at,store_id) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND paid_at=?)").bind(paymentId,id,b.method,total,now,storeId,id,storeId,now),
+   env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'paid',?,?,? WHERE EXISTS(SELECT 1 FROM payments WHERE id=? AND store_id=?)").bind(uid(),id,session.role,JSON.stringify({method:b.method,amount_cents:total,store_id:storeId}),now,paymentId,storeId)
+  ]);
+  if(result[0].meta.changes!==1)return json({error:'Ticket already closed; refresh'},409);
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true,amount_cents:total});
+ }
+ const scopedRelease=path.match(/^\/api\/store\/orders\/([^/]+)\/release-table$/);
+ if(scopedRelease&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const id=scopedRelease[1],storeId=session.storeId;
+  const order=await env.DB.prepare("SELECT id,table_no FROM orders WHERE id=? AND store_id=? AND source='dinein'").bind(id,storeId).first();
+  if(!order)return json({error:'Dine-in order not found'},404);
+  const result=await env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=? AND store_id=?').bind(id,storeId).run();
+  if(!result.meta.changes)return json({error:'Table already released'},409);
+  await event(env,id,'table_released',session.role,{table_no:order.table_no,store_id:storeId});
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true});
  }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
