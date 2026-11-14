@@ -41,3 +41,16 @@ test('reservation alerts refresh while POS is open and stay scoped to the curren
  assert.match(app,/epoch!==storeEpoch\|\|store!==currentDeviceStore\?\.id/);
  assert.match(app,/posReservationAlerts\.clear\(\)/);
 });
+
+test('release-table tip and table occupancy update share one transactional batch',()=>{
+ const start=api.indexOf('const scopedRelease=');
+ const end=api.indexOf('const orderLookup=',start);
+ const block=api.slice(start,end);
+ assert.ok(start>=0&&end>start);
+ assert.match(block,/env\.DB\.batch\(statements\)/);
+ assert.match(block,/DELETE FROM table_occupancy/);
+ assert.match(block,/INSERT INTO order_tips/);
+ assert.match(block,/changes\(\)=1/);
+ assert.match(app,/tip_request_key:releaseTipKey/);
+ assert.doesNotMatch(app,/stage:'release',request_key:releaseTipKey/);
+});
