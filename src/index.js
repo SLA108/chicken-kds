@@ -223,6 +223,34 @@ if(sessionToken){
   await broadcastStore(env,session.storeId,'pickup',{item_id:scopedPickup[1]});
   return json({ok:true});
  }
+
+ const scopedAddItems=path.match(/^\/api\/store\/orders\/([^/]+)\/items$/);
+ if(scopedAddItems&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const b=await parse(req);
+  if(!b||!Array.isArray(b.items)||b.items.length<1||b.items.length>30)return json({error:'Invalid items'},400);
+  const id=scopedAddItems[1],storeId=session.storeId;
+  const order=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
+  if(!order)return json({error:'Order not found'},404);
+  if(order.status==='cancelled'||order.paid_at||order.kitchen_completed_at)return json({error:'Order closed'},409);
+  const now=new Date().toISOString();
+  let statements;
+  try{statements=await prepareOrderItems(env,b.items,id,now,storeId);}catch(e){return json({error:e.message},400);}
+  statements.push(env.DB.prepare("UPDATE orders SET status='new',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(now,id,storeId));
+  statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'items_added',session.role,JSON.stringify({count:b.items.length,store_id:storeId}),now));
+  const result=await env.DB.batch(statements);
+  if(result[result.length-2].meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true});
+ }
+ const scopedPickupAll=path.match(/^\/api\/store\/pickups\/orders\/([^/]+)\/ack-all$/);
+ if(scopedPickupAll&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const id=scopedPickupAll[1],now=new Date().toISOString();
+  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled')").bind(now,id,id,session.storeId).run();
+  if(result.meta.changes)await broadcastStore(env,session.storeId,'pickup',{order_id:id,acknowledged:result.meta.changes});
+  return json({ok:true,count:result.meta.changes||0});
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
