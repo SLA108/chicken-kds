@@ -607,10 +607,11 @@ if(path==='/api/store/reservations'&&req.method==='GET'){
  const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? AND status!='cancelled' ORDER BY starts_at ASC LIMIT 200").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999').all()).results;
  return json({reservations:rows});
 }
-const storeReservation=path.match(/^\/api\/store\/reservations\/([^/]+)\/arrived$/);
+const storeReservation=path.match(/^\/api\/store\/reservations\/([^/]+)\/(arrived|no-show)$/);
 if(storeReservation&&req.method==='POST'){
  if(session.role!=='pos')return json({error:'Forbidden'},403);
- const result=await env.DB.prepare("UPDATE reservations SET status='arrived',updated_at=? WHERE id=? AND store_id=? AND status='booked'").bind(new Date().toISOString(),storeReservation[1],session.storeId).run();
+ const status=storeReservation[2]==='arrived'?'arrived':'no_show';
+ const result=await env.DB.prepare("UPDATE reservations SET status=?,updated_at=? WHERE id=? AND store_id=? AND status='booked'").bind(status,new Date().toISOString(),storeReservation[1],session.storeId).run();
  if(!result.meta.changes)return json({error:'Reservation not found or already handled'},409);
  await broadcastStore(env,session.storeId,'reservations',{id:storeReservation[1]});
  return json({ok:true});
