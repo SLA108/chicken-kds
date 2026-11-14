@@ -625,7 +625,7 @@ if(path==='/api/store/reservations'&&req.method==='GET'){
  if(session.role!=='pos')return json({error:'Forbidden'},403);
  const changedSince=new URL(req.url).searchParams.get('changed_since');
  if(changedSince!==null){
-  if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(changedSince))return json({error:'Invalid change cursor'},400);
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(changedSince))return json({error:'Invalid change cursor'},400);
   const changes=(await env.DB.prepare('SELECT id,store_id,starts_at,party_size,guest_name,phone,note,status,created_at,updated_at FROM reservations WHERE store_id=? AND updated_at>? ORDER BY updated_at ASC,id ASC LIMIT 200').bind(session.storeId,changedSince).all()).results;
   return json({changes});
  }
