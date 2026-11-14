@@ -21,6 +21,8 @@ test('admin V3 store configuration requires explicit feature flag',()=>{
 });
 
 test('store-specific paid order detail scopes all lookups',()=>{
- assert.match(api,/\/api\\\/store\\\/pos\\\/history/);
- assert.match(api,/Paid order not found/);
+ assert.ok(api.includes('const scopedPosDetail=path.match('));
+ assert.ok(api.includes('Paid order not found'));
+ assert.ok(api.includes('AND store_id=? AND paid_at IS NOT NULL'));
+ assert.ok(api.includes('WHERE order_id=? AND store_id=?'));
 });
