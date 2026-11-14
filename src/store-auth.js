@@ -29,3 +29,20 @@ export async function sha256Hex(value){return hex(new Uint8Array(await crypto.su
 export async function activeDeviceStore(env,deviceId,storeId){
  return env.DB.prepare('SELECT d.id,d.store_id,s.code,s.name FROM pos_devices d JOIN stores s ON s.id=d.store_id WHERE d.id=? AND d.store_id=? AND d.active=1 AND s.active=1').bind(deviceId,storeId).first();
 }
+
+/**
+ * V3.1 allowlist lookup. Fail closed for revoked devices, inactive stores,
+ * or absent grants. Never use a client-provided store id without this check.
+ * Requires migration 0012; do not call before it has been applied.
+ */
+export async function allowedDeviceStore(env,deviceId,storeId){
+ return env.DB.prepare(
+  'SELECT d.id, s.id AS store_id, s.code, s.name FROM pos_devices d JOIN device_store_access a ON a.device_id=d.id JOIN stores s ON s.id=a.store_id WHERE d.id=? AND s.id=? AND d.active=1 AND s.active=1'
+ ).bind(deviceId,storeId).first();
+}
+export async function listAllowedDeviceStores(env,deviceId){
+ const result=await env.DB.prepare(
+  'SELECT s.id,s.code,s.name FROM pos_devices d JOIN device_store_access a ON a.device_id=d.id JOIN stores s ON s.id=a.store_id WHERE d.id=? AND d.active=1 AND s.active=1 ORDER BY s.name'
+ ).bind(deviceId).all();
+ return result.results||[];
+}
