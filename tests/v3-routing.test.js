@@ -65,3 +65,13 @@ test('admin store sales uses Warsaw calendar day boundaries',()=>{
  assert.ok(section.includes("args.push(midnightUtc(next.toISOString().slice(0,10)))"));
  assert.ok(section.includes("timezone:'Europe/Warsaw'"));
 });
+
+test('item completion cannot overwrite kitchen-completed order status',()=>{
+ const start=api.indexOf('const scopedItemDone=');
+ const end=api.indexOf('const scopedStatus=',start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes("AND kitchen_completed_at IS NULL"));
+ assert.ok(section.includes('if(statusUpdate.meta.changes!==1)'));
+ assert.ok(section.includes("return json({error:'Order changed; refresh'},409)"));
+});
