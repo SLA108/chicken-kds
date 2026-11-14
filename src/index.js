@@ -543,11 +543,14 @@ if(/^\/api\/admin\/devices\/[^/]+\/stores$/.test(path)&&['GET','PUT'].includes(r
  const activeStores=(await env.DB.prepare('SELECT id FROM stores WHERE active=1').all()).results;
  const activeIds=new Set(activeStores.map(x=>x.id));
  if(ids.some(id=>!activeIds.has(id)))return json({error:'Unknown or inactive store'},400);
+ const previous=(await env.DB.prepare('SELECT store_id FROM device_store_access WHERE device_id=?').bind(deviceId).all()).results.map(x=>x.store_id);
  const now=new Date().toISOString();
  await env.DB.batch([
   env.DB.prepare('DELETE FROM device_store_access WHERE device_id=?').bind(deviceId),
-  ...ids.map(id=>env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,id,now))
+  ...ids.map(id=>env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,id,now)),
+  env.DB.prepare('UPDATE pos_devices SET store_id=? WHERE id=?').bind(ids.includes(device.store_id)?device.store_id:ids[0],deviceId)
  ]);
+ await Promise.all(previous.filter(id=>!ids.includes(id)).map(id=>disconnectDeviceStore(env,id,deviceId)));
  return json({ok:true,device_id:deviceId,store_ids:ids});
 }
 if(path==='/api/admin/device-pairings'&&req.method==='GET'){
@@ -606,8 +609,10 @@ if(path==='/api/admin/devices'&&req.method==='POST'){
 const revokeDeviceMatch=path.match(/^\/api\/admin\/devices\/([0-9a-f-]{36})\/revoke$/);
 if(revokeDeviceMatch&&req.method==='POST'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const assigned=(await env.DB.prepare('SELECT store_id FROM device_store_access WHERE device_id=?').bind(revokeDeviceMatch[1]).all()).results.map(x=>x.store_id);
  const result=await env.DB.prepare("UPDATE pos_devices SET active=0,revoked_at=? WHERE id=? AND active=1").bind(new Date().toISOString(),revokeDeviceMatch[1]).run();
  if(!result.meta.changes)return json({error:'Active device not found'},404);
+ await Promise.all(assigned.map(id=>disconnectDeviceStore(env,id,revokeDeviceMatch[1])));
  return json({ok:true});
 }
 const storeDetailMatch=path.match(/^\/api\/admin\/stores\/([^/]+)\/orders$/);
