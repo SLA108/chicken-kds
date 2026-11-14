@@ -590,3 +590,32 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .super-mobile-reservations .super-reschedule-controls input{grid-column:1/-1;width:100%;max-width:none;box-sizing:border-box}
 }
 @media(min-width:761px){.bo-mobile-header{display:none}}
+
+/* Refined Back Office phone layout */
+@media(max-width:760px){
+ body:has(.bo-layout) #app>header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:10px 14px;align-items:center}
+ body:has(.bo-layout) #app>header .ck-header-brand{grid-column:1;grid-row:1;min-width:0;font-size:12px}
+ body:has(.bo-layout) #app>header .ck-header-logo{width:32px;height:32px;object-fit:contain}
+ body:has(.bo-layout) #app>header nav{grid-column:1/-1;grid-row:2;display:flex;gap:14px;flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;font-size:12px}
+ body:has(.bo-layout) #app>header .toolbar{grid-column:2;grid-row:1;display:flex;align-items:center;gap:7px}
+ body:has(.bo-layout) #app>header .toolbar .status{display:none}
+ body:has(.bo-layout) #app>header .toolbar button{font-size:12px;padding:8px 10px}
+ .bo-layout{padding:0!important;margin:0!important}
+ .bo-mobile-header{border-radius:12px;margin:0 0 12px;padding:8px 10px;box-shadow:0 1px 3px #15243a10}
+ .bo-mobile-header button{padding:9px 12px}
+ .bo-content{padding:0!important}
+ .bo-content>.admin-head{display:none!important}
+ .bo-content>.admin-workspace{padding:16px!important;margin:0!important;border-radius:15px}
+ .bo-content>.admin-workspace .admin-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap;margin-bottom:14px}
+ .bo-content>.admin-workspace .admin-section-head h2{font-size:19px;line-height:1.2;margin:0}
+ .bo-content>.admin-workspace .admin-section-head p{font-size:12px;line-height:1.35;margin:5px 0 0}
+ .bo-content>.admin-workspace .admin-section-head button{flex:0 0 auto;font-size:12px;padding:9px 12px}
+ .bo-content .admin-overview{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px;margin:14px 0}
+ .bo-content .admin-metric{min-width:0;padding:13px 11px;border-radius:13px;gap:5px}
+ .bo-content .admin-metric strong{font-size:clamp(17px,5vw,24px);line-height:1.2;letter-spacing:-.035em;overflow-wrap:normal;word-break:normal;white-space:nowrap;font-variant-numeric:tabular-nums}
+ .bo-content .admin-metric span{font-size:11px}
+}
+@media(max-width:365px){
+ .bo-content .admin-overview{grid-template-columns:1fr!important}
+ .bo-content .admin-metric strong{font-size:25px}
+}
