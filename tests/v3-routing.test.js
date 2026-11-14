@@ -109,3 +109,11 @@ test('bulk pickup acknowledgement rejects orders outside device store and cancel
  assert.ok(section.includes("return json({error:'Order cancelled'},409)"));
  assert.ok(section.includes('picked_up_at IS NULL'));
 });
+
+test('idempotent kitchen status cannot silently succeed after kitchen completion',()=>{
+ const start=api.indexOf('const scopedStatus='),end=api.indexOf('const scopedPickup=',start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes("if(old.status===b.status){"));
+ assert.ok(section.includes("if(current?.kitchen_completed_at)return json({error:'Order already kitchen-completed; refresh'},409)"));
+});
