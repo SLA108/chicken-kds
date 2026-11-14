@@ -9,7 +9,7 @@ test('device POS pickup paths map to backend scoped pickup routes',()=>{
  assert.match(ui,/path\.slice\('\/pos'\.length\)/);
  assert.ok(api.includes('const scopedPickup=path.match('),'single-dish pickup route');
  assert.ok(api.includes('const scopedPickupAll=path.match('),'bulk pickup route');
- assert.ok(api.includes('pickups\\/orders\\/([^/]+)\\/ack-all'),'bulk pickup route pattern');
+ assert.ok(api.includes("scopedPickupAll&&req.method==='POST'"),'bulk pickup POST handler');
 });
 
 test('device mode rejects unknown API routes rather than falling back to legacy',()=>{
