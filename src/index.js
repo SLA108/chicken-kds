@@ -214,7 +214,11 @@ if(sessionToken){
   if(!['cooking','done'].includes(b?.status))return json({error:'Invalid status'},400);
   const id=scopedStatus[1],old=await env.DB.prepare('SELECT status,paid_at FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
   if(!old)return json({error:'Not found'},404);
-  if(old.status===b.status)return json({ok:true});
+  if(old.status===b.status){
+   const current=await env.DB.prepare('SELECT kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
+   if(current?.kitchen_completed_at)return json({error:'Order already kitchen-completed; refresh'},409);
+   return json({ok:true});
+  }
   const transitions={new:['cooking'],cooking:['done']};
   if(!transitions[old.status]?.includes(b.status))return json({error:'Invalid transition'},409);
   const now=new Date().toISOString();
