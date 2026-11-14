@@ -20,7 +20,8 @@ test('store order and table reads filter by verified session store',()=>{
  assert.match(worker,/\.bind\(session\.storeId\)\.all\(\)/);
 });
 test('store WebSocket connections use distinct room keys',()=>{
- assert.match(worker,/storeId===null\?'main':'store:'\+storeId/);
+ assert.match(worker,/idFromName\('store:'\+storeId\)/);
+ assert.doesNotMatch(worker,/storeId===null\?'main'/);
  assert.match(worker,/return room\(env,session\.storeId\)\.fetch/);
  assert.match(worker,/await broadcastStore\(env,session\.storeId,'orders'/);
 });
