@@ -317,19 +317,20 @@ async function loadPosReservations(){
  const warsawNow=value('year')+'-'+value('month')+'-'+value('day')+'T'+value('hour')+':'+value('minute');
  const minuteValue=stamp=>{const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(stamp);return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5])/60000:NaN};
  const currentMinute=minuteValue(warsawNow);
- for(const r of posReservations){const diff=minuteValue(r.starts_at)-currentMinute;if(r.status==='booked'&&diff>=-5&&diff<=30&&!document.hidden&&!posReservationAlerts.has(r.id+'@'+r.starts_at)){posReservationAlerts.add(r.id+'@'+r.starts_at);showReservationAlert(r);}}
+ for(const r of posReservations){const diff=minuteValue(r.starts_at)-currentMinute;if(r.status==='booked'&&diff>=-5&&diff<=30&&!document.hidden&&!posReservationAlerts.has(r.id+'@'+r.starts_at)){if(showReservationAlert(r))posReservationAlerts.add(r.id+'@'+r.starts_at);}}
  if(fohTab==='reservations')pos();
  }catch(e){console.warn('Reservations unavailable',e)}finally{posReservationLoading=false;if(posReservationReloadPending){posReservationReloadPending=false;loadPosReservations()}}
 }
 function showReservationAlert(r){
- if(page!=='pos'||document.hidden)return;
+ if(page!=='pos'||document.hidden)return false;
  const id='reservation-reminder-'+r.id;
- if(document.getElementById(id)||document.querySelector('[id^="reservation-reminder-"]'))return;
+ if(document.getElementById(id)||document.querySelector('[id^="reservation-reminder-"]'))return false;
  const el=document.createElement('div');el.id=id;el.className='admin-modal-backdrop';
  el.innerHTML='<section class="admin-modal" role="alertdialog" aria-modal="true" aria-label="Upcoming reservation"><div class="admin-modal-head"><div><span class="admin-eyebrow">UPCOMING RESERVATION</span><h2>'+esc(r.starts_at.slice(11))+' · '+Number(r.party_size)+' guests</h2></div></div><p><strong>'+esc(r.guest_name||'Guest')+'</strong></p><p>'+esc(r.note||'No notes')+'</p><div class="admin-modal-actions"><button type="button" data-reservation-view>View reservations</button><button type="button" class="alt" data-reservation-dismiss>Dismiss</button></div></section>';
  document.body.append(el);
  el.querySelector('[data-reservation-dismiss]').onclick=()=>el.remove();
  el.querySelector('[data-reservation-view]').onclick=()=>{el.remove();fohTab='reservations';pos()};
+ return true;
 }
 function posReservationPanel(){return '<section class="panel foh-workspace"><div class="row"><h2>Reservations</h2><button type="button" class="alt" id="pos-reservations-refresh">Refresh</button></div><p class="muted">Upcoming bookings for this restaurant. Reservations do not occupy tables or create orders.</p>'+
  (posReservations.length?'<div class="bo-sales-table"><table><thead><tr><th>Date / Time</th><th>Guest</th><th>Guests</th><th>Phone</th><th>Notes</th><th>Status</th><th></th></tr></thead><tbody>'+posReservations.map(r=>'<tr><td>'+esc(r.starts_at.replace('T',' '))+'</td><td>'+esc(r.guest_name)+'</td><td>'+r.party_size+'</td><td>'+esc(r.phone)+'</td><td>'+esc(r.note)+'</td><td>'+esc(r.status)+'</td><td>'+(r.status==='booked'?'<button type="button" data-pos-reservation-arrived="'+esc(r.id)+'" data-reservation-action="arrived">Mark Arrived</button> <button type="button" data-pos-reservation-arrived="'+esc(r.id)+'" data-reservation-action="no-show">No-show</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<p>No upcoming reservations.</p>')+'</section>'}
