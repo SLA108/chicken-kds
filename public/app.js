@@ -822,6 +822,21 @@ function connectAdminWs(){
 }
 let overviewData=null,overviewError='',overviewBusy=false;
 async function loadOverview(){if(overviewBusy)return;overviewBusy=true;try{overviewData=await api('/admin/overview');overviewError='';}catch(e){overviewError=e.message;}finally{overviewBusy=false;}}
+function boWorkloadChart(rows,stores,key,title,subtitle){
+ const points=Array.from({length:96},(_,i)=>i);
+ const max=Math.max(1,...rows.map(r=>key==='avg'?r.completed?r.total_kitchen_minutes/r.completed:0:Number(r[key])||0));
+ const colors=['#3183ce','#d18a30','#43a58a','#8b6ac9','#d35e76'];
+ const paths=stores.map((store,j)=>{
+  const data=new Map(rows.filter(r=>r.store_id===store.store_id).map(r=>[r.slot,r]));
+  const pts=points.map(i=>{const r=data.get(i);const v=r?(key==='avg'?(r.completed?r.total_kitchen_minutes/r.completed:0):Number(r[key])||0):0;return (32+i*6)+','+(134-v/max*115);}).join(' ');
+  return '<polyline points="'+pts+'" fill="none" stroke="'+colors[j%colors.length]+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+ }).join('');
+ return '<div class="bo-workload-chart"><h4>'+title+'</h4><p class="muted small">'+subtitle+'</p><svg viewBox="0 0 620 164" role="img" aria-label="'+title+'" preserveAspectRatio="none"><path d="M32 19 V134 H602" fill="none" stroke="#cbd5e1"/><path d="M32 77 H602" stroke="#e2e8f0" stroke-dasharray="4 4"/>'+paths+'<text x="32" y="156" font-size="12" fill="#64748b">00:00</text><text x="282" y="156" font-size="12" fill="#64748b">12:00</text><text x="564" y="156" font-size="12" fill="#64748b">24:00</text><text x="4" y="22" font-size="11" fill="#64748b">'+Math.ceil(max)+'</text></svg><div class="bo-workload-legend">'+stores.map((st,j)=>'<span><i style="background:'+colors[j%colors.length]+'"></i>'+esc(st.name)+'</span>').join('')+'</div></div>';
+}
+function boWorkloadPanel(data){
+ const rows=data?.workload||[],stores=data?.stores||[];
+ return '<section class="bo-workload"><h3>Kitchen workload</h3><p class="muted small">Today · Europe/Warsaw · 15-minute intervals · excludes cancelled orders and TEST restaurant</p>'+(rows.length?boWorkloadChart(rows,stores,'orders','Incoming orders','New orders per 15 minutes')+boWorkloadChart(rows,stores,'dishes','Incoming dishes','New dish quantities per 15 minutes')+boWorkloadChart(rows,stores,'avg','Order → kitchen completed','Average minutes for completed orders, grouped by order creation time'):'<p class="muted small">No orders recorded today.</p>')+'<p class="muted small">Historical pending-dish workload will be added after event-history validation. Missing completion timestamps are excluded from the time average.</p></section>';
+}
 function overviewPanel(){
  const t=overviewData?.total||{paid_cents:0,unpaid_cents:0,total_cents:0,orders:0,unpriced_orders:0};
  const storeCard=x=>{
@@ -842,6 +857,7 @@ function overviewPanel(){
  '<p class="muted small">'+t.orders+' orders today · Excludes cancelled orders and TEST restaurant'+(t.unpriced_orders?' · '+t.unpriced_orders+' orders contain unpriced items':'')+'</p>'+
  '</div><h3>Restaurant performance</h3><div class="bo-store-cards">'+overviewData.stores.map(storeCard).join('')+'</div><div class="bo-sales-table bo-store-legacy-table"><table><thead><tr><th>Restaurant</th><th>Orders</th><th>Total Sales</th><th>Paid</th><th>Unpaid</th><th>Cash Tips</th><th>Card Tips</th><th>Total Tips</th><th>Discounts</th></tr></thead><tbody>'+
  overviewData.stores.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+Number(x.orders)+'</td><td>'+money(x.total_cents)+'</td><td>'+money(x.paid_cents)+'</td><td>'+money(x.unpaid_cents)+'</td><td>'+money(x.cash_tips_cents||0)+'</td><td>'+money(x.card_tips_cents||0)+'</td><td>'+money(x.tip_cents||0)+'</td><td>'+money(x.discount_cents||0)+'</td></tr>').join('')+'</tbody></table></div>')+
+ boWorkloadPanel(overviewData)+
  '<p class="muted small">Sales reflect orders created today in Warsaw time. Paid amounts come from recorded payments; Unpaid is the outstanding order value. Payments for earlier orders are not included.</p></section>';
 }
 let reservations=[],reservationError='',reservationBusy=false,reservationStore='',reservationDay='',reservationEditing='';
