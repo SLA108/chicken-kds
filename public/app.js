@@ -664,6 +664,21 @@ function adminOrderCard(o){
  (o.note?'<p class="warning">Note: '+esc(o.note)+'</p>':'')+
  '<div class="bo-order-foot"><small>'+posDetailTime(o.created_at)+'</small><small>'+done.length+'/'+items.length+' item lines ready · '+picked.length+'/'+items.length+' collected</small></div></article>';
 }
+let adminWs=null,adminWsRetry=null,adminWsRefresh=null,adminWsLive=false;
+function connectAdminWs(){
+ if(page!=='admin'||!token||adminWs)return;
+ const proto=location.protocol==='https:'?'wss:':'ws:';
+ const socket=new WebSocket(proto+'//'+location.host+'/ws',['ckauth.'+token]);
+ adminWs=socket;
+ socket.onopen=()=>{if(adminWs!==socket)return;adminWsLive=true;if(adminTab==='orders')admin();};
+ socket.onmessage=e=>{if(adminWs!==socket||e.data==='pong')return;let m;try{m=JSON.parse(e.data)}catch{return}
+  if(m.type!=='store_event')return;
+  clearTimeout(adminWsRefresh);
+  adminWsRefresh=setTimeout(async()=>{if(adminWs!==socket)return;if(adminTab==='orders'){await loadAdminOrders();if(adminTab==='orders')admin();}else if(adminTab==='overview'){await loadOverview();if(adminTab==='overview')admin();}},250);
+ };
+ socket.onclose=()=>{if(adminWs!==socket)return;adminWs=null;adminWsLive=false;clearTimeout(adminWsRetry);if(page==='admin'&&token)adminWsRetry=setTimeout(connectAdminWs,4000);};
+ socket.onerror=()=>{try{socket.close()}catch{}};
+}
 let overviewData=null,overviewError='',overviewBusy=false;
 async function loadOverview(){if(overviewBusy)return;overviewBusy=true;try{overviewData=await api('/admin/overview');overviewError='';}catch(e){overviewError=e.message;}finally{overviewBusy=false;}}
 function overviewPanel(){
@@ -681,7 +696,7 @@ function adminOrderPanel(){
  const count=k=>Number(adminOrdersSummary.find(x=>x.status===k)?.count||0);
  const choices='<option value="">All restaurants</option>'+v3Stores.map(x=>'<option value="'+esc(x.id)+'" '+(adminOrdersStore===x.id?'selected':'')+'>'+esc(x.name)+'</option>').join('');
  const statuses='<option value="">All statuses</option>'+['new','cooking','done','cancelled'].map(x=>'<option value="'+x+'" '+(adminOrdersStatus===x?'selected':'')+'>'+esc(statusName[x]||x)+'</option>').join('');
- return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Orders</h2><p>Read-only order monitoring across restaurants. Updates automatically every 10 seconds while this tab is open.</p></div><button type="button" class="alt" id="admin-orders-refresh">Refresh orders</button></div>'+
+ return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Orders</h2><p>Read-only order monitoring across restaurants. Live updates via WebSocket.</p></div><button type="button" class="alt" id="admin-orders-refresh">Refresh orders</button></div>'+
  '<p class="muted small">'+(adminOrdersLastSync?'Last updated: '+adminOrdersLastSync.toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw'}):'Waiting for first update')+'</p><div class="toolbar"><label>Restaurant <select id="admin-orders-store">'+choices+'</select></label><label>Status <select id="admin-orders-status">'+statuses+'</select></label></div>'+
  (adminOrdersError?'<p class="warning" role="alert">'+esc(adminOrdersError)+'</p>':'')+
  '<div class="admin-overview">'+['new','cooking','done','cancelled'].map(k=>'<div class="admin-metric"><strong>'+count(k)+'</strong><span>'+esc(statusName[k]||k)+'</span></div>').join('')+'</div>'+
@@ -829,7 +844,7 @@ function chooseInitialStore(){
  };
  return true;
 }
-async function start(){if(chooseInitialStore())return;try{await refresh(true);if(page==='admin'&&adminTab==='overview'){await loadOverview();admin();}if(page!=='admin')connect()}catch(e){notify(e.message)}}
+async function start(){if(chooseInitialStore())return;try{await refresh(true);if(page==='admin'){if(adminTab==='overview'){await loadOverview();admin();}connectAdminWs();}else connect()}catch(e){notify(e.message)}}
 (async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(storeSelectionPending)chooseInitialStore();else if(token)start();else login()})();
 setInterval(async()=>{if(deviceMode()&&!storeSelectionPending)await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
@@ -840,7 +855,7 @@ window.addEventListener('focus',()=>{if(token&&page==='kitchen')refresh()});
 setInterval(()=>{if(token&&page!=='kitchen')refresh()},60000);
 
 // Back Office order monitoring uses a read-only poll; POS/Kitchen sockets are unchanged.
-setInterval(async()=>{if(page!=='admin'||!token||adminTab!=='orders'||document.hidden||adminOrdersBusy)return;const before=JSON.stringify([adminOrders,adminOrdersSummary,adminOrdersHasMore,adminOrdersError]);await loadAdminOrders();if(page==='admin'&&adminTab==='orders'&&before!==JSON.stringify([adminOrders,adminOrdersSummary,adminOrdersHasMore,adminOrdersError]))admin();},10000);
+setInterval(async()=>{if(page!=='admin'||!token||adminTab!=='orders'||document.hidden||adminOrdersBusy||adminWsLive)return;const before=JSON.stringify([adminOrders,adminOrdersSummary,adminOrdersHasMore,adminOrdersError]);await loadAdminOrders();if(page==='admin'&&adminTab==='orders'&&before!==JSON.stringify([adminOrders,adminOrdersSummary,adminOrdersHasMore,adminOrdersError]))admin();},10000);
 
 // Lightweight overview refresh only while the dashboard is visible.
 setInterval(async()=>{if(page!=='admin'||!token||adminTab!=='overview'||document.hidden||overviewBusy)return;await loadOverview();if(adminTab==='overview')admin();},60000);
