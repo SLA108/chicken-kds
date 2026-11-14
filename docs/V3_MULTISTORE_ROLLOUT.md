@@ -48,3 +48,12 @@ Admin-only endpoints added to `src/index.js`:
 - Store sessions **fail closed** with `STORE_API_NOT_READY` for all other endpoints. No legacy order API is accessible with a store session. Legacy shared-PIN tokens still use legacy global APIs and therefore **must not be used in a multi-store production deployment**.
 - Device enrollment and login need brute-force protection and stronger admin authentication before production.
 - Required next: update ALL order, payment, table, kitchen history, menu, and WS routes to require verified store context; replace legacy tokens before multi-store activation. Integration tests and staging D1 migrations have NOT been run.
+
+## Scoped read-only API progress (not deployed)
+
+A valid device session now permits:
+- `GET /api/store/orders` (POS or Kitchen): only active orders for the authenticated store; child items and modifiers are joined through that store's orders. POS also receives store-filtered payments and occupancy.
+- `GET /api/store/tables` (POS): table 01–20 occupancy filtered by authenticated store.
+- `DISABLE_LEGACY_STORE_ACCESS=true` is an optional staging cutover guard for non-admin legacy PIN tokens; default remains unchanged. Admin legacy endpoints are **not** store-scoped and must be audited before production.
+
+**Not yet done:** scoped write APIs, checkout/payment, kitchen history, WS routing, per-store menu and front-end integration, staging migration/test runs. Do not deploy.
