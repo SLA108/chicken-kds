@@ -728,10 +728,10 @@ function overviewPanel(){
  const metric=(label,value)=>'<div class="admin-metric"><strong>'+money(value)+'</strong><span>'+label+'</span></div>';
  return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Business Overview</h2><p>Today · '+esc(overviewData?.date||'Europe/Warsaw')+' · PLN gross (incl. VAT)</p></div><button type="button" class="alt" id="bo-overview-refresh">Refresh</button></div>'+
  (overviewError?'<p class="warning" role="alert">'+esc(overviewError)+'</p>':'')+
- (!overviewData?'<p>Loading sales overview…</p>':'<div class="admin-overview">'+metric('Total Sales',t.total_cents)+metric('Paid',t.paid_cents)+metric('Unpaid',t.unpaid_cents)+'</div>'+
+ (!overviewData?'<p>Loading sales overview…</p>':'<div class="admin-overview">'+metric('Total Sales',t.total_cents)+metric('Paid',t.paid_cents)+metric('Unpaid',t.unpaid_cents)+'</div><h3>Tips (excluded from sales)</h3><div class="admin-overview">'+metric('Cash Tips',t.cash_tips_cents||0)+metric('Card Tips',t.card_tips_cents||0)+metric('Total Tips',t.tip_cents||0)+'</div>'+
  '<p class="muted small">'+t.orders+' orders today · Excludes cancelled orders and TEST restaurant'+(t.unpriced_orders?' · '+t.unpriced_orders+' orders contain unpriced items':'')+'</p>'+
- '<h3>Restaurant performance</h3><div class="bo-sales-table"><table><thead><tr><th>Restaurant</th><th>Orders</th><th>Total Sales</th><th>Paid</th><th>Unpaid</th></tr></thead><tbody>'+
- overviewData.stores.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+Number(x.orders)+'</td><td>'+money(x.total_cents)+'</td><td>'+money(x.paid_cents)+'</td><td>'+money(x.unpaid_cents)+'</td></tr>').join('')+'</tbody></table></div>')+
+ '<h3>Restaurant performance</h3><div class="bo-sales-table"><table><thead><tr><th>Restaurant</th><th>Orders</th><th>Total Sales</th><th>Paid</th><th>Unpaid</th><th>Cash Tips</th><th>Card Tips</th><th>Total Tips</th></tr></thead><tbody>'+
+ overviewData.stores.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+Number(x.orders)+'</td><td>'+money(x.total_cents)+'</td><td>'+money(x.paid_cents)+'</td><td>'+money(x.unpaid_cents)+'</td><td>'+money(x.cash_tips_cents||0)+'</td><td>'+money(x.card_tips_cents||0)+'</td><td>'+money(x.tip_cents||0)+'</td></tr>').join('')+'</tbody></table></div>')+
  '<p class="muted small">Sales reflect orders created today in Warsaw time. Paid amounts come from recorded payments; Unpaid is the outstanding order value. Payments for earlier orders are not included.</p></section>';
 }
 let superStore='',superMenu=[],superLinks=[],superOptions=[],superCart=[],superSource='takeaway',superTable='01',superCustomer='',superPhone='',superNote='',superBusy=false,superError='',superLoaded=false,superKey=crypto.randomUUID();
