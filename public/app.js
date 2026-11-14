@@ -412,8 +412,8 @@ function showReleaseTable(id){
   confirmButton.disabled=true;cancel.disabled=true;confirmButton.textContent='Releasing…';error.hidden=true;
   try{
    const releaseStore=currentDeviceStore?.id,releaseEpoch=storeEpoch;
-   const rawTip=modal.querySelector('#release-tip').value.trim(),tipCents=Math.round(Number(rawTip)*100);if(!rawTip||!Number.isFinite(Number(rawTip))||tipCents<0||tipCents>10000000||Math.abs(Number(rawTip)*100-tipCents)>0.0001)throw Error('Enter a valid tip amount');if(tipCents>0){if(!paid)throw Error('Checkout the order before adding a tip');await api('/orders/'+id+'/tips','POST',{amount_cents:tipCents,method:modal.querySelector('#release-tip-method').value,stage:'release',request_key:releaseTipKey});}
-   await api('/orders/'+id+'/release-table','POST',{});
+   const rawTip=modal.querySelector('#release-tip').value.trim(),tipCents=Math.round(Number(rawTip)*100);if(!rawTip||!Number.isFinite(Number(rawTip))||tipCents<0||tipCents>10000000||Math.abs(Number(rawTip)*100-tipCents)>0.0001)throw Error('Enter a valid tip amount');if(tipCents>0&&!paid)throw Error('Checkout the order before adding a tip');
+   await api('/orders/'+id+'/release-table','POST',{tip_amount_cents:tipCents,tip_method:modal.querySelector('#release-tip-method').value,tip_request_key:releaseTipKey});
    close();
    // Server has confirmed the release. Update the visible POS state immediately,
    // without blocking on the next full menu/orders/tables network refresh.
