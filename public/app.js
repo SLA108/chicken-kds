@@ -733,12 +733,19 @@ function chooseInitialStore(){
  disconnect();
  document.body.className='role-login-body';
  app.innerHTML='<div class="role-login-screen"><section class="role-login-box"><div class="role-brand"><div class="role-brand-mark">C<span>&</span>K</div><h1>Chicken i Kimchi</h1></div><h2>Choose your store</h2><p class="role-subtitle">Select the restaurant for this device. You can switch later.</p><form id="v3-first-store-form"><label>Authorized store<select name="store_id" required><option value="">Select a store</option>'+deviceStores.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')+'</select></label><button type="submit">Continue</button></form></section></div>';
- app.querySelector('#v3-first-store-form').onsubmit=e=>{
+ app.querySelector('#v3-first-store-form').onsubmit=async e=>{
   e.preventDefault();const selected=String(new FormData(e.currentTarget).get('store_id')||'');
   if(!deviceStores.some(x=>x.id===selected))return;
-  localStorage.setItem(lastStoreKey,selected);
-  sessionStorage.removeItem('ck_token_'+page);
-  location.reload();
+  const button=app.querySelector('#v3-first-store-form button[type="submit"]');button.disabled=true;
+  try{
+   const response=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({store_id:selected})});
+   if(!response.ok)throw Error('Store access expired. Ask Back Office to check this device.');
+   const result=await response.json();
+   if(result.store?.id!==selected||result.role!==page)throw Error('Store authorization could not be verified.');
+   localStorage.setItem(lastStoreKey,selected);
+   sessionStorage.removeItem('ck_token_'+page);
+   location.reload();
+  }catch(error){notify(error.message);button.disabled=false}
  };
  return true;
 }
