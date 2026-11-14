@@ -95,6 +95,16 @@ if(sessionToken){
   return json(Array.from({length:20},(_,i)=>{const number=String(i+1).padStart(2,'0'),matches=rows.filter(o=>o.table_no===number);return {number,occupied:matches.length>0,order_id:matches[0]?.id||null,conflict:matches.length>1,status:matches[0]?.status||null};}));
  }
 
+ if(path==='/ws'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);
+  return room(env,session.storeId).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':session.role,'sec-websocket-protocol':wsProtocol}}));
+ }
+ if(path==='/api/store/menu'&&req.method==='GET'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
+  return json(rows);
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
