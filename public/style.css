@@ -651,3 +651,18 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-mobile-discounts{font-size:11px;color:#718096;margin:0 3px}
  .bo-content>.admin-workspace:has(.bo-mobile-summary)>h3{margin:23px 0 12px;font-size:17px}
 }
+
+/* Mobile overview: aligned figures and single-line section heading */
+@media(max-width:760px){
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;gap:10px!important;margin-bottom:14px!important}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head>div{flex:1;min-width:0}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head h2{text-align:left!important;white-space:nowrap;margin:0!important;font-size:0}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head h2:after{font-size:clamp(15px,4.2vw,18px)}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head button{margin:0!important;flex:0 0 auto}
+ .bo-mobile-sales-split,.bo-mobile-tips-split{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px}
+ .bo-mobile-sales-split>div,.bo-mobile-tips-split>div{align-items:start;text-align:left}
+ .bo-mobile-sales-split strong,.bo-mobile-tips-split strong{font-variant-numeric:tabular-nums;letter-spacing:-.025em}
+ .bo-mobile-tips-top{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
+ .bo-mobile-tips-top>strong{justify-self:end;text-align:right;font-variant-numeric:tabular-nums}
+ .bo-mobile-order-count strong{font-variant-numeric:tabular-nums;text-align:right}
+}
