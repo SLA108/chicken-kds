@@ -225,6 +225,15 @@ if(sessionToken){
   return json({ok:true});
  }
 
+ const orderLookup=path.match(/^\\/api\\/store\\/orders\\/by-client-key\\/([^/]+)$/);
+ if(orderLookup&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const key=decodeURIComponent(orderLookup[1]);
+  if(key.length<16||key.length>128)return json({error:'Invalid client key'},400);
+  const found=await env.DB.prepare('SELECT id,source,table_no,status,created_at FROM orders WHERE client_key=? AND store_id=?').bind(key,session.storeId).first();
+  return json({found:!!found,order:found||null});
+ }
+
  if(path==='/api/store/orders'&&req.method==='POST'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const b=await parse(req);
