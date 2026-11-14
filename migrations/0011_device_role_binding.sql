@@ -17,3 +17,11 @@ CREATE TABLE IF NOT EXISTS device_pair_requests (
  FOREIGN KEY(device_id) REFERENCES pos_devices(id)
 );
 CREATE INDEX IF NOT EXISTS idx_device_pair_requests_expiry ON device_pair_requests(expires_at);
+
+-- Database-backed approval lockout, shared across Worker instances.
+CREATE TABLE IF NOT EXISTS device_approval_attempts (
+ scope TEXT PRIMARY KEY,
+ attempts INTEGER NOT NULL DEFAULT 0,
+ window_started_at TEXT NOT NULL,
+ blocked_until TEXT
+);
