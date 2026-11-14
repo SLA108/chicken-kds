@@ -455,7 +455,7 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
  if(storeId){where.push('o.store_id=?');args.push(storeId);}
  if(status){where.push('o.status=?');args.push(status);}
  const clause=where.length?'WHERE '+where.join(' AND '):'';
- const orders=(await env.DB.prepare('SELECT o.*,s.name AS store_name,s.code AS store_code FROM orders o JOIN stores s ON s.id=o.store_id '+clause+' ORDER BY o.created_at DESC,o.id DESC LIMIT ? OFFSET ?').bind(...args,limit+1,offset).all()).results;
+ const orders=(await env.DB.prepare('SELECT o.*,s.name AS store_name,s.code AS store_code, EXISTS(SELECT 1 FROM table_occupancy t WHERE t.order_id=o.id AND t.store_id=o.store_id) AS table_occupied FROM orders o JOIN stores s ON s.id=o.store_id '+clause+' ORDER BY o.created_at DESC,o.id DESC LIMIT ? OFFSET ?').bind(...args,limit+1,offset).all()).results;
  const has_more=orders.length>limit,visible=orders.slice(0,limit);
  if(visible.length){
   const ids=visible.map(o=>o.id),marks=ids.map(()=>'?').join(',');
