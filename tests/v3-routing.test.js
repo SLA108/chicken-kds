@@ -53,7 +53,7 @@ test('add-items checkout race returns recoverable conflict',()=>{
 
 test('store-specific active override controls both menu visibility and order item validation',()=>{
  const matches=api.match(/WHERE COALESCE\(o\.active,m\.active\)=1/g)||[];
- assert.equal(matches.length,3);
+ assert.equal(matches.length,4);
  assert.ok(!api.includes('WHERE m.active=1 AND COALESCE(o.active,1)=1'));
  assert.ok(api.includes('COALESCE(o.sold_out,0)=0'));
 });
