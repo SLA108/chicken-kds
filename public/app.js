@@ -192,7 +192,13 @@ function connect(){
   const recovered=await renewDeviceSession();
   // Renewal can intentionally reload the page after an access change.
   if(generation!==wsGeneration)return;
-  if(!recovered){disconnect();token='';sessionStorage.removeItem('ck_token_'+page);menu=[];orders=[];tableState=[];render();return;}
+  if(!recovered){
+   // Renewal may have intentionally opened the store selector or started a
+   // clean reload. Never overwrite that screen with the old-store UI.
+   if(storeSelectionPending)return;
+   disconnect();token='';sessionStorage.removeItem('ck_token_'+page);
+   menu=[];orders=[];tableState=[];login();return;
+  }
  }
  if(page==='pos'){const status=document.querySelector('header .status');if(status){status.className='status offline';status.textContent='● Connecting / Offline'}else render()}else render();
  reconnectTimer=setTimeout(()=>{if(token&&generation===wsGeneration)connect()},2500)};
