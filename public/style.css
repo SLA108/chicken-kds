@@ -534,3 +534,5 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .reservation-actions{flex-wrap:wrap}.reservation-actions button[data-reservation-action="arrived"]{background:#16805c;color:white;font-weight:850;border:1px solid #3ab68d;box-shadow:0 0 0 2px #16805c22}
 .reservation-actions button[data-reservation-action="no-show"]{background:#37485c;color:#e6edf5;border:1px solid #6c7c8f;font-weight:750}
 .reservation-table tr:has(.reservation-action-required){background:rgba(241,130,66,.065)}
+
+.super-reservation-panel{margin-top:22px}.super-reschedule-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.super-reschedule-controls input{min-width:185px;max-width:230px}.super-reschedule-controls button{white-space:nowrap}.super-reservation-panel .reservation-table{min-width:700px}
