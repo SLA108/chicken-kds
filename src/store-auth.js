@@ -4,7 +4,7 @@ const enc=new TextEncoder();
 const dec=new TextDecoder();
 const hex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 const bytesFromHex=hexString=>{if(!/^(?:[0-9a-f]{2})+$/.test(hexString))return null;return Uint8Array.from(hexString.match(/.{2}/g),x=>parseInt(x,16));};
-const b64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
+const b64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const unb64url=value=>{if(!/^[A-Za-z0-9_-]+$/.test(value))return null;try{return Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4)),c=>c.charCodeAt(0));}catch{return null;}};
 async function signingKey(secret){if(typeof secret!=='string'||secret.length<32)throw Error('AUTH_SECRET must contain at least 32 characters');return crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);}
 export async function issueStoreSession(secret,{role,storeId,deviceId},now=Date.now(),ttlMs=8*60*60*1000){
@@ -15,7 +15,7 @@ export async function issueStoreSession(secret,{role,storeId,deviceId},now=Date.
 }
 export async function verifyStoreSession(secret,token,now=Date.now()){
  if(typeof token!=='string'||token.length>2048)return null;
- const match=/^cks1\\.([A-Za-z0-9_-]+)\\.([0-9a-f]{64})$/.exec(token);
+ const match=/^cks1\.([A-Za-z0-9_-]+)\.([0-9a-f]{64})$/.exec(token);
  if(!match)return null;
  const signature=bytesFromHex(match[2]),key=await signingKey(secret);
  const valid=await crypto.subtle.verify('HMAC',key,signature,enc.encode(match[1]));
