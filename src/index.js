@@ -626,15 +626,16 @@ if(path==='/api/admin/overview'&&req.method==='GET'){
  (SELECT COUNT(*) FROM order_items i WHERE i.order_id=o.id AND i.price_cents IS NULL) AS unpriced
  FROM orders o JOIN stores s ON s.id=o.store_id
  WHERE s.code!='TEST' AND s.active=1 AND o.created_at>=? AND o.created_at<? AND o.status!='cancelled'`).bind(from,to).all()).results;
+ const discountRows=(await env.DB.prepare("SELECT o.store_id,COALESCE(SUM(i.quantity*i.discount_cents),0) AS discount_cents FROM orders o JOIN stores s ON s.id=o.store_id JOIN order_items i ON i.order_id=o.id WHERE s.code!='TEST' AND s.active=1 AND o.created_at>=? AND o.created_at<? AND o.status!='cancelled' GROUP BY o.store_id").bind(from,to).all()).results;
  const tipRows=(await env.DB.prepare("SELECT t.store_id,t.method,COALESCE(SUM(t.amount_cents),0) AS amount_cents FROM order_tips t JOIN stores s ON s.id=t.store_id WHERE s.code!='TEST' AND s.active=1 AND t.created_at>=? AND t.created_at<? GROUP BY t.store_id,t.method").bind(from,to).all()).results;
  const result=stores.map(store=>{
   const subset=rows.filter(o=>o.store_id===store.id);
   let paid=0,unpaid=0,unpriced=0;
   for(const o of subset){const received=Math.max(0,Number(o.paid_cents)||0),total=Math.max(0,Number(o.order_cents)||0);paid+=received;unpaid+=Math.max(0,total-received);if(Number(o.unpriced))unpriced++;}
-  const tips=tipRows.filter(t=>t.store_id===store.id);const cash_tips_cents=tips.filter(t=>t.method==='cash').reduce((n,t)=>n+Number(t.amount_cents),0),card_tips_cents=tips.filter(t=>t.method==='card').reduce((n,t)=>n+Number(t.amount_cents),0);
-  return {store_id:store.id,code:store.code,name:store.name,orders:subset.length,paid_cents:paid,unpaid_cents:unpaid,total_cents:paid+unpaid,unpriced_orders:unpriced,cash_tips_cents,card_tips_cents,tip_cents:cash_tips_cents+card_tips_cents};
+  const discount_cents=Number(discountRows.find(d=>d.store_id===store.id)?.discount_cents||0);const tips=tipRows.filter(t=>t.store_id===store.id);const cash_tips_cents=tips.filter(t=>t.method==='cash').reduce((n,t)=>n+Number(t.amount_cents),0),card_tips_cents=tips.filter(t=>t.method==='card').reduce((n,t)=>n+Number(t.amount_cents),0);
+  return {store_id:store.id,code:store.code,name:store.name,orders:subset.length,paid_cents:paid,unpaid_cents:unpaid,total_cents:paid+unpaid,unpriced_orders:unpriced,cash_tips_cents,card_tips_cents,tip_cents:cash_tips_cents+card_tips_cents,discount_cents};
  });
- const total=result.reduce((a,x)=>({orders:a.orders+x.orders,paid_cents:a.paid_cents+x.paid_cents,unpaid_cents:a.unpaid_cents+x.unpaid_cents,total_cents:a.total_cents+x.total_cents,unpriced_orders:a.unpriced_orders+x.unpriced_orders,cash_tips_cents:a.cash_tips_cents+x.cash_tips_cents,card_tips_cents:a.card_tips_cents+x.card_tips_cents,tip_cents:a.tip_cents+x.tip_cents}),{orders:0,paid_cents:0,unpaid_cents:0,total_cents:0,unpriced_orders:0,cash_tips_cents:0,card_tips_cents:0,tip_cents:0});
+ const total=result.reduce((a,x)=>({orders:a.orders+x.orders,paid_cents:a.paid_cents+x.paid_cents,unpaid_cents:a.unpaid_cents+x.unpaid_cents,total_cents:a.total_cents+x.total_cents,unpriced_orders:a.unpriced_orders+x.unpriced_orders,cash_tips_cents:a.cash_tips_cents+x.cash_tips_cents,card_tips_cents:a.card_tips_cents+x.card_tips_cents,tip_cents:a.tip_cents+x.tip_cents,discount_cents:a.discount_cents+x.discount_cents}),{orders:0,paid_cents:0,unpaid_cents:0,total_cents:0,unpriced_orders:0,cash_tips_cents:0,card_tips_cents:0,tip_cents:0,discount_cents:0});
  return json({date:day,timezone:'Europe/Warsaw',currency:'PLN',stores:result,total});
 }
 if(path==='/api/admin/store-sales'&&req.method==='GET'){
