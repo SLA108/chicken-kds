@@ -317,3 +317,11 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .admin-workspace:has(#v3-store-select)>#v3-device-form{margin:0 0 16px}
 @media(max-width:1050px){.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish{grid-template-columns:minmax(0,1fr) minmax(130px,180px) minmax(110px,140px);gap:12px}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>label:has([data-v3-sold]){grid-column:2}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>button{grid-column:3}}
 @media(max-width:680px){.admin-workspace:has(#v3-store-select)>#v3-load-stores{width:100%;margin:0 0 12px}.admin-workspace:has(#v3-store-select)>label:has(#v3-store-select){display:flex;width:100%}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:15px;gap:13px}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>.admin-dish-info{grid-column:1/-1}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>label:has([data-v3-sold]){grid-column:1}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>button{grid-column:2;align-self:end}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish input[type=number],.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish select{font-size:16px}}
+
+/* V3.1: device access editor */
+.v3-store-grants{display:flex;flex-wrap:wrap;gap:12px;border:1px solid #cbd5e1;border-radius:10px;padding:12px}
+.v3-store-grants label{display:flex;align-items:center;gap:7px}
+.v3-grants-overlay{position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.65);display:flex;align-items:center;justify-content:center;padding:16px}
+.v3-grants-dialog{background:#fff;color:#172033;width:min(480px,100%);max-height:90vh;overflow:auto;padding:24px;border-radius:16px;box-shadow:0 20px 60px #0005}
+.v3-grants-dialog form{display:grid;gap:14px}
+.v3-grants-dialog form>label{display:flex;gap:12px;align-items:center}
