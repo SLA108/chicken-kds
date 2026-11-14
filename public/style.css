@@ -740,3 +740,40 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-store-fields.three{gap:5px}
  .bo-store-field strong{font-size:clamp(11px,3.2vw,15px)}
 }
+
+/* Stronger hierarchy for restaurant performance: sales first, details second */
+.bo-store-card{border:1px solid #d9e3ef;box-shadow:0 7px 24px rgba(24,44,72,.07);overflow:hidden}
+.bo-store-card-header{padding-bottom:14px;border-bottom:1px solid #e8edf4}
+.bo-store-card-header h4{font-size:19px;letter-spacing:-.025em}
+.bo-store-orders{background:#edf3fb;padding:9px 12px;border-radius:12px;min-width:62px}
+.bo-store-orders strong{font-size:25px;line-height:1;color:#183a65}
+.bo-store-main{background:#1d3151;color:#fff;margin:15px 0 4px;border-radius:13px;padding:17px 15px}
+.bo-store-main>div:first-child{flex:1}
+.bo-store-main>div:last-child{text-align:right}
+.bo-store-main small{color:#b9cce5;font-size:11px}
+.bo-store-main strong{color:#fff;font-weight:800}
+.bo-store-main>div:first-child strong{font-size:clamp(20px,2.3vw,28px)}
+.bo-store-main>div:last-child strong{font-size:clamp(14px,1.7vw,19px)}
+.bo-store-section{padding:14px 0}
+.bo-store-section h5{font-size:11px;letter-spacing:.045em;text-transform:uppercase;color:#6b7b91;margin-bottom:11px}
+.bo-store-section:nth-of-type(3) .bo-store-field:first-child strong{color:#177354}
+.bo-store-section:nth-of-type(3) .bo-store-field:last-child strong{color:#b65b33}
+.bo-store-fields{gap:12px}
+.bo-store-field small{font-size:11px}
+.bo-store-field strong{font-size:15px;color:#20314b;font-weight:750}
+.bo-store-fields.three .bo-store-field{padding-right:4px}
+.bo-store-footer{background:#f5f7fb;border-radius:9px;padding:11px 12px;border:0}
+@media(max-width:760px){
+ .bo-store-cards{gap:15px}
+ .bo-store-card{padding:15px;border-radius:18px}
+ .bo-store-card-header h4{font-size:20px}
+ .bo-store-main{margin:15px 0 5px;padding:17px 14px}
+ .bo-store-main>div:first-child strong{font-size:clamp(19px,5.4vw,26px)}
+ .bo-store-main>div:last-child strong{font-size:clamp(13px,3.9vw,18px)}
+ .bo-store-section{padding:13px 0}
+ .bo-store-field strong{font-size:clamp(13px,3.6vw,16px)}
+ .bo-store-fields.three .bo-store-field strong{font-size:clamp(11px,3.2vw,15px)}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>h3{font-size:19px;font-weight:800;letter-spacing:-.025em;margin:25px 0 14px;padding-left:11px;border-left:4px solid #315fba}
+ .bo-mobile-sales{box-shadow:0 10px 25px rgba(24,44,72,.16)}
+ .bo-mobile-tips{box-shadow:0 3px 12px rgba(24,44,72,.035)}
+}
