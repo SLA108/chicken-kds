@@ -343,6 +343,19 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
   return json({error:'Multi-store schema not installed',code:'MULTISTORE_SCHEMA_MISSING'},503);
  }
 }
+// Cross-store paid sales report. TEST is excluded unless explicitly requested.
+if(path==='/api/admin/store-sales'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const q=new URL(req.url).searchParams,from=q.get('from'),to=q.get('to'),includeTest=q.get('include_test')==='true';
+ const valid=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&new Date(d+'T12:00:00Z').toISOString().slice(0,10)===d;
+ if((from&&!valid(from))||(to&&!valid(to))||(from&&to&&from>to))return json({error:'Invalid date range'},400);
+ const conditions=["o.paid_at IS NOT NULL"],args=[];
+ if(!includeTest)conditions.push("s.code!='TEST'");
+ if(from){conditions.push('o.paid_at>=?');args.push(from+'T00:00:00Z');}
+ if(to){const next=new Date(to+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);conditions.push('o.paid_at<?');args.push(next.toISOString().slice(0,10)+'T00:00:00Z');}
+ const rows=(await env.DB.prepare("SELECT s.id AS store_id,s.code,s.name,COUNT(DISTINCT o.id) AS paid_orders,COALESCE(SUM(p.amount_cents),0) AS revenue_cents FROM stores s LEFT JOIN orders o ON o.store_id=s.id AND "+conditions.join(' AND ')+" LEFT JOIN payments p ON p.order_id=o.id AND p.store_id=s.id WHERE "+(includeTest?'1=1':"s.code!='TEST'")+" GROUP BY s.id,s.code,s.name ORDER BY s.code").bind(...args).all()).results;
+ return json({stores:rows,include_test:includeTest,from:from||null,to:to||null,timezone:'UTC'});
+}
 // V3 admin-only store detail. Does not grant access to POS/KDS store routing.
 // V3 device enrollment foundation: admin-only; credentials are stored hashed.
 // Device credentials do not authorize any POS/KDS endpoint until the
