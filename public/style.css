@@ -619,3 +619,35 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-content .admin-overview{grid-template-columns:1fr!important}
  .bo-content .admin-metric strong{font-size:25px}
 }
+
+/* Dedicated mobile Overview dashboard */
+.bo-mobile-summary{display:none}
+@media(max-width:760px){
+ .bo-content>.admin-workspace:has(.bo-mobile-summary){padding:14px!important;background:transparent;border:0;box-shadow:none}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head{margin-bottom:14px}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head h2{font-size:0}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head h2:after{content:"Today's performance";font-size:18px}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>.admin-section-head p{display:none}
+ .bo-mobile-summary{display:grid;gap:12px}
+ .bo-desktop-overview{display:none}
+ .bo-mobile-sales{padding:20px;border-radius:18px;background:#182c48;color:#fff;box-shadow:0 9px 22px #14243b22}
+ .bo-mobile-sales-top{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px;color:#d5e3f6}
+ .bo-mobile-sales-date{font-size:11px;color:#aabdd8}
+ .bo-mobile-sales-total{display:block;margin:15px 0 18px;font-size:clamp(28px,8vw,38px);line-height:1.1;letter-spacing:-.04em;white-space:nowrap;font-variant-numeric:tabular-nums}
+ .bo-mobile-sales-split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-top:14px;border-top:1px solid #405471}
+ .bo-mobile-sales-split>div,.bo-mobile-tips-split>div{display:grid;gap:5px;min-width:0}
+ .bo-mobile-sales-split small{font-size:11px;color:#b6c9e3}
+ .bo-mobile-sales-split strong{font-size:clamp(15px,4.4vw,20px);white-space:nowrap}
+ .bo-mobile-tips,.bo-mobile-order-count{padding:17px;background:#fff;border:1px solid #e0e6ee;border-radius:16px}
+ .bo-mobile-tips-top,.bo-mobile-order-count{display:flex;justify-content:space-between;align-items:center;gap:10px}
+ .bo-mobile-tips-top>span{font-size:15px;font-weight:800;color:#18263c}
+ .bo-mobile-tips-top>span small{display:block;font-size:10px;font-weight:400;color:#758298}
+ .bo-mobile-tips-top>strong{font-size:23px;white-space:nowrap;color:#17253a}
+ .bo-mobile-tips-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;padding-top:13px;border-top:1px solid #e7ecf2}
+ .bo-mobile-tips-split small{font-size:11px;color:#738197}
+ .bo-mobile-tips-split strong{font-size:17px;color:#1e293b;white-space:nowrap}
+ .bo-mobile-order-count{font-size:14px;color:#536177}
+ .bo-mobile-order-count strong{font-size:24px;color:#15253b}
+ .bo-mobile-discounts{font-size:11px;color:#718096;margin:0 3px}
+ .bo-content>.admin-workspace:has(.bo-mobile-summary)>h3{margin:23px 0 12px;font-size:17px}
+}
