@@ -172,6 +172,8 @@ if(sessionToken){
  const scopedTips=path.match(/^\/api\/store\/orders\/([^/]+)\/tips$/);
  if(scopedTips&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const ownOrder=await env.DB.prepare('SELECT id FROM orders WHERE id=? AND store_id=?').bind(scopedTips[1],session.storeId).first();
+  if(!ownOrder)return json({error:'Order not found'},404);
   const rows=(await env.DB.prepare('SELECT id,amount_cents,method,stage,created_at FROM order_tips WHERE order_id=? AND store_id=? ORDER BY created_at').bind(scopedTips[1],session.storeId).all()).results;
   return json({tips:rows,total_cents:rows.reduce((n,t)=>n+t.amount_cents,0)});
  }
