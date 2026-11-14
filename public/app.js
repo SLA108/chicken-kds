@@ -167,7 +167,7 @@ function login(){
  }
  if(!selected)return;const form=document.querySelector('#role-login-form');form.onsubmit=async e=>{e.preventDefault();const btn=document.querySelector('#enter');btn.disabled=true;btn.textContent='Signing in…';try{const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value})});const b=await r.json();if(!r.ok)throw Error(b.error||'Sign-in failed');token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start()}catch(err){document.querySelector('#loginerr').textContent=err.message}finally{btn.disabled=false;btn.textContent='Sign in'}};
 }
-async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=storeEpoch,store=currentDeviceStore?.id;const stale=()=>epoch!==storeEpoch||store!==currentDeviceStore?.id||serial!==kitchenRefreshSerial;try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);if(stale())return;menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}if(stale())return;if(page==='kitchen'){
+async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=storeEpoch,store=currentDeviceStore?.id;const stale=()=>epoch!==storeEpoch||store!==currentDeviceStore?.id||serial!==kitchenRefreshSerial;try{if(page==='admin'){await loadAdminMenu();if(stale())return;menu=adminMenu;if(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])'))return;render();return;}const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);if(stale())return;menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}if(stale())return;if(page==='kitchen'){
   // Ignore stale overlapping responses and preserve optimistic dish states until save settles.
   if(stale())return;
   for(const order of o)for(const item of order.items||[]){
@@ -770,7 +770,7 @@ function chooseInitialStore(){
  };
  return true;
 }
-async function start(){if(chooseInitialStore())return;try{await refresh(true);connect()}catch(e){notify(e.message)}}
+async function start(){if(chooseInitialStore())return;try{await refresh(true);if(page!=='admin')connect()}catch(e){notify(e.message)}}
 (async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(storeSelectionPending)chooseInitialStore();else if(token)start();else login()})();
 setInterval(async()=>{if(deviceMode()&&!storeSelectionPending)await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
