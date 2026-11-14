@@ -870,3 +870,45 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-monitor-card .bo-order-head>b{font-size:17px}
  .bo-monitor-pagination{gap:9px}
 }
+
+/* Restaurant-first Orders Monitor */
+.bo-monitor-simple-filter{display:flex;flex-wrap:wrap;align-items:end;gap:12px;background:#f3f6fa;padding:12px 14px;border-radius:13px;margin:14px 0 4px}
+.bo-monitor-simple-filter label{display:grid;gap:5px;flex:1 1 140px;max-width:270px;font-size:12px;font-weight:700;color:#566780}
+.bo-monitor-simple-filter select,.bo-monitor-simple-filter input{width:100%;min-width:0;box-sizing:border-box}
+.bo-monitor-updated{font-size:11px;color:#8190a5;margin:8px 2px 15px}
+.bo-monitor-store-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.bo-monitor-store{min-width:0;border:1px solid #dce5ef;border-radius:17px;background:#fff;padding:16px;box-shadow:0 4px 15px #152a460b}
+.bo-monitor-store.selected{border-color:#3869d0;box-shadow:0 0 0 2px #3869d01c,0 7px 20px #152a4612}
+.bo-monitor-store-head{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:17px}
+.bo-monitor-store-head h3{margin:0 0 5px;font-size:19px;color:#172942;overflow-wrap:anywhere}
+.bo-monitor-store-head small,.bo-monitor-hint{font-size:11px;color:#8290a3}
+.bo-monitor-store-tag{background:#f0f4fa;color:#63758e;border-radius:7px;padding:5px 7px;font-size:10px;white-space:nowrap}
+.bo-monitor-store-statuses{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.bo-monitor-status-button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0;min-height:72px;border:1px solid #e2e8f0;border-bottom:3px solid #a3adbb;border-radius:11px;background:#f7f9fc;color:#233550;padding:9px 3px;cursor:pointer;transition:background .12s,border-color .12s}
+.bo-monitor-status-button strong{font-size:clamp(19px,2.1vw,28px);font-variant-numeric:tabular-nums;line-height:1}
+.bo-monitor-status-button span{font-size:10px;font-weight:700;white-space:nowrap}
+.bo-monitor-status-button.bo-monitor-new{border-bottom-color:#db963a}
+.bo-monitor-status-button.bo-monitor-cooking{border-bottom-color:#4677d5}
+.bo-monitor-status-button.bo-monitor-done{border-bottom-color:#168467}
+.bo-monitor-status-button.bo-monitor-cancelled{border-bottom-color:#9da9ba}
+.bo-monitor-status-button:hover{background:#e9f0fc}
+.bo-monitor-status-button.selected{background:#e5edff;border-color:#527bdf;color:#204ba5}
+.bo-monitor-show-all{display:block;margin:13px 0 0;padding:7px 10px;border-radius:8px;background:#e9effb;color:#2852a0;font-size:12px;font-weight:750}
+.bo-monitor-hint{display:block;margin-top:12px}
+.bo-monitor-results{margin-top:22px;border-top:1px solid #dce5f0;padding-top:20px}
+.bo-monitor-results-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.bo-monitor-results-head h3{margin:0 0 4px;font-size:20px}
+.bo-monitor-results-head small{color:#738298;font-size:12px}
+.bo-monitor-empty{padding:22px;text-align:center;background:#f5f8fc;border-radius:12px;color:#728198}
+@media(max-width:1250px){.bo-monitor-store-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.bo-monitor-store-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){
+ .bo-monitor-simple-filter{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;padding:10px}
+ .bo-monitor-simple-filter label{min-width:0;max-width:none}
+ .bo-monitor-store{padding:13px}
+ .bo-monitor-store-statuses{gap:5px}
+ .bo-monitor-status-button{min-height:66px;padding:7px 2px}
+ .bo-monitor-status-button strong{font-size:22px}
+ .bo-monitor-status-button span{font-size:9px}
+ .bo-monitor-store-head h3{font-size:18px}
+}
