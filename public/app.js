@@ -822,38 +822,47 @@ function connectAdminWs(){
 }
 let overviewData=null,overviewError='',overviewBusy=false;
 async function loadOverview(){if(overviewBusy)return;overviewBusy=true;try{overviewData=await api('/admin/overview');overviewError='';}catch(e){overviewError=e.message;}finally{overviewBusy=false;}}
-let boWorkloadMetrics=['orders','dishes'],boWorkloadStores=null;
-const boWorkloadDefs={orders:{label:'Orders',unit:'orders'},dishes:{label:'Dishes',unit:'dishes'},avg:{label:'Kitchen time',unit:'min'}};
-function boWorkloadValue(r,key){if(!r)return null;if(key==='avg')return r.completed?Number(r.total_kitchen_minutes)/Number(r.completed):null;return Number(r[key])||0;}
+let boWorkloadMetric='orders',boWorkloadStores=null;
+const boWorkloadDefs={orders:{label:'Orders',unit:'orders / 15 min'},dishes:{label:'Dishes',unit:'dishes / 15 min'},avg:{label:'Kitchen time',unit:'minutes'}};
+function boWorkloadValue(r,key){if(!r)return key==='avg'?null:0;if(key==='avg')return r.completed?Number(r.total_kitchen_minutes)/Number(r.completed):null;return Number(r[key])||0;}
 function boWorkloadPanel(data){
  const rows=data?.workload||[],stores=data?.stores||[],colors=['#3183ce','#d18a30','#43a58a','#8b6ac9','#d35e76'];
  if(boWorkloadStores===null)boWorkloadStores=stores.map(s=>s.store_id);
- const active=stores.filter(s=>boWorkloadStores.includes(s.store_id)),metrics=boWorkloadMetrics;
+ const active=stores.filter(s=>boWorkloadStores.includes(s.store_id)),key=boWorkloadMetric,def=boWorkloadDefs[key];
  const byStore=new Map(stores.map(s=>[s.store_id,new Map(rows.filter(r=>r.store_id===s.store_id).map(r=>[Number(r.slot),r]))]));
- const left=metrics.filter(k=>k!=='avg'),right=metrics.includes('avg');
- const maxLeft=Math.max(1,...rows.flatMap(r=>left.map(k=>boWorkloadValue(r,k)||0))),maxRight=Math.max(1,...rows.map(r=>boWorkloadValue(r,'avg')||0));
- const x=i=>54+i*8.2,y=(v,max)=>200-(v/max)*164;
- const lines=active.map(st=>{const si=stores.findIndex(s=>s.store_id===st.store_id),data=byStore.get(st.store_id);return metrics.map((k,mi)=>{
-  const pts=[];for(let i=0;i<96;i++){const v=boWorkloadValue(data.get(i),k);if(v===null){if(pts.length)pts.push(null);continue;}pts.push([x(i),y(v,k==='avg'?maxRight:maxLeft)]);}
-  const segments=[];let part=[];for(const p of pts){if(!p){if(part.length)segments.push(part);part=[];}else part.push(p);}if(part.length)segments.push(part);
-  return segments.map(part=>'<polyline points="'+part.map(p=>p.join(',')).join(' ')+'" fill="none" stroke="'+colors[si%colors.length]+'" stroke-width="2.8" stroke-dasharray="'+(k==='orders'?'none':k==='dishes'?'7 4':'2 5')+'" stroke-linejoin="round" stroke-linecap="round"/>').join('');
- }).join('')}).join('');
- const checks=Object.entries(boWorkloadDefs).map(([k,d])=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-metric="'+k+'" '+(metrics.includes(k)?'checked':'')+'>'+d.label+'</label>').join('');
- const storeChecks=stores.map((st,i)=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-store="'+esc(st.store_id)+'" '+(boWorkloadStores.includes(st.store_id)?'checked':'')+'><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</label>').join('');
- return '<section class="bo-workload"><h3>Kitchen workload</h3><p class="muted small">Today · Europe/Warsaw · 15-minute intervals · excludes cancelled orders and TEST restaurant</p><div class="bo-workload-chart"><div class="bo-workload-controls"><div><strong>Metrics</strong><div class="bo-workload-options">'+checks+'</div></div><div><strong>Restaurants</strong><div class="bo-workload-options">'+storeChecks+'</div></div></div><div class="bo-workload-plot"><svg id="bo-workload-svg" viewBox="0 0 890 245" role="img" aria-label="Interactive restaurant workload comparison" preserveAspectRatio="none"><path d="M54 36 V200 H834" fill="none" stroke="#b7c6d8"/><path d="M54 118 H834" fill="none" stroke="#e1e7ef" stroke-dasharray="4 5"/>'+lines+'<line id="bo-workload-cursor" x1="54" x2="54" y1="36" y2="200" stroke="#64748b" stroke-dasharray="3 3" visibility="hidden"/><rect x="54" y="36" width="780" height="164" fill="transparent" id="bo-workload-hit"/><text x="54" y="225" font-size="13" fill="#64748b">00:00</text><text x="430" y="225" font-size="13" fill="#64748b">12:00</text><text x="790" y="225" font-size="13" fill="#64748b">24:00</text><text x="6" y="39" font-size="12" fill="#64748b">'+Math.ceil(maxLeft)+'</text>'+(right?'<text x="848" y="39" font-size="12" fill="#64748b">'+Math.ceil(maxRight)+'m</text>':'')+'</svg><div id="bo-workload-tooltip" class="bo-workload-tooltip" hidden></div></div><p class="muted small">Solid: Orders · Dashed: Dishes · Dotted: Kitchen time. Left axis: counts · Right axis: minutes. Hover or tap for exact values.</p></div><p class="muted small">Kitchen time uses only orders with a recorded completion timestamp. Historical pending-dish load is not yet shown.</p></section>';
+ const values=active.flatMap(st=>rows.filter(r=>r.store_id===st.store_id).map(r=>boWorkloadValue(r,key)).filter(v=>v!==null));
+ const rawMax=Math.max(1,...values),max=key==='avg'?Math.ceil(rawMax/5)*5:Math.ceil(rawMax);
+ const x=i=>62+i*7.9,y=v=>206-(v/max)*160;
+ const lines=active.map(st=>{
+  const si=stores.findIndex(s=>s.store_id===st.store_id),data=byStore.get(st.store_id),segments=[];let part=[];
+  for(let i=0;i<96;i++){
+   const v=boWorkloadValue(data.get(i),key);
+   if(v===null){if(part.length)segments.push(part);part=[];}else part.push([x(i),y(v)]);
+  }
+  if(part.length)segments.push(part);
+  return segments.map(part=>'<polyline points="'+part.map(p=>p.join(',')).join(' ')+'" fill="none" stroke="'+colors[si%colors.length]+'" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>').join('');
+ }).join('');
+ const ticks=[0,.25,.5,.75,1].map(f=>'<line x1="62" x2="815" y1="'+y(max*f)+'" y2="'+y(max*f)+'" stroke="#e5ebf2" stroke-dasharray="'+(f===0?'none':'3 5')+'"/><text x="52" y="'+(y(max*f)+4)+'" text-anchor="end" font-size="12" fill="#64748b">'+(key==='avg'?(max*f).toFixed(0):Math.round(max*f))+'</text>').join('');
+ const hours=[0,6,12,18,24].map(h=>'<text x="'+(h===24?815:x(h*4))+'" y="231" text-anchor="'+(h===0?'start':h===24?'end':'middle')+'" font-size="12" fill="#64748b">'+String(h).padStart(2,'0')+':00</text>').join('');
+ const metricButtons=Object.entries(boWorkloadDefs).map(([k,d])=>'<button type="button" class="bo-workload-tab'+(k===key?' active':'')+'" data-bo-metric="'+k+'" aria-pressed="'+(k===key)+'">'+d.label+'</button>').join('');
+ const storeButtons=stores.map((st,i)=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-store="'+esc(st.store_id)+'" '+(boWorkloadStores.includes(st.store_id)?'checked':'')+'><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</label>').join('');
+ return '<section class="bo-workload"><h3>Kitchen workload</h3><p class="muted small">Today · Europe/Warsaw · 15-minute intervals</p><div class="bo-workload-chart"><div class="bo-workload-controls"><div><strong>Compare by metric</strong><div class="bo-workload-tabs">'+metricButtons+'</div></div><div><strong>Restaurants</strong><div class="bo-workload-options">'+storeButtons+'</div></div></div><div class="bo-workload-chart-heading"><strong>'+def.label+'</strong><span>'+def.unit+'</span></div><div class="bo-workload-plot"><div class="bo-workload-svg-scroll"><svg id="bo-workload-svg" viewBox="0 0 850 252" role="img" aria-label="'+def.label+' by restaurant over time" preserveAspectRatio="xMidYMid meet">'+ticks+lines+'<line id="bo-workload-cursor" x1="62" x2="62" y1="46" y2="206" stroke="#64748b" stroke-dasharray="3 3" visibility="hidden"/><rect x="62" y="46" width="753" height="160" fill="transparent" id="bo-workload-hit"/>'+hours+'<text x="62" y="17" font-size="12" fill="#64748b">'+def.unit+'</text></svg></div><div id="bo-workload-tooltip" class="bo-workload-tooltip" hidden></div></div><div class="bo-workload-legend">'+stores.filter(st=>boWorkloadStores.includes(st.store_id)).map(st=>{const i=stores.findIndex(s=>s.store_id===st.store_id);return '<span><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</span>';}).join('')+'</div></div><p class="muted small">'+(key==='avg'?'Kitchen time is measured from order creation to kitchen completion; slots without completed orders show no value.':'Each point represents a 15-minute interval.')+' Cancelled orders and TEST restaurant are excluded.</p></section>';
 }
 function bindBoWorkload(){
- document.querySelectorAll('[data-bo-metric]').forEach(el=>el.onchange=()=>{const k=el.dataset.boMetric;boWorkloadMetrics=el.checked?[...new Set([...boWorkloadMetrics,k])]:boWorkloadMetrics.filter(v=>v!==k);admin();});
+ document.querySelectorAll('[data-bo-metric]').forEach(el=>el.onclick=()=>{boWorkloadMetric=el.dataset.boMetric;admin();});
  document.querySelectorAll('[data-bo-store]').forEach(el=>el.onchange=()=>{const k=el.dataset.boStore;boWorkloadStores=el.checked?[...new Set([...boWorkloadStores,k])]:boWorkloadStores.filter(v=>v!==k);admin();});
  const svg=document.querySelector('#bo-workload-svg'),tip=document.querySelector('#bo-workload-tooltip');if(!svg||!tip||!overviewData)return;
- const rows=overviewData.workload||[],stores=overviewData.stores||[];
- const map=new Map(rows.map(r=>[r.store_id+':'+r.slot,r]));
- const show=e=>{const rect=svg.getBoundingClientRect(),px=(e.clientX-rect.left)/rect.width*890,slot=Math.max(0,Math.min(95,Math.round((px-54)/8.2)));if(px<45||px>845){tip.hidden=true;svg.querySelector('#bo-workload-cursor').setAttribute('visibility','hidden');return;}
-  const time=String(Math.floor(slot/4)).padStart(2,'0')+':'+String(slot%4*15).padStart(2,'0');
-  const content=(boWorkloadStores||[]).map(id=>{const st=stores.find(s=>s.store_id===id),r=map.get(id+':'+slot);return st?'<div><strong>'+esc(st.name)+'</strong> · '+boWorkloadMetrics.map(k=>boWorkloadDefs[k].label+': '+(boWorkloadValue(r,k)===null?'—':(k==='avg'?boWorkloadValue(r,k).toFixed(1):boWorkloadValue(r,k)))+' '+boWorkloadDefs[k].unit).join(' · ')+'</div>':'';}).join('');
-  tip.innerHTML='<strong>'+time+'</strong>'+content;tip.hidden=false;svg.querySelector('#bo-workload-cursor').setAttribute('x1',String(54+slot*8.2));svg.querySelector('#bo-workload-cursor').setAttribute('x2',String(54+slot*8.2));svg.querySelector('#bo-workload-cursor').setAttribute('visibility','visible');
+ const rows=overviewData.workload||[],stores=overviewData.stores||[],map=new Map(rows.map(r=>[r.store_id+':'+r.slot,r]));
+ const cursor=svg.querySelector('#bo-workload-cursor');
+ const show=e=>{
+  const point=svg.createSVGPoint();point.x=e.clientX;point.y=e.clientY;
+  const ctm=svg.getScreenCTM();if(!ctm)return;const local=point.matrixTransform(ctm.inverse());
+  const px=local.x;if(px<62||px>815){tip.hidden=true;cursor.setAttribute('visibility','hidden');return;}
+  const slot=Math.max(0,Math.min(95,Math.round((px-62)/7.9))),time=String(Math.floor(slot/4)).padStart(2,'0')+':'+String(slot%4*15).padStart(2,'0');
+  const content=(boWorkloadStores||[]).map(id=>{const st=stores.find(s=>s.store_id===id),r=map.get(id+':'+slot),v=boWorkloadValue(r,boWorkloadMetric);return st?'<div class="bo-workload-tip-row"><span>'+esc(st.name)+'</span><b>'+(v===null?'—':boWorkloadMetric==='avg'?v.toFixed(1)+' min':v)+'</b></div>':'';}).join('');
+  tip.innerHTML='<strong>'+time+' – '+String((Math.floor(slot/4)+(slot%4===3?1:0))%24).padStart(2,'0')+':'+String((slot%4+1)%4*15).padStart(2,'0')+'</strong>'+content;tip.hidden=false;cursor.setAttribute('x1',String(62+slot*7.9));cursor.setAttribute('x2',String(62+slot*7.9));cursor.setAttribute('visibility','visible');
  };
- svg.onpointermove=show;svg.onclick=show;svg.onpointerleave=()=>{tip.hidden=true;svg.querySelector('#bo-workload-cursor').setAttribute('visibility','hidden');};
+ svg.onpointermove=show;svg.onclick=show;svg.onpointerleave=()=>{tip.hidden=true;cursor.setAttribute('visibility','hidden');};
 }
 function overviewPanel(){
  const t=overviewData?.total||{paid_cents:0,unpaid_cents:0,total_cents:0,orders:0,unpriced_orders:0};
