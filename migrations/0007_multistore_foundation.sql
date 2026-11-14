@@ -19,8 +19,11 @@ INSERT OR IGNORE INTO stores(id,code,name,active,created_at) VALUES
  ('store-srod','SROD','Śródmieście',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  ('store-gdy','GDY','Gdynia',0,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 
-ALTER TABLE orders ADD COLUMN store_id TEXT NOT NULL DEFAULT 'legacy-primary' REFERENCES stores(id);
-ALTER TABLE payments ADD COLUMN store_id TEXT NOT NULL DEFAULT 'legacy-primary' REFERENCES stores(id);
+-- SQLite forbids adding a REFERENCES column with a non-NULL default when foreign keys are enabled.
+-- Add a NOT NULL store discriminator without inline REFERENCES; existing rows receive the test store.
+-- Store membership is enforced by scoped API authorization and validated separately.
+ALTER TABLE orders ADD COLUMN store_id TEXT NOT NULL DEFAULT 'legacy-primary';
+ALTER TABLE payments ADD COLUMN store_id TEXT NOT NULL DEFAULT 'legacy-primary';
 -- Menu is still a shared catalog. Per-store price/availability overrides follow later.
 CREATE TABLE IF NOT EXISTS store_menu_overrides (
   store_id TEXT NOT NULL REFERENCES stores(id),
