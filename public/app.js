@@ -870,7 +870,7 @@ function bindBoWorkload(){
   const end=String((Math.floor(slot/4)+(slot%4===3?1:0))%24).padStart(2,'0')+':'+String((slot%4+1)%4*15).padStart(2,'0');
   const selected=stores.filter(st=>(boWorkloadStores||[]).includes(st.store_id));
   const details=selected.map(st=>({st,r:map.get(st.store_id+':'+slot)}));
-  if(isMobile()){
+  {
    tip.hidden=true;
    if(mobile){
     const header='<div class="bo-workload-mobile-head"><strong>'+start+' – '+end+'</strong><button type="button" data-workload-close aria-label="Close details">×</button></div>';
@@ -879,20 +879,13 @@ function bindBoWorkload(){
     mobile.innerHTML=header+head+body;mobile.hidden=false;
     mobile.querySelector('[data-workload-close]').onclick=()=>{mobile.hidden=true;cursor.setAttribute('visibility','hidden');};
    }
-  }else{
-   if(mobile)mobile.hidden=true;
-   tip.innerHTML='<strong>'+start+' – '+end+'</strong>'+details.map(({st,r})=>'<div class="bo-workload-tip-store"><strong>'+esc(st.name)+'</strong>'+boWorkloadMetrics.map(k=>{const v=boWorkloadValue(r,k);return '<div class="bo-workload-tip-row"><span>'+boWorkloadDefs[k].label+'</span><b>'+(v===null?'—':k==='avg'?v.toFixed(1)+' min':v)+'</b></div>';}).join('')+'</div>').join('');
-   tip.hidden=false;
-   const plot=svg.parentElement,svgRect=svg.getBoundingClientRect(),plotRect=plot.getBoundingClientRect();
-   const left=Math.max(4,Math.min(plot.clientWidth-tip.offsetWidth-4,e.clientX-plotRect.left+12));
-   const top=Math.max(4,Math.min(plot.clientHeight-tip.offsetHeight-4,e.clientY-plotRect.top+12));
-   tip.style.left=left+'px';tip.style.top=top+'px';
   }
+
   cursor.setAttribute('x1',String(xFromSlot(slot)));cursor.setAttribute('x2',String(xFromSlot(slot)));cursor.setAttribute('visibility','visible');
  };
  svg.onpointermove=e=>{if(!isMobile())show(e);};
  svg.onclick=show;
- svg.onpointerleave=()=>{if(!isMobile()){tip.hidden=true;cursor.setAttribute('visibility','hidden');}};
+ svg.onpointerleave=()=>{};
 
 }
 function overviewPanel(){
