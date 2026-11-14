@@ -982,3 +982,21 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .bo-workload-datebar button{padding:7px 11px;border:1px solid #d8e2ed;border-radius:8px;background:#fff;color:#203550;cursor:pointer}
 .bo-workload-datebar button:disabled{opacity:.4;cursor:default}
 .bo-workload-datebar span{font-size:11px;color:#72829a}
+
+/* Workload tooltip stays inside desktop plot; compact mobile details stay above chart. */
+.bo-workload-plot{position:relative;overflow-x:auto;overflow-y:hidden}
+.bo-workload-tooltip{position:absolute;right:auto;bottom:auto;z-index:5;max-height:185px;overflow-y:auto;max-width:min(260px,65%);box-sizing:border-box;pointer-events:none}
+.bo-workload-mobile-detail{display:none}
+@media(max-width:700px){
+ .bo-workload-plot{overflow-x:auto;overflow-y:hidden}
+ .bo-workload-tooltip{display:none!important}
+ .bo-workload-mobile-detail:not([hidden]){display:block;position:relative;margin:8px 0;padding:10px;border:1px solid #d8e2ed;border-radius:10px;background:#f8fbff;font-size:11px}
+ .bo-workload-mobile-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+ .bo-workload-mobile-head button{font-size:20px;line-height:20px;border:0;background:transparent;color:#536277}
+ .bo-workload-mobile-grid{display:grid;grid-template-columns:minmax(0,1fr) 45px 45px 45px;align-items:center;gap:4px;padding:5px 0;border-top:1px solid #e4eaf0}
+ .bo-workload-mobile-grid>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .bo-workload-mobile-grid i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+ .bo-workload-mobile-grid>b{text-align:right;font-variant-numeric:tabular-nums}
+ .bo-workload-mobile-label{font-size:10px;color:#718198}
+ .bo-workload-mobile-label span:not(:first-child){text-align:right}
+}
