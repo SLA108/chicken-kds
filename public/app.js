@@ -707,6 +707,7 @@ function admin(){
  });
  document.querySelector('#v3-load-stores').onclick=async()=>{await loadV3Stores();admin()};
  document.querySelector('#v3-store-select').onchange=async e=>{v3SelectedStore=e.target.value;try{await loadV3StoreMenu();admin()}catch(err){notify(err.message)}};
+ document.querySelectorAll('[data-v3-select-store]').forEach(button=>button.onclick=async()=>{v3SelectedStore=button.dataset.v3SelectStore;try{await loadV3StoreMenu();admin()}catch(err){notify(err.message)}});
  document.querySelectorAll('[data-v3-save]').forEach(btn=>btn.onclick=async()=>{
   const id=btn.dataset.v3Save,price=document.querySelector('[data-v3-price="'+id+'"]').value.trim(),active=document.querySelector('[data-v3-active="'+id+'"]').value,sold=document.querySelector('[data-v3-sold="'+id+'"]').checked;
   const cents=price===''?null:Math.round(Number(price)*100);
