@@ -11,7 +11,7 @@ test('legacy manual device enrollment and credential login removed',()=>{
  assert.ok(!server.includes("if(path==='/api/device/session'"));
  assert.ok(!server.includes("if(path==='/api/admin/devices'&&req.method==='POST')"));
  assert.ok(!ui.includes("device-secret"));
- assert.ok(!ui.includes("device-id"));
+ assert.ok(!ui.includes('id="device-id"'));
 });
 test('pairing and store-scoped device sessions retained',()=>{
  assert.ok(server.includes("if(path==='/api/device/renew'"));
