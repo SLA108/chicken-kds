@@ -493,3 +493,7 @@ body.kitchen,body.kitchen #app{background:#111827;min-height:100vh}
 body.kitchen #app>header{margin:0;border:0;background:#111827}
 body.kitchen #v3-current-store{margin-top:0}
 body.kitchen #app>header + #v3-current-store{border-top:0}
+
+/* Official brand artwork on staff sign-in, responsive without cropping. */
+.role-brand-logo{display:block;width:min(220px,65vw);height:160px;object-fit:contain;margin:0 auto 10px}
+@media(max-width:560px){.role-brand-logo{width:min(190px,60vw);height:138px}}
