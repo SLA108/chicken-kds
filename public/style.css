@@ -912,3 +912,15 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-monitor-status-button span{font-size:9px}
  .bo-monitor-store-head h3{font-size:18px}
 }
+
+/* Orders monitor: transparent financial breakdown */
+.bo-monitor-financial{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;background:#f1f5fb;border-radius:11px;padding:12px;margin:0 0 10px}
+.bo-monitor-financial>div{display:grid;gap:5px;min-width:0}
+.bo-monitor-financial small{font-size:10px;color:#728199}
+.bo-monitor-financial strong{font-size:clamp(12px,1.3vw,17px);font-variant-numeric:tabular-nums;white-space:nowrap;color:#1b2d48}
+.bo-monitor-financial strong.bo-monitor-discount{color:#a15c20}
+.bo-monitor-financial>div:last-child strong{color:#1c6a53}
+.bo-monitor-payment{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:#728199;margin-bottom:12px}
+.bo-monitor-payment b{color:#263c56;font-size:12px;font-variant-numeric:tabular-nums}
+.bo-monitor-item-financial{font-variant-numeric:tabular-nums;color:#38577c}
+@media(max-width:760px){.bo-monitor-financial{gap:5px;padding:10px}.bo-monitor-financial strong{font-size:clamp(11px,3vw,15px)}}
