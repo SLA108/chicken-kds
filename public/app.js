@@ -470,7 +470,7 @@ function admin(){
    const result=await api('/admin/devices','POST',{store_id:v3SelectedStore,label});
    const target=document.querySelector('#v3-device-credential');target.hidden=false;target.replaceChildren();
    const title=document.createElement('strong');title.textContent='Copy these credentials now; the secret is shown only once.';
-   const field=document.createElement('textarea');field.readOnly=true;field.rows=4;field.value='Device ID: '+result.id+'+String.fromCharCode(10)+'Enrollment secret: '+result.enrollment_secret;
+   const field=document.createElement('textarea');field.readOnly=true;field.rows=4;field.value='Device ID: '+result.id+String.fromCharCode(10)+'Enrollment secret: '+result.enrollment_secret;
    const copy=document.createElement('button');copy.type='button';copy.textContent='Copy credentials';copy.onclick=()=>navigator.clipboard.writeText(field.value).then(()=>notify('Copied')).catch(()=>notify('Copy failed'));
    target.append(title,field,copy);v3Devices=(await api('/admin/devices')).devices||[];
    notify('Device registered. Save the secret before leaving this page.');
