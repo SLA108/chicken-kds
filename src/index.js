@@ -265,6 +265,9 @@ if(sessionToken){
  if(scopedPickupAll&&req.method==='POST'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const id=scopedPickupAll[1],now=new Date().toISOString();
+  const order=await env.DB.prepare('SELECT status FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
+  if(!order)return json({error:'Order not found'},404);
+  if(order.status==='cancelled')return json({error:'Order cancelled'},409);
   const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled')").bind(now,id,id,session.storeId).run();
   if(result.meta.changes)await broadcastStore(env,session.storeId,'pickup',{order_id:id,acknowledged:result.meta.changes});
   return json({ok:true,count:result.meta.changes||0});
