@@ -17,11 +17,27 @@ async function renewDeviceSession(){
  renewalPending=(async()=>{
   try{
    const preferredStore=localStorage.getItem(lastStoreKey);
-   const r=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(preferredStore?{store_id:preferredStore}:{})});
+   const request=storeId=>fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(storeId?{store_id:storeId}:{})});
+   let r=await request(preferredStore);
+   // A previously selected store may have been revoked. Retry without a
+   // selection so the server chooses a currently authorized active store.
+   if(r.status===403&&preferredStore){
+    localStorage.removeItem(lastStoreKey);
+    r=await request(null);
+   }
    if(!r.ok)return false;
    const result=await r.json();
    if(result.role!==page)return false;
+   const oldStoreId=currentDeviceStore?.id;
    deviceStores=result.stores||[];currentDeviceStore=result.store||null;
+   if(oldStoreId&&currentDeviceStore?.id!==oldStoreId){
+    // Server changed the active store: invalidate the old socket and UI.
+    disconnect();
+    sessionStorage.removeItem('ck_token_'+page);
+    localStorage.setItem(lastStoreKey,currentDeviceStore.id);
+    location.reload();
+    return false;
+   }
    if(currentDeviceStore)localStorage.setItem(lastStoreKey,currentDeviceStore.id);
    token=result.token;sessionStorage.setItem('ck_token_'+page,token);
    return true;
