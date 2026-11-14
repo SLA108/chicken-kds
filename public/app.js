@@ -207,7 +207,17 @@ function connect(){
 
 function storeBanner(){
  document.querySelector('#v3-current-store')?.remove();
- if(!deviceMode()||!currentDeviceStore||!['pos','kitchen'].includes(page))return;
+ if(!['pos','kitchen'].includes(page))return;
+ if(!deviceMode()||!currentDeviceStore){
+  if(page==='kitchen'){
+   const warning=document.createElement('div');
+   warning.id='v3-current-store';warning.className='v3-current-store v3-current-store-unverified';
+   warning.setAttribute('role','status');
+   warning.innerHTML='<div><small>CURRENT RESTAURANT</small><strong>STORE NOT VERIFIED</strong><small>Device store session is unavailable. Contact Back Office before processing orders.</small></div>';
+   app.prepend(warning);
+  }
+  return;
+ }
  const banner=document.createElement('div');
  banner.id='v3-current-store';banner.className='v3-current-store '+(page==='kitchen'?'v3-current-store-kitchen':'');
  banner.innerHTML='<div><small>CURRENT STORE</small><strong>'+esc(currentDeviceStore.name)+'</strong></div><button type="button" id="v3-switch-store" '+(deviceStores.length<2?'disabled':'')+'>Switch store</button>';
