@@ -449,28 +449,44 @@ if(path==='/ws'){
 }
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'';
+ const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'',period=params.get('period')||'current';
  if(status&&!['new','cooking','done','cancelled'].includes(status))return json({error:'Invalid status'},400);
- if(storeId){
-  const found=await env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first();
-  if(!found)return json({error:'Store not found'},404);
+ if(!['current','today','yesterday','7days','custom'].includes(period))return json({error:'Invalid period'},400);
+ if(storeId){const found=await env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first();if(!found)return json({error:'Store not found'},404);}
+ const warsawParts=date=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);const val=k=>parts.find(p=>p.type===k).value;return val('year')+'-'+val('month')+'-'+val('day');};
+ const midnight=date=>{const tentative=Date.parse(date+'T00:00:00Z');const offsetAt=ms=>{const p=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Warsaw',timeZoneName:'shortOffset'}).formatToParts(new Date(ms)).find(x=>x.type==='timeZoneName')?.value||'GMT';const m=p.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);return m?(m[1]==='-'?-1:1)*(Number(m[2])*60+Number(m[3]||0))*60000:0;};let result=tentative-offsetAt(tentative);return new Date(tentative-offsetAt(result)).toISOString();};
+ const today=warsawParts(new Date()),shift=(date,days)=>new Date(Date.parse(date+'T12:00:00Z')+days*86400000).toISOString().slice(0,10);
+ let from='',to='';
+ if(period==='current'||period==='today'){from=midnight(today);to=midnight(shift(today,1));}
+ if(period==='yesterday'){from=midnight(shift(today,-1));to=midnight(today);}
+ if(period==='7days'){from=midnight(shift(today,-6));to=midnight(shift(today,1));}
+ if(period==='custom'){
+  const a=params.get('from')||'',b=params.get('to')||'';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(a)||!/^\d{4}-\d{2}-\d{2}$/.test(b)||a>b||!Number.isFinite(Date.parse(a))||!Number.isFinite(Date.parse(b)))return json({error:'Invalid date range'},400);
+  from=midnight(a);to=midnight(shift(b,1));
  }
- const limit=100,offset=Math.min(100000,Math.max(0,Number.parseInt(params.get('offset')||'0',10)||0));
+ const limit=20,offset=Math.min(100000,Math.max(0,Number.parseInt(params.get('offset')||'0',10)||0));
  const where=[],args=[];
  if(storeId){where.push('o.store_id=?');args.push(storeId);}
  if(status){where.push('o.status=?');args.push(status);}
- const clause=where.length?'WHERE '+where.join(' AND '):'';
+ if(period==='current'){where.push("(o.created_at>=? AND o.created_at<? OR (o.created_at<? AND o.status IN ('new','cooking')))");args.push(from,to,from);}
+ else{where.push('o.created_at>=? AND o.created_at<?');args.push(from,to);}
+ const clause='WHERE '+where.join(' AND ');
  const orders=(await env.DB.prepare('SELECT o.*,s.name AS store_name,s.code AS store_code, EXISTS(SELECT 1 FROM table_occupancy t WHERE t.order_id=o.id AND t.store_id=o.store_id) AS table_occupied FROM orders o JOIN stores s ON s.id=o.store_id '+clause+' ORDER BY o.created_at DESC,o.id DESC LIMIT ? OFFSET ?').bind(...args,limit+1,offset).all()).results;
  const has_more=orders.length>limit,visible=orders.slice(0,limit);
  if(visible.length){
   const ids=visible.map(o=>o.id),marks=ids.map(()=>'?').join(',');
   const items=(await env.DB.prepare('SELECT i.* FROM order_items i WHERE i.order_id IN ('+marks+') ORDER BY i.created_at ASC').bind(...ids).all()).results;
   const itemIds=items.map(i=>i.id);
-  const modifiers=itemIds.length?(await env.DB.prepare('SELECT m.* FROM order_item_modifiers m WHERE m.order_item_id IN ('+itemIds.map(()=>'?').join(',')+')').bind(...itemIds).all()).results:[];
-  for(const o of visible)o.items=items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}));
+  const modifiers=[];
+  for(let n=0;n<itemIds.length;n+=80){const chunk=itemIds.slice(n,n+80);modifiers.push(...(await env.DB.prepare('SELECT m.* FROM order_item_modifiers m WHERE m.order_item_id IN ('+chunk.map(()=>'?').join(',')+')').bind(...chunk).all()).results);}
+  const byOrder=new Map(),byItem=new Map();
+  for(const m of modifiers){if(!byItem.has(m.order_item_id))byItem.set(m.order_item_id,[]);byItem.get(m.order_item_id).push(m);}
+  for(const i of items){if(!byOrder.has(i.order_id))byOrder.set(i.order_id,[]);byOrder.get(i.order_id).push({...i,modifiers:byItem.get(i.id)||[]});}
+  for(const o of visible)o.items=byOrder.get(o.id)||[];
  }
  const summary=(await env.DB.prepare('SELECT o.status,COUNT(*) AS count FROM orders o '+clause+' GROUP BY o.status').bind(...args).all()).results;
- return json({orders:visible,summary,has_more,next_offset:has_more?offset+limit:null,limit});
+ return json({orders:visible,summary,has_more,next_offset:has_more?offset+limit:null,limit,period});
 }
 if(path==='/api/admin/stores'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
