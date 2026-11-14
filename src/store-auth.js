@@ -6,7 +6,6 @@ const hex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 const bytesFromHex=hexString=>{if(!/^(?:[0-9a-f]{2})+$/.test(hexString))return null;return Uint8Array.from(hexString.match(/.{2}/g),x=>parseInt(x,16));};
 const b64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
 const unb64url=value=>{if(!/^[A-Za-z0-9_-]+$/.test(value))return null;try{return Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4)),c=>c.charCodeAt(0));}catch{return null;}};
-const equal=(a,b)=>{if(!a||!b||a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];return diff===0;};
 async function signingKey(secret){if(typeof secret!=='string'||secret.length<32)throw Error('AUTH_SECRET must contain at least 32 characters');return crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);}
 export async function issueStoreSession(secret,{role,storeId,deviceId},now=Date.now(),ttlMs=8*60*60*1000){
  if(!['pos','kitchen','scanner'].includes(role)||!storeId||!deviceId||!Number.isSafeInteger(now)||ttlMs<=0||ttlMs>24*60*60*1000)throw Error('Invalid store session');
