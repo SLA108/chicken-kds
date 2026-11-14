@@ -32,7 +32,7 @@ async function getStoreOrders(env,storeId,limit=120){
 async function prepareOrderItems(env,items,orderId,now,storeId=null){
  const unique=[...new Set(items.map(x=>x.menu_id))];
  const rows=storeId
-  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
+  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
   :(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
  const lookup=new Map(rows.map(x=>[x.id,x]));
  if(unique.some(id=>!lookup.has(id))||items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))throw Error('Invalid items');
@@ -105,7 +105,7 @@ if(sessionToken){
  }
  if(path==='/api/store/menu'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
-  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
+  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
   return json(rows);
  }
  if(path==='/api/store/pickups'&&req.method==='GET'){
@@ -332,7 +332,7 @@ if(sessionToken){
  }
  if(path==='/api/store/menu/modifiers'&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
-  const [groups,options,links]=await Promise.all([env.DB.prepare('SELECT id,name,min_select,max_select FROM modifier_groups WHERE active=1').all(),env.DB.prepare('SELECT id,group_id,name,price_cents FROM modifier_options WHERE active=1').all(),env.DB.prepare("SELECT l.menu_id,l.group_id FROM menu_modifier_groups l JOIN menu m ON m.id=l.menu_id LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0").bind(session.storeId).all()]);
+  const [groups,options,links]=await Promise.all([env.DB.prepare('SELECT id,name,min_select,max_select FROM modifier_groups WHERE active=1').all(),env.DB.prepare('SELECT id,group_id,name,price_cents FROM modifier_options WHERE active=1').all(),env.DB.prepare("SELECT l.menu_id,l.group_id FROM menu_modifier_groups l JOIN menu m ON m.id=l.menu_id LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0").bind(session.storeId).all()]);
   return json({groups:groups.results,options:options.results,links:links.results});
  }
  if(path==='/api/store/kitchen/categories'&&req.method==='GET'){
