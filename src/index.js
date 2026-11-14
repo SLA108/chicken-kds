@@ -539,8 +539,8 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  const pairing=await env.DB.prepare("SELECT id FROM device_pair_requests WHERE code=? AND status='pending' AND expires_at>?").bind(b.code,now).first();
  if(!pairing)return json({error:'Code expired or already used'},409);
  const result=await env.DB.batch([
-  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now),
-  env.DB.prepare("INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) SELECT ?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM device_pair_requests WHERE id=? AND device_id=? AND status='approved')").bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now,pairing.id,deviceId)
+  env.DB.prepare("INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) SELECT ?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM device_pair_requests WHERE id=? AND status='pending' AND expires_at>?)").bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now,pairing.id,now),
+  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now)
  ]);
  if(!result[0].meta.changes||!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
  return json({ok:true,device_id:deviceId});
