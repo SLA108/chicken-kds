@@ -30,3 +30,14 @@ test('discount percentages are validated and persisted',()=>{
  assert.match(api,/\[0,20,50\]\.includes\(discount\)/);
  assert.match(app,/50% – Finebite/);
 });
+
+test('discount controls do not run modifier group selection logic',()=>{
+ assert.match(app,/input\[name\^="group-"\]/);
+ assert.match(app,/input\[name="item-discount"\]/);
+ assert.doesNotMatch(app,/querySelectorAll\('\.modifier-choice input'\)/);
+});
+test('reservation alerts refresh while POS is open and stay scoped to the current restaurant',()=>{
+ assert.match(app,/loadPosReservations\(\)\},60000\)/);
+ assert.match(app,/epoch!==storeEpoch\|\|store!==currentDeviceStore\?\.id/);
+ assert.match(app,/posReservationAlerts\.clear\(\)/);
+});
