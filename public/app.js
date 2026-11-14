@@ -205,17 +205,23 @@ function storeBanner(){
   overlay.innerHTML='<section class="v3-grants-dialog" role="dialog" aria-modal="true"><h2>Switch store</h2><p class="muted">Select an authorized restaurant.</p><form id="v3-store-switch-form"><select name="store_id">'+deviceStores.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===currentDeviceStore.id?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select><div class="toolbar"><button type="button" id="v3-switch-cancel" class="alt">Cancel</button><button type="submit">Switch store</button></div></form></section>';
   document.body.append(overlay);
   overlay.querySelector('#v3-switch-cancel').onclick=()=>overlay.remove();
-  overlay.querySelector('#v3-store-switch-form').onsubmit=e=>{
-   e.preventDefault();const selected=new FormData(e.currentTarget).get('store_id');
+  overlay.querySelector('#v3-store-switch-form').onsubmit=async e=>{
+   e.preventDefault();const selected=String(new FormData(e.currentTarget).get('store_id')||'');
    if(!deviceStores.some(x=>x.id===selected))return;
    if(selected===currentDeviceStore?.id){overlay.remove();return}
    if(busy){notify('Wait for the current order submission to finish.');return}
    if(page==='pos'&&configuredCart.length&&!confirm('Switching stores will discard the unsent order draft. Continue?'))return;
-   // Reload closes the old WebSocket, clears all in-memory order/menu state,
-   // and obtains a fresh server-authorized session for the selected store.
-   sessionStorage.removeItem('ck_token_'+page);
-   localStorage.setItem(lastStoreKey,selected);
-   location.reload();
+   const button=overlay.querySelector('button[type="submit"]');button.disabled=true;
+   try{
+    // Verify the target grant with the server before changing local selection.
+    const response=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({store_id:selected})});
+    if(!response.ok)throw Error('This store is no longer authorized or the network is unavailable.');
+    const result=await response.json();
+    if(result.store?.id!==selected||result.role!==page)throw Error('Store authorization could not be verified.');
+    sessionStorage.removeItem('ck_token_'+page);
+    localStorage.setItem(lastStoreKey,selected);
+    location.reload();
+   }catch(error){notify(error.message);button.disabled=false}
   };
  };
 }
