@@ -70,6 +70,28 @@ class MigrationIntegrity(unittest.TestCase):
         self.db.execute("UPDATE orders SET kitchen_completed_at=NULL WHERE id='o1'")
         self.db.execute("UPDATE order_items SET is_done=0,done_at=NULL WHERE id='i1'")
 
+    def test_preexisting_duplicate_payments_block_unique_migration(self):
+        db = sqlite3.connect(":memory:")
+        try:
+            db.executescript("""
+            CREATE TABLE stores(id TEXT PRIMARY KEY);
+            CREATE TABLE orders(id TEXT PRIMARY KEY,store_id TEXT);
+            CREATE TABLE payments(id TEXT PRIMARY KEY,order_id TEXT,store_id TEXT);
+            CREATE TABLE order_items(id TEXT PRIMARY KEY,order_id TEXT,is_done INTEGER,done_at TEXT,picked_up_at TEXT);
+            INSERT INTO stores VALUES('a');
+            INSERT INTO orders VALUES('o1','a');
+            INSERT INTO payments VALUES('p1','o1','a'),('p2','o1','a');
+            """)
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.executescript((ROOT / "migrations" / "0009_v3_write_integrity.sql").read_text())
+        finally:
+            db.close()
+
+    def test_payment_store_change_to_valid_other_store_is_rejected(self):
+        self.db.execute("INSERT INTO payments VALUES('p1','o1','a')")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE payments SET order_id='o2' WHERE id='p1'")
+
     def test_cancelled_order_rejects_dish_changes(self):
         self.db.execute("UPDATE orders SET status='cancelled' WHERE id='o1'")
         with self.assertRaises(sqlite3.IntegrityError):
