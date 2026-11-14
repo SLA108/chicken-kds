@@ -225,7 +225,7 @@ function connect(){
  const socket=new WebSocket(`${proto}//${location.host}/ws`,['ckauth.'+token]);
  ws=socket;
  const current=()=>generation===wsGeneration&&ws===socket;
- socket.onopen=()=>{if(!current())return;connected=true;if(page==='pos'){loadPosReservations();const status=document.querySelector('header .status');if(status){status.className='status online';status.textContent='● Live'}else render()}else render();refresh();};
+ socket.onopen=()=>{if(!current())return;connected=true;if(page==='pos'){catchUpReservationEvents();loadPosReservations();const status=document.querySelector('header .status');if(status){status.className='status online';status.textContent='● Live'}else render()}else render();refresh();};
  socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
  socket.onclose=async event=>{if(!current())return;ws=null;connected=false;
  if(event.code===1008&&deviceMode()){
@@ -334,8 +334,26 @@ function showNextReservationEvent(){
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)showNextReservationEvent()});
 function warsawDay(offset=0){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(Date.now()+offset*86400000));const v=k=>parts.find(p=>p.type===k).value;return v('year')+'-'+v('month')+'-'+v('day')}
+async function catchUpReservationEvents(){
+ if(page!=='pos'||!currentDeviceStore?.id)return;
+ const store=currentDeviceStore.id,epoch=storeEpoch,key='ck_reservation_cursor_'+store;
+ let since=localStorage.getItem(key);
+ if(!since){localStorage.setItem(key,new Date().toISOString());return;}
+ try{
+  const data=await api('/reservations?changed_since='+encodeURIComponent(since));
+  if(epoch!==storeEpoch||store!==currentDeviceStore?.id)return;
+  const changes=data.changes||[];
+  for(const r of changes){
+   if(r.status==='arrived'||r.status==='no_show')continue;
+   queueReservationEvent({action:r.status==='cancelled'?'cancelled':r.created_at===r.updated_at?'created':'updated',reservation:r});
+  }
+  if(changes.length<200)localStorage.setItem(key,new Date().toISOString());
+  else if(changes.length)localStorage.setItem(key,changes[changes.length-1].updated_at);
+ }catch(e){console.warn('Reservation change sync unavailable',e)}
+}
 async function loadPosReservations(){
  if(page!=='pos'||!currentDeviceStore?.id)return;
+ catchUpReservationEvents();
  if(posReservationLoading){posReservationReloadPending=true;return;}
  posReservationLoading=true;const store=currentDeviceStore.id,epoch=storeEpoch;
  try{const from=warsawDay(),to=warsawDay(7),data=await api('/reservations?from='+from+'&to='+to);
