@@ -67,3 +67,14 @@ test('database scripts use D1 migrations, not the legacy schema bootstrap',()=>{
  assert.match(pkg.scripts['db:remote'],/d1 migrations apply/);
  assert.doesNotMatch(pkg.scripts['db:remote'],/schema\.sql/);
 });
+
+test('Warsaw reservation reminders use calendar components instead of host-local Date.parse',()=>{
+ const start=app.indexOf('async function loadPosReservations()');
+ const end=app.indexOf('function showReservationAlert(',start);
+ const block=app.slice(start,end);
+ assert.ok(start>=0&&end>start);
+ assert.match(block,/timeZone:'Europe\/Warsaw'/);
+ assert.match(block,/hourCycle:'h23'/);
+ assert.match(block,/Date\.UTC\(/);
+ assert.doesNotMatch(block,/Date\.parse\(/);
+});
