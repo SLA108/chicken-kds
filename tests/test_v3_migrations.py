@@ -33,6 +33,31 @@ def setup():
     return db
 
 
+class TableMigration(unittest.TestCase):
+    def test_same_table_number_can_be_used_in_two_stores(self):
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.executescript("""
+            CREATE TABLE stores(id TEXT PRIMARY KEY);
+            CREATE TABLE orders(id TEXT PRIMARY KEY,store_id TEXT NOT NULL REFERENCES stores(id));
+            CREATE TABLE table_occupancy(
+              table_no TEXT PRIMARY KEY,order_id TEXT NOT NULL UNIQUE REFERENCES orders(id),
+              created_at TEXT NOT NULL
+            );
+            INSERT INTO stores VALUES('a'),('b');
+            INSERT INTO orders VALUES('o1','a'),('o2','b');
+            INSERT INTO table_occupancy VALUES('01','o1','2026-01-01');
+            """)
+            db.executescript((ROOT / "migrations" / "0008_multistore_tables.sql").read_text())
+            db.execute("INSERT INTO table_occupancy VALUES('b','01','o2','2026-01-02')")
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM table_occupancy WHERE table_no='01'").fetchone()[0],2)
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("INSERT INTO table_occupancy VALUES('a','01','o2','2026-01-02')")
+        finally:
+            db.close()
+
+
 class MigrationIntegrity(unittest.TestCase):
     def setUp(self):
         self.db = setup()
