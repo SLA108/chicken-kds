@@ -58,7 +58,7 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
  }
 }
 // V3 admin-only store detail. Does not grant access to POS/KDS store routing.
-const storeDetailMatch=path.match(/^\\/api\\/admin\\/stores\\/([^/]+)\\/orders$/);
+const storeDetailMatch=path.match(/^\/api\/admin\/stores\/([^/]+)\/orders$/);
 if(storeDetailMatch&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const storeId=decodeURIComponent(storeDetailMatch[1]);
