@@ -487,3 +487,9 @@ body:not(.kitchen):has(.foh-tabs) main{padding-bottom:36px}
 .ck-header-logo[hidden]{display:none}
 .ck-header-brand>span{white-space:nowrap}
 @media(max-width:650px){.ck-header-logo{width:52px;height:32px}.ck-header-brand>span{font-size:12px}}
+
+/* Ensure Kitchen header and current-store banner have no light seam. */
+body.kitchen,body.kitchen #app{background:#111827;min-height:100vh}
+body.kitchen #app>header{margin:0;border:0;background:#111827}
+body.kitchen #v3-current-store{margin-top:0}
+body.kitchen #app>header + #v3-current-store{border-top:0}
