@@ -67,8 +67,8 @@ if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typ
 // Pairing approval issues an HttpOnly device cookie used for scoped session renewal.
 // Independent, HttpOnly role credentials prevent POS/Kitchen overwriting each other.
 const deviceRoles=['pos','kitchen','scanner'];
-const roleCookie=(role)=>'ck_device_'+role;
-const rolePairCookie=(role)=>'ck_pair_'+role;
+const roleCookie=(role)=>'ck_device';
+const rolePairCookie=(role)=>'ck_pair';
 const cookieValue=(name)=>(req.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1)||'';
 const renewalCookie=(role,id,secret)=>roleCookie(role)+'='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=31536000';
 const clearRenewalCookie=(role)=>roleCookie(role)+'=; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=0';
@@ -95,7 +95,7 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  if(request.status!=='approved')return json({status:'pending'});
  const device=await env.DB.prepare("SELECT id,store_id,role,token_hash FROM pos_devices WHERE id=? AND active=1").bind(request.device_id).first();
  if(!device)return json({error:'Device unavailable'},403);
- if(device.role!==role)return json({error:'Device role mismatch'},403);
+ if(role==='scanner'&&device.role!=='scanner'||role!=='scanner'&&device.role==='scanner')return json({error:'Device role mismatch'},403);
  const allowedStores=await listAllowedDeviceStores(env,device.id);
  if(!allowedStores.length)return json({error:'No authorized active stores'},403);
  const initialStore=allowedStores.find(s=>s.id===device.store_id)||allowedStores[0];
@@ -104,8 +104,8 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  const updated=await env.DB.prepare('UPDATE pos_devices SET token_hash=? WHERE id=? AND token_hash=? AND active=1').bind(await sha256Hex(credential),device.id,'pending:'+device.id).run();
  if(!updated.meta.changes)return json({error:'Pairing already claimed'},409);
  await env.DB.prepare("UPDATE device_pair_requests SET status='expired' WHERE id=?").bind(request.id).run();
- const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:initialStore.id,deviceId:device.id});
- const response=json({status:'approved',token,role:device.role,store:initialStore,stores:allowedStores});response.headers.append('set-cookie',renewalCookie(role,device.id,credential));response.headers.append('set-cookie',clearPairCookie(role));return response;
+ const token=await issueStoreSession(env.AUTH_SECRET,{role,storeId:initialStore.id,deviceId:device.id});
+ const response=json({status:'approved',token,role,store:initialStore,stores:allowedStores});response.headers.append('set-cookie',renewalCookie(role,device.id,credential));response.headers.append('set-cookie',clearPairCookie(role));return response;
 }
 if(path==='/api/device/renew'&&req.method==='POST'){
  const origin=req.headers.get('origin');
@@ -117,7 +117,7 @@ if(path==='/api/device/renew'&&req.method==='POST'){
  if(!match)return json({error:'Device enrollment required'},401);
  const digest=await sha256Hex(match.credential);
  const device=await env.DB.prepare('SELECT id,store_id,role FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(match.deviceId,digest).first();
- if(!device||device.role!==role)return json({error:'Device revoked or role mismatch'},401);
+ if(!device||role==='scanner'&&device.role!=='scanner'||role!=='scanner'&&device.role==='scanner')return json({error:'Device revoked or role mismatch'},401);
  const stores=await listAllowedDeviceStores(env,device.id);
  if(!stores.length)return json({error:'No authorized active stores'},403);
  let selectedId=device.store_id,explicitStore=false;
@@ -127,8 +127,8 @@ if(path==='/api/device/renew'&&req.method==='POST'){
  }
  const store=stores.find(s=>s.id===selectedId)||(!explicitStore?stores[0]:null);
  if(!store)return json({error:'Store not authorized'},403);
- const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:store.id,deviceId:device.id});
- return json({token,role:device.role,store,stores,expires_in:28800},200,{'set-cookie':renewalCookie(role,device.id,match.credential)});
+ const token=await issueStoreSession(env.AUTH_SECRET,{role,storeId:store.id,deviceId:device.id});
+ return json({token,role,store,stores,expires_in:28800},200,{'set-cookie':renewalCookie(role,device.id,match.credential)});
 }
 if(path==='/api/device/logout'&&req.method==='POST'){
  const origin=req.headers.get('origin');
@@ -146,7 +146,7 @@ if(sessionToken){
  const device=await allowedDeviceStore(env,session.deviceId,session.storeId);
  if(!device)return json({error:'Device revoked or store inactive'},403);
  const boundRole=await env.DB.prepare('SELECT role FROM pos_devices WHERE id=?').bind(session.deviceId).first();
- if(boundRole?.role!==session.role)return json({error:'Device role mismatch'},403);
+ if(!boundRole||session.role==='scanner'&&boundRole.role!=='scanner'||session.role!=='scanner'&&boundRole.role==='scanner')return json({error:'Device role mismatch'},403);
  if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,api_enabled:false});
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
