@@ -420,3 +420,15 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 @media(max-width:1000px){.v3-menu-row{grid-template-columns:minmax(0,1fr) minmax(130px,1fr) minmax(130px,1fr)}.v3-menu-info{grid-column:1/-1}}
 @media(max-width:700px){.v3-management-section{padding:15px}.v3-management-head,.v3-selected-store,.v3-section-heading,.v3-device-card,.v3-form-footer{align-items:stretch;flex-direction:column}.v3-form-grid{grid-template-columns:1fr}.v3-menu-row{grid-template-columns:1fr 1fr}.v3-menu-row .v3-menu-info{grid-column:1/-1}.v3-menu-row button{grid-column:2}.v3-store-tiles{grid-template-columns:1fr 1fr}.v3-section-count{align-self:flex-start}.v3-form-footer label{max-width:none}.v3-management-form input:not([type=checkbox]),.v3-management-form select,.v3-menu-row input[type=number],.v3-menu-row select{font-size:16px}}
 @media(max-width:420px){.v3-store-tiles{grid-template-columns:1fr}.v3-menu-row{grid-template-columns:1fr}.v3-menu-row button{grid-column:1}.v3-management-head>button{width:100%}}
+
+/* Back Office V3.1: compact workspace navigation */
+.bo-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:22px;align-items:start}
+.bo-sidebar{position:sticky;top:12px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;padding:16px 10px}
+.bo-brand{display:grid;gap:5px;padding:4px 10px 20px;font-size:12px;letter-spacing:.035em}
+.bo-brand small{font-size:10px;color:#64748b;letter-spacing:.13em}
+.bo-nav{display:grid;gap:5px}
+.bo-nav button{display:block;width:100%;text-align:left;background:transparent;border:0;border-radius:9px;padding:12px;color:#334155;font-weight:600;cursor:pointer}
+.bo-nav button:hover{background:#e2e8f0}
+.bo-nav button.selected{background:#dbeafe;color:#1d4ed8}
+.bo-content{min-width:0}
+@media(max-width:850px){.bo-layout{grid-template-columns:minmax(0,1fr)}.bo-sidebar{position:static;padding:10px}.bo-brand{padding:4px 8px 10px}.bo-nav{display:flex;overflow-x:auto;gap:6px}.bo-nav button{width:auto;flex:0 0 auto;white-space:nowrap;padding:10px 12px}}
