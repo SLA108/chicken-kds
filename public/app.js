@@ -653,7 +653,7 @@ function admin(){
  document.querySelector('#sync').onclick=()=>refresh();
  document.querySelectorAll('[data-admin-tab]').forEach(el=>el.onclick=()=>{adminTab=el.dataset.adminTab;if(adminTab==='stores'&&!v3Loaded){loadV3Stores().then(()=>admin());}admin()});
  document.querySelector('#v3-toggle-store').onclick=async()=>{
-  const store=v3Stores.find(x=>x.id===v3SelectedStore);if(!store||store.code==='TEST'&&store.active){notify('TEST store must remain active');return;}
+  const store=v3Stores.find(x=>x.id===v3SelectedStore);if(!store)return;
   if(!confirm((store.active?'Deactivate ':'Activate ')+store.name+'?'))return;
   try{await api('/admin/stores/'+encodeURIComponent(store.id)+'/config','PATCH',{active:!store.active});await loadV3Stores();admin();notify('Store status updated')}catch(err){notify(err.message)}
  };
