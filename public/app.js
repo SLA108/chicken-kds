@@ -151,7 +151,7 @@ async function acknowledgePickupAll(orderId){
   pos();await loadPickups(false);
  }catch(e){notify('Pick Up All: '+e.message);await loadPickups(false)}
 }
-function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div class="ck-header-brand"><img class="ck-header-logo" src="/chicken-i-kimchi-logo-web.webp" alt="" onerror="this.hidden=true"><span><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</span></div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${page==='admin'?'online':connected?'online':'offline'}">● ${page==='admin'?'Back Office':connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=async()=>{if(deviceMode()){if(!confirm('This device will stay paired. Return to the staff sign-in screen?'))return;sessionStorage.removeItem('ck_token_'+page);token='';disconnect();await renewDeviceSession();if(token)start();else login();return;}sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};}
+function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div class="ck-header-brand"><img class="ck-header-logo" src="/chicken-i-kimchi-logo-web.webp" alt="" onerror="this.hidden=true"><span><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</span></div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${page==='admin'?'online':connected?'online':'offline'}">● ${page==='admin'?'Back Office':connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=async()=>{if(deviceMode()){if(!confirm('This device will stay paired. Return to the staff sign-in screen?'))return;sessionStorage.removeItem('ck_token_'+page);token='';disconnect();await renewDeviceSession();if(token)start();else login();return;}sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};storeBanner();}
 let pairPoll=null;
 async function beginPairing(){
  const r=await fetch('/api/device/pair/start',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'}});
@@ -287,7 +287,7 @@ function storeBanner(){
   };
  };
 }
-function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();storeBanner();}
+function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();}
 function categoryButtons(){return `<div class="chips">${['All',...new Set(menu.map(x=>x.category))].map(x=>`<button data-cat="${esc(x)}" class="${category===x?'selected':''}">${esc(x)}</button>`).join('')}</div>`;}
 
 function money(c){return (c/100).toFixed(2)+' zł'}
