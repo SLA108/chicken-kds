@@ -99,6 +99,9 @@ if(sessionToken){
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
+// Optional staging-only cutover guard. Never enable before all legacy
+// endpoints have store-scoped replacements and admin access is secured.
+if(env.DISABLE_LEGACY_STORE_ACCESS==='true'&&role!=='admin')return json({error:'Legacy role sessions disabled',code:'LEGACY_ACCESS_DISABLED'},403);
 try{
 // V3.0 read-only store inventory. Requires migration 0007.
 // Store selection and order routing are intentionally NOT enabled until
