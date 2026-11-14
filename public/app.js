@@ -215,7 +215,7 @@ function queueSuperPosAlerts(incoming,initial){
  showSuperPosAlert();
 }
 let reconnectTimer=null,wsGeneration=0;
-function disconnect(){storeEpoch++;kitchenRefreshSerial++;document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();superPosPendingIds.clear();pickupInitialized=false;pickupItems=[];pickupSerial++;posReservations=[];posReservationLoaded=false;posReservationAlerts.clear();document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
+function disconnect(){storeEpoch++;kitchenRefreshSerial++;document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();superPosPendingIds.clear();pickupInitialized=false;pickupItems=[];pickupSerial++;posReservations=[];posReservationLoaded=false;posReservationAlerts.clear();document.querySelectorAll('[id^="reservation-reminder-"]').forEach(el=>el.remove());document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
 function connect(){
  if(!token)return;
  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
@@ -313,9 +313,19 @@ async function loadPosReservations(){
  posReservations=data.reservations||[];posReservationLoaded=true;
  const now=new Date(),warsawNow=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(now).replace(' ','T');
  const currentMs=Date.parse(warsawNow+':00');
- for(const r of posReservations){const diff=(Date.parse(r.starts_at+':00')-currentMs)/60000;if(r.status==='booked'&&diff>=-5&&diff<=30&&!posReservationAlerts.has(r.id)){posReservationAlerts.add(r.id);notify('Reservation reminder · '+r.starts_at.slice(11)+' · '+r.party_size+' guests · '+(r.guest_name||'Guest'));}}
+ for(const r of posReservations){const diff=(Date.parse(r.starts_at+':00')-currentMs)/60000;if(r.status==='booked'&&diff>=-5&&diff<=30&&!posReservationAlerts.has(r.id)){posReservationAlerts.add(r.id);showReservationAlert(r);}}
  if(fohTab==='reservations')pos();
  }catch(e){console.warn('Reservations unavailable',e)}finally{posReservationLoading=false}
+}
+function showReservationAlert(r){
+ if(page!=='pos'||document.hidden)return;
+ const id='reservation-reminder-'+r.id;
+ if(document.getElementById(id))return;
+ const el=document.createElement('div');el.id=id;el.className='admin-modal-backdrop';
+ el.innerHTML='<section class="admin-modal" role="alertdialog" aria-modal="true" aria-label="Upcoming reservation"><div class="admin-modal-head"><div><span class="admin-eyebrow">UPCOMING RESERVATION</span><h2>'+esc(r.starts_at.slice(11))+' · '+Number(r.party_size)+' guests</h2></div></div><p><strong>'+esc(r.guest_name||'Guest')+'</strong></p><p>'+esc(r.note||'No notes')+'</p><div class="admin-modal-actions"><button type="button" data-reservation-view>View reservations</button><button type="button" class="alt" data-reservation-dismiss>Dismiss</button></div></section>';
+ document.body.append(el);
+ el.querySelector('[data-reservation-dismiss]').onclick=()=>el.remove();
+ el.querySelector('[data-reservation-view]').onclick=()=>{el.remove();fohTab='reservations';pos()};
 }
 function posReservationPanel(){return '<section class="panel foh-workspace"><div class="row"><h2>Reservations</h2><button type="button" class="alt" id="pos-reservations-refresh">Refresh</button></div><p class="muted">Upcoming bookings for this restaurant. Reservations do not occupy tables or create orders.</p>'+
  (posReservations.length?'<div class="bo-sales-table"><table><thead><tr><th>Date / Time</th><th>Guest</th><th>Guests</th><th>Phone</th><th>Notes</th><th>Status</th><th></th></tr></thead><tbody>'+posReservations.map(r=>'<tr><td>'+esc(r.starts_at.replace('T',' '))+'</td><td>'+esc(r.guest_name)+'</td><td>'+r.party_size+'</td><td>'+esc(r.phone)+'</td><td>'+esc(r.note)+'</td><td>'+esc(r.status)+'</td><td>'+(r.status==='booked'?'<button type="button" data-pos-reservation-arrived="'+esc(r.id)+'" data-reservation-action="arrived">Mark Arrived</button> <button type="button" data-pos-reservation-arrived="'+esc(r.id)+'" data-reservation-action="no-show">No-show</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<p>No upcoming reservations.</p>')+'</section>'}
