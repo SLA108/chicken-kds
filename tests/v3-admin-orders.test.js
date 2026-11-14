@@ -12,8 +12,12 @@ test('admin orders endpoint requires admin and supports scoped filters',()=>{
  assert.match(worker,/\[50,100\]\.includes/);
  assert.match(worker,/period==='current'/);
 });
-test('Back Office Orders has restaurant, status, pagination and refresh',()=>{
- for(const id of ['admin-orders-store','admin-orders-status','admin-orders-refresh','admin-orders-prev','admin-orders-next'])assert.ok(app.includes(id),id);
+test('Back Office Orders uses clickable restaurant status cards, pagination and refresh',()=>{
+ for(const id of ['data-monitor-store','data-monitor-status','admin-orders-refresh','admin-orders-prev','admin-orders-next','admin-orders-period'])assert.ok(app.includes(id),id);
+ assert.match(app,/v3Stores\.map\(store=>/);
+ assert.match(app,/adminOrdersStore=store;adminOrdersStatus=status/);
+ assert.doesNotMatch(app,/id="admin-orders-store"/);
+ assert.doesNotMatch(app,/id="admin-orders-status"/);
  assert.match(app,/api\('\/admin\/orders\?'\+q\)/);
  assert.match(app,/adminOrderPanel\(\)/);
  assert.doesNotMatch(app,/orders\.filter\(o=>o\.status==='new'\|\|o\.status==='cooking'\)\.map\(o=>ticket\(o\)\)/);
