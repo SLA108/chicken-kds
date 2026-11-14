@@ -4,7 +4,13 @@ const roles={pos:['pos','admin'],kitchen:['kitchen','admin'],admin:['admin'],sca
 const encoder=new TextEncoder();
 async function tokenFor(pin,secret){const key=await crypto.subtle.importKey('raw',encoder.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,encoder.encode(pin)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function identify(req,env){const header=req.headers.get('authorization')||'';const protocol=req.headers.get('sec-websocket-protocol')||'';const supplied=header.startsWith('Bearer ')?header.slice(7):protocol.startsWith('ckauth.')?protocol.slice(7):'';if(!supplied)return null;for(const role of ['admin','pos','kitchen','scanner']){if(!env[role.toUpperCase()+'_PIN'])continue;const expected=await tokenFor(env[role.toUpperCase()+'_PIN'],env.AUTH_SECRET);if(supplied.length===expected.length){let diff=0;for(let i=0;i<supplied.length;i++)diff|=supplied.charCodeAt(i)^expected.charCodeAt(i);if(!diff)return role;}}return null;}
-function room(env){return env.ROOM.get(env.ROOM.idFromName('main'));}
+// V3 foundation: existing clients stay on the legacy 'main' room.
+// Store-scoped rooms are reserved for the authenticated store session rollout.
+// Never select a store room from an unverified browser query/header.
+function room(env,storeId=null){
+ const key=storeId===null?'main':'store:'+storeId;
+ return env.ROOM.get(env.ROOM.idFromName(key));
+}
 async function broadcast(env,type,data){try{const response=await room(env).fetch('https://room.internal/broadcast',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({type,data})});if(!response.ok)console.error('broadcast failed',response.status,await response.text());}catch(e){console.error('broadcast error',e);}}
 async function parse(req){try{return await req.json();}catch{return null;}}
 function allowed(role,action){return !!role&&roles[action].includes(role);}
@@ -50,6 +56,18 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
   console.error('store inventory unavailable',e);
   return json({error:'Multi-store schema not installed',code:'MULTISTORE_SCHEMA_MISSING'},503);
  }
+}
+// V3 admin-only store detail. Does not grant access to POS/KDS store routing.
+const storeDetailMatch=path.match(/^\\/api\\/admin\\/stores\\/([^/]+)\\/orders$/);
+if(storeDetailMatch&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const storeId=decodeURIComponent(storeDetailMatch[1]);
+ if(!/^[a-zA-Z0-9_-]{1,64}$/.test(storeId))return json({error:'Invalid store ID'},400);
+ const store=await env.DB.prepare('SELECT id,code,name,active FROM stores WHERE id=?').bind(storeId).first();
+ if(!store)return json({error:'Store not found'},404);
+ const limit=50;
+ const rows=(await env.DB.prepare('SELECT id,source,table_no,status,created_at,paid_at,kitchen_completed_at FROM orders WHERE store_id=? ORDER BY created_at DESC,id DESC LIMIT ?').bind(storeId,limit).all()).results;
+ return json({store,orders:rows,limit});
 }
 if(path==='/ws'){if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);return room(env).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':role,'sec-websocket-protocol':req.headers.get('sec-websocket-protocol')||''}}));}
 // Modifier configuration endpoints. Existing Phase 2 foundation tables are reused.
