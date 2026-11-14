@@ -465,7 +465,7 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(a)||!/^\d{4}-\d{2}-\d{2}$/.test(b)||a>b||!Number.isFinite(Date.parse(a))||!Number.isFinite(Date.parse(b)))return json({error:'Invalid date range'},400);
   from=midnight(a);to=midnight(shift(b,1));
  }
- const limit=20,offset=Math.min(100000,Math.max(0,Number.parseInt(params.get('offset')||'0',10)||0));
+ const limit=[50,100].includes(Number(params.get('limit')))?Number(params.get('limit')):50,offset=Math.min(100000,Math.max(0,Number.parseInt(params.get('offset')||'0',10)||0));
  const where=[],args=[];
  if(storeId){where.push('o.store_id=?');args.push(storeId);}
  if(status){where.push('o.status=?');args.push(status);}
