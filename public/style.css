@@ -504,3 +504,10 @@ body.kitchen #app>header + #v3-current-store{border-top:0}
 .foh-ticket.foh-ticket-paid [data-release-table]{background:#15803d;color:#fff;border:0;font-weight:750}
 .foh-ticket.foh-ticket-unpaid{border-left:4px solid #f59e0b}
 .foh-ticket.foh-ticket-unpaid .foh-payment{color:#b45309}
+
+/* POS dark-theme ticket states: override the generic body:has(.foh-head) card background. */
+body:has(.foh-head) .foh-ticket.foh-ticket-unpaid{background:#473725;border:2px solid #d99639;color:#fff3df;box-shadow:inset 0 0 0 1px #d9963922}
+body:has(.foh-head) .foh-ticket.foh-ticket-paid{background:#1b493d;border:2px solid #2fb77b;color:#e5fff1;box-shadow:inset 0 0 0 1px #2fb77b22}
+body:has(.foh-head) .foh-ticket.foh-ticket-unpaid .foh-payment{color:#ffd18b}
+body:has(.foh-head) .foh-ticket.foh-ticket-paid .foh-payment{color:#8df0b9}
+body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:#168451;color:#fff;border:1px solid #3cce8a}
