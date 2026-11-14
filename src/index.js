@@ -38,6 +38,19 @@ if(!env.AUTH_SECRET||!env.POS_PIN||!env.KITCHEN_PIN||!env.ADMIN_PIN||!env.SCANNE
 if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||!['pos','kitchen','admin','scanner'].includes(b.role))return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
+// V3.0 read-only store inventory. Requires migration 0007.
+// Store selection and order routing are intentionally NOT enabled until
+// authenticated store-scoped sessions and all query isolation are implemented.
+if(path==='/api/admin/stores'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ try{
+  const rows=(await env.DB.prepare("SELECT s.id,s.code,s.name,s.active,COUNT(o.id) AS order_count FROM stores s LEFT JOIN orders o ON o.store_id=s.id GROUP BY s.id,s.code,s.name,s.active ORDER BY CASE WHEN s.code='TEST' THEN 0 ELSE 1 END,s.name").all()).results;
+  return json({stores:rows,multistore_enabled:false});
+ }catch(e){
+  console.error('store inventory unavailable',e);
+  return json({error:'Multi-store schema not installed',code:'MULTISTORE_SCHEMA_MISSING'},503);
+ }
+}
 if(path==='/ws'){if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);return room(env).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':role,'sec-websocket-protocol':req.headers.get('sec-websocket-protocol')||''}}));}
 // Modifier configuration endpoints. Existing Phase 2 foundation tables are reused.
 if(path==='/api/menu/modifiers'&&req.method==='GET'){
