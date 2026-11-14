@@ -522,7 +522,16 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  const b=await parse(req);
  if(!b||!/^[0-9]{6}$/.test(b.code||'')||!['pos','kitchen','scanner'].includes(b.role)||typeof b.label!=='string'||!b.label.trim()||b.label.length>100||typeof b.secondary_pin!=='string')return json({error:'Invalid approval'},400);
  if(!env.DEVICE_APPROVAL_PIN||env.DEVICE_APPROVAL_PIN.length<8)return json({error:'Secondary approval password not configured'},503);
- if(await sha256Hex(b.secondary_pin)!==await sha256Hex(env.DEVICE_APPROVAL_PIN))return json({error:'Incorrect secondary password'},403);
+ const attemptScope='pair:'+b.code,nowMs=Date.now(),windowStart=new Date(nowMs-15*60*1000).toISOString();
+ const attempt=await env.DB.prepare('SELECT attempts,window_started_at,blocked_until FROM device_approval_attempts WHERE scope=?').bind(attemptScope).first();
+ if(attempt?.blocked_until&&Date.parse(attempt.blocked_until)>nowMs)return json({error:'Too many attempts. Request a new pairing code later.'},429);
+ if(await sha256Hex(b.secondary_pin)!==await sha256Hex(env.DEVICE_APPROVAL_PIN)){
+  const reset=!attempt||attempt.window_started_at<windowStart;
+  const attempts=reset?1:attempt.attempts+1;
+  const blocked=attempts>=5?new Date(nowMs+15*60*1000).toISOString():null;
+  await env.DB.prepare('INSERT INTO device_approval_attempts(scope,attempts,window_started_at,blocked_until) VALUES(?,?,?,?) ON CONFLICT(scope) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until').bind(attemptScope,attempts,reset?new Date(nowMs).toISOString():attempt.window_started_at,blocked).run();
+  return json({error:'Incorrect secondary password'},403);
+ }
  const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(b.store_id).first();
  if(!store)return json({error:'Active store not found'},404);
  const now=new Date().toISOString(),deviceId=uid();
@@ -530,10 +539,10 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  const pairing=await env.DB.prepare("SELECT id FROM device_pair_requests WHERE code=? AND status='pending' AND expires_at>?").bind(b.code,now).first();
  if(!pairing)return json({error:'Code expired or already used'},409);
  const result=await env.DB.batch([
-  env.DB.prepare('INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) VALUES(?,?,?,?,?,1,?)').bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now),
-  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now)
+  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now),
+  env.DB.prepare("INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) SELECT ?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM device_pair_requests WHERE id=? AND device_id=? AND status='approved')").bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now,pairing.id,deviceId)
  ]);
- if(!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
+ if(!result[0].meta.changes||!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
  return json({ok:true,device_id:deviceId});
 }
 if(path==='/api/admin/devices'&&req.method==='GET'){
