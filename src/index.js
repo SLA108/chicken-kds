@@ -29,9 +29,11 @@ async function getStoreOrders(env,storeId,limit=120){
  const modifiers=itemIds.length?(await env.DB.prepare(`SELECT m.* FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(storeId,...itemIds).all()).results:[];
  return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));
 }
-async function prepareOrderItems(env,items,orderId,now){
+async function prepareOrderItems(env,items,orderId,now,storeId=null){
  const unique=[...new Set(items.map(x=>x.menu_id))];
- const rows=(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
+ const rows=storeId
+  ?(await env.DB.prepare('SELECT m.*,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
+  :(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
  const lookup=new Map(rows.map(x=>[x.id,x]));
  if(unique.some(id=>!lookup.has(id))||items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))throw Error('Invalid items');
  const links=(await env.DB.prepare('SELECT l.menu_id,g.id AS group_id,g.name,g.min_select,g.max_select FROM menu_modifier_groups l JOIN modifier_groups g ON g.id=l.group_id AND g.active=1 WHERE l.menu_id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
@@ -147,6 +149,35 @@ if(sessionToken){
   await event(env,id,'table_released',session.role,{table_no:order.table_no,store_id:storeId});
   await broadcastStore(env,storeId,'orders',{id});
   return json({ok:true});
+ }
+
+ if(path==='/api/store/orders'&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const b=await parse(req);
+  if(!b||!Array.isArray(b.items)||!b.items.length||b.items.length>100||typeof b.client_key!=='string'||b.client_key.length<16||!['dinein','takeaway','delivery'].includes(b.source))return json({error:'Invalid order'},400);
+  if(b.items.some(x=>typeof x.menu_id!=='string'))return json({error:'Invalid menu IDs'},400);
+  const storeId=session.storeId;
+  const existing=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
+  if(existing)return existing.store_id===storeId?json({id:existing.id,duplicate:true}):json({error:'Client key already used'},409);
+  if(b.source==='dinein'){
+   if(!/^(0[1-9]|1[0-9]|20)$/.test(String(b.table_no||'')))return json({error:'Choose a table from 01 to 20'},400);
+   const occupied=await env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=? AND table_no=?').bind(storeId,b.table_no).first();
+   if(occupied)return json({error:'Table occupied'},409);
+  }
+  const id=uid(),now=new Date().toISOString();
+  const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key,store_id) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,b.source,String(b.table_no||'').slice(0,30),'new',String(b.note||'').slice(0,500),now,now,session.role,b.client_key,storeId)];
+  if(b.source==='dinein')statements.push(env.DB.prepare('INSERT INTO table_occupancy(store_id,table_no,order_id,created_at) VALUES(?,?,?,?)').bind(storeId,b.table_no,id,now));
+  try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId));}catch(e){return json({error:e.message},400);}
+  statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',session.role,JSON.stringify({store_id:storeId}),now));
+  statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created',JSON.stringify({store_id:storeId}),now));
+  try{await env.DB.batch(statements);}catch(e){
+   const duplicate=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
+   if(duplicate)return duplicate.store_id===storeId?json({id:duplicate.id,duplicate:true}):json({error:'Client key already used'},409);
+   if(b.source==='dinein'&&String(e).includes('UNIQUE'))return json({error:'Table already occupied'},409);
+   throw e;
+  }
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({id},201);
  }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
