@@ -578,14 +578,14 @@ function admin(){
    const granted=new Set((current.stores||[]).map(x=>x.id));
    const overlay=document.createElement('div');
    overlay.className='v3-grants-overlay';
-   overlay.innerHTML='<section class="v3-grants-dialog" role="dialog" aria-modal="true"><h2>Allowed stores</h2><p class="muted">Choose the stores this device can access.</p><form id="v3-grants-editor">'+v3Stores.filter(x=>x.active).map(x=>'<label><input type="checkbox" name="store_ids" value="'+esc(x.id)+'" '+(granted.has(x.id)?'checked':'')+'> '+esc(x.name)+'</label>').join('')+'<div class="toolbar"><button type="button" id="v3-grants-cancel" class="alt">Cancel</button><button type="submit">Save access</button></div></form></section>';
+   overlay.innerHTML='<section class="v3-grants-dialog" role="dialog" aria-modal="true"><h2>Allowed stores</h2><p class="muted">Choose the stores this device can access.</p><form id="v3-grants-editor">'+v3Stores.filter(x=>x.active).map(x=>'<label><input type="checkbox" name="store_ids" value="'+esc(x.id)+'" '+(granted.has(x.id)?'checked':'')+'> '+esc(x.name)+'</label>').join('')+'<label>Secondary password<input type="password" name="secondary_pin" autocomplete="off" required></label><div class="toolbar"><button type="button" id="v3-grants-cancel" class="alt">Cancel</button><button type="submit">Save access</button></div></form></section>';
    document.body.append(overlay);
    overlay.querySelector('#v3-grants-cancel').onclick=()=>overlay.remove();
    overlay.querySelector('#v3-grants-editor').onsubmit=async e=>{
     e.preventDefault();const ids=new FormData(e.currentTarget).getAll('store_ids').map(String);
     if(!ids.length){notify('Select at least one store');return;}
     const save=e.currentTarget.querySelector('[type=submit]');save.disabled=true;
-    try{await api('/admin/devices/'+encodeURIComponent(id)+'/stores','PUT',{store_ids:ids});overlay.remove();notify('Device store access updated.');}
+    try{const secondary_pin=String(new FormData(e.currentTarget).get('secondary_pin')||'');await api('/admin/devices/'+encodeURIComponent(id)+'/stores','PUT',{store_ids:ids,secondary_pin});overlay.remove();notify('Device store access updated.');}
     catch(err){notify('Update failed: '+err.message)}finally{save.disabled=false;}
    };
   }catch(err){notify('Unable to load access: '+err.message)}
