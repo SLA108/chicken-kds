@@ -511,3 +511,19 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid{background:#1b493d;border:2px so
 body:has(.foh-head) .foh-ticket.foh-ticket-unpaid .foh-payment{color:#ffd18b}
 body:has(.foh-head) .foh-ticket.foh-ticket-paid .foh-payment{color:#8df0b9}
 body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:#168451;color:#fff;border:1px solid #3cce8a}
+
+/* Reservation alerts and history */
+.reservation-alert-overlay{position:fixed;inset:0;z-index:1200;background:rgba(9,17,30,.72);backdrop-filter:blur(5px);display:grid;place-items:center;padding:18px}
+.reservation-alert-card{box-sizing:border-box;width:min(100%,540px);max-height:90dvh;overflow:auto;background:#fff!important;color:#172338!important;border:1px solid #e2e8f0;border-radius:24px;padding:32px;box-shadow:0 28px 90px #0006;text-align:center;animation:super-pos-alert-in .2s ease-out}
+.reservation-alert-card h2{color:#14233b!important;font-size:28px;line-height:1.2;margin:12px 0 8px}
+.reservation-alert-icon{width:64px;height:64px;margin:0 auto 14px;border-radius:20px;display:grid;place-items:center;background:#eef3ff;font-size:30px}
+.reservation-alert-kicker{font-size:12px;letter-spacing:.15em;font-weight:850;color:#d46b38}
+.reservation-alert-guests{font-size:18px;font-weight:750;color:#25344b;margin-bottom:20px}
+.reservation-alert-details{background:#f4f7fb;border:1px solid #e0e7f0;border-radius:16px;padding:12px 18px;text-align:left;margin-bottom:20px}
+.reservation-alert-details>div{padding:9px 0;display:flex;flex-direction:column;gap:4px}
+.reservation-alert-details small{font-size:10px;letter-spacing:.12em;font-weight:800;color:#65758b}
+.reservation-alert-details strong{color:#1e293b;overflow-wrap:anywhere}
+.reservation-alert-actions{display:flex;gap:10px}.reservation-alert-actions button{flex:1;min-height:46px}
+.reservation-workspace{min-height:250px}.reservation-filters{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin:24px 0 18px}.reservation-filter-tabs{display:flex;gap:6px;padding:5px;border-radius:12px;background:#17263a}.reservation-filter-tabs button{padding:10px 14px;border-radius:9px;background:transparent;color:#cbd5e1}.reservation-filter-tabs button.active{background:#4166b3;color:#fff}.reservation-filters label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#b8c7da}.reservation-filters input{min-height:39px;max-width:165px}.reservation-count{background:#304258;color:#e2e8f0;padding:8px 12px;border-radius:20px;font-size:12px;font-weight:750}
+.reservation-table-wrap{overflow-x:auto}.reservation-table{width:100%;border-collapse:collapse;min-width:830px}.reservation-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#9fb0c7;padding:14px 12px;border-bottom:1px solid #405168}.reservation-table td{padding:15px 12px;border-bottom:1px solid #3b4c61;color:#e2e8f0;vertical-align:middle}.reservation-table td strong{color:#fff}.reservation-table td small{display:block;color:#b3c1d2;margin-top:4px}.reservation-notes{max-width:220px;white-space:normal;overflow-wrap:anywhere}.reservation-status{display:inline-block;border-radius:16px;background:#334155;padding:5px 10px;text-transform:capitalize;font-size:12px}.reservation-status-booked{background:#1b4c48;color:#a6f2d6}.reservation-status-arrived{background:#274a7d;color:#d4e8ff}.reservation-status-cancelled,.reservation-status-no_show{background:#65343b;color:#ffd1d5}.reservation-actions{display:flex;gap:5px}.reservation-actions button{font-size:12px;padding:8px 10px}.reservation-empty{text-align:center;padding:34px 12px;color:#e2e8f0}.reservation-empty p{color:#9fb0c7}
+@media(max-width:600px){.reservation-alert-card{padding:22px}.reservation-alert-card h2{font-size:22px}.reservation-alert-actions{flex-direction:column}.reservation-filters{align-items:stretch}.reservation-filters input{max-width:none}}
