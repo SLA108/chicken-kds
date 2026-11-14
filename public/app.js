@@ -613,8 +613,8 @@ async function uploadAdminImage(file){
  }finally{image.close();}
 }
 let v3Stores=[],v3SelectedStore='',v3StoreMenu=[],v3Devices=[],v3StoreError='',v3Loaded=false,v3PairAllowedStores=null,v3RevokedOpen=false,v3StoreMenuOpen=false;
-let adminOrders=[],adminOrdersSummary=[],adminOrdersStore='',adminOrdersStatus='',adminOrdersOffset=0,adminOrdersHasMore=false,adminOrdersLoaded=false,adminOrdersError='',adminOrdersRequest=0,adminOrdersLastSync=null,adminOrdersBusy=false;
-async function loadAdminOrders(){if(adminOrdersBusy)return;adminOrdersBusy=true;const request=++adminOrdersRequest;const q=new URLSearchParams({offset:String(adminOrdersOffset)});if(adminOrdersStore)q.set('store_id',adminOrdersStore);if(adminOrdersStatus)q.set('status',adminOrdersStatus);try{const data=await api('/admin/orders?'+q);if(request!==adminOrdersRequest)return;adminOrders=data.orders||[];adminOrdersSummary=data.summary||[];adminOrdersHasMore=Boolean(data.has_more);adminOrdersLoaded=true;adminOrdersLastSync=new Date();adminOrdersError='';}catch(e){if(request===adminOrdersRequest){adminOrdersError=e.message;adminOrdersLoaded=true;}}finally{adminOrdersBusy=false;}}
+let adminOrders=[],adminOrdersSummary=[],adminOrdersStore='',adminOrdersStatus='',adminOrdersPeriod='current',adminOrdersFrom='',adminOrdersTo='',adminOrdersOffset=0,adminOrdersHasMore=false,adminOrdersLoaded=false,adminOrdersError='',adminOrdersRequest=0,adminOrdersLastSync=null,adminOrdersBusy=false;
+async function loadAdminOrders(){if(adminOrdersBusy)return;adminOrdersBusy=true;const request=++adminOrdersRequest;const q=new URLSearchParams({offset:String(adminOrdersOffset),period:adminOrdersPeriod});if(adminOrdersPeriod==='custom'){if(!adminOrdersFrom||!adminOrdersTo){adminOrdersError='Select a start and end date';adminOrdersLoaded=true;adminOrdersBusy=false;return;}q.set('from',adminOrdersFrom);q.set('to',adminOrdersTo);}if(adminOrdersStore)q.set('store_id',adminOrdersStore);if(adminOrdersStatus)q.set('status',adminOrdersStatus);try{const data=await api('/admin/orders?'+q);if(request!==adminOrdersRequest)return;adminOrders=data.orders||[];adminOrdersSummary=data.summary||[];adminOrdersHasMore=Boolean(data.has_more);adminOrdersLoaded=true;adminOrdersLastSync=new Date();adminOrdersError='';}catch(e){if(request===adminOrdersRequest){adminOrdersError=e.message;adminOrdersLoaded=true;}}finally{adminOrdersBusy=false;}}
 
 async function loadV3Stores(){
  try{const [stores,devices]=await Promise.all([api('/admin/stores'),api('/admin/devices')]);v3Stores=stores.stores||[];v3Devices=devices.devices||[];v3StoreError='';v3Loaded=true;if(!v3Stores.some(x=>x.id===v3SelectedStore))v3SelectedStore=v3Stores[0]?.id||'';if(v3SelectedStore)await loadV3StoreMenu();}
@@ -697,11 +697,12 @@ function adminOrderPanel(){
  const choices='<option value="">All restaurants</option>'+v3Stores.map(x=>'<option value="'+esc(x.id)+'" '+(adminOrdersStore===x.id?'selected':'')+'>'+esc(x.name)+'</option>').join('');
  const statuses='<option value="">All statuses</option>'+['new','cooking','done','cancelled'].map(x=>'<option value="'+x+'" '+(adminOrdersStatus===x?'selected':'')+'>'+esc(statusName[x]||x)+'</option>').join('');
  return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Orders</h2><p>Read-only order monitoring across restaurants. Live updates via WebSocket.</p></div><button type="button" class="alt" id="admin-orders-refresh">Refresh orders</button></div>'+
+ '<div class="toolbar"><label>Period <select id="admin-orders-period">'+[['current','Today + Active'],['today','Today'],['yesterday','Yesterday'],['7days','Last 7 days'],['custom','Custom range']].map(x=>'<option value="'+x[0]+'" '+(adminOrdersPeriod===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+'</select></label>'+(adminOrdersPeriod==='custom'?'<label>From <input type="date" id="admin-orders-from" value="'+esc(adminOrdersFrom)+'"></label><label>To <input type="date" id="admin-orders-to" value="'+esc(adminOrdersTo)+'"></label>':'')+'</div>'+ 
  '<p class="muted small">'+(adminOrdersLastSync?'Last updated: '+adminOrdersLastSync.toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw'}):'Waiting for first update')+'</p><div class="toolbar"><label>Restaurant <select id="admin-orders-store">'+choices+'</select></label><label>Status <select id="admin-orders-status">'+statuses+'</select></label></div>'+
  (adminOrdersError?'<p class="warning" role="alert">'+esc(adminOrdersError)+'</p>':'')+
  '<div class="admin-overview">'+['new','cooking','done','cancelled'].map(k=>'<div class="admin-metric"><strong>'+count(k)+'</strong><span>'+esc(statusName[k]||k)+'</span></div>').join('')+'</div>'+
  (!adminOrdersLoaded?'<p>Loading orders…</p>':adminOrders.length?'<div class="grid">'+adminOrders.map(adminOrderCard).join('')+'</div>':'<p>No orders match these filters.</p>')+
- '<div class="toolbar"><button type="button" class="alt" id="admin-orders-prev" '+(adminOrdersOffset===0?'disabled':'')+'>Previous</button><span>Page '+(Math.floor(adminOrdersOffset/100)+1)+'</span><button type="button" class="alt" id="admin-orders-next" '+(!adminOrdersHasMore?'disabled':'')+'>Next</button></div></section>';
+ '<div class="toolbar"><button type="button" class="alt" id="admin-orders-prev" '+(adminOrdersOffset===0?'disabled':'')+'>Previous</button><span>Page '+(Math.floor(adminOrdersOffset/20)+1)+'</span><button type="button" class="alt" id="admin-orders-next" '+(!adminOrdersHasMore?'disabled':'')+'>Next</button></div></section>';
 }
 function admin(){
  const filtered=adminMenu.filter(m=>!adminFilter||m.category===adminFilter);
@@ -720,11 +721,13 @@ function admin(){
  document.querySelectorAll('[data-admin-tab]').forEach(el=>el.onclick=()=>{adminTab=el.dataset.adminTab;if(['stores','devices','orders','overview'].includes(adminTab)&&!v3Loaded)loadV3Stores().then(()=>admin()).catch(e=>notify(e.message));if(adminTab==='orders')loadAdminOrders().then(()=>admin());if(adminTab==='overview')loadOverview().then(()=>{if(adminTab==='overview')admin()});admin()});
  const overviewRefresh=document.querySelector('#bo-overview-refresh');if(overviewRefresh)overviewRefresh.onclick=async()=>{await loadOverview();if(adminTab==='overview')admin();};
  const reloadOrders=()=>{adminOrdersOffset=0;adminOrdersLoaded=false;loadAdminOrders().then(()=>{if(adminTab==='orders')admin()})};
+ document.querySelector('#admin-orders-period').onchange=e=>{adminOrdersPeriod=e.target.value;reloadOrders();};
+ if(adminOrdersPeriod==='custom'){document.querySelector('#admin-orders-from').onchange=e=>{adminOrdersFrom=e.target.value;reloadOrders()};document.querySelector('#admin-orders-to').onchange=e=>{adminOrdersTo=e.target.value;reloadOrders()};}
  document.querySelector('#admin-orders-store').onchange=e=>{adminOrdersStore=e.target.value;reloadOrders()};
  document.querySelector('#admin-orders-status').onchange=e=>{adminOrdersStatus=e.target.value;reloadOrders()};
  document.querySelector('#admin-orders-refresh').onclick=()=>loadAdminOrders().then(()=>admin());
- document.querySelector('#admin-orders-prev').onclick=()=>{adminOrdersOffset=Math.max(0,adminOrdersOffset-100);loadAdminOrders().then(()=>admin())};
- document.querySelector('#admin-orders-next').onclick=()=>{if(!adminOrdersHasMore)return;adminOrdersOffset+=100;loadAdminOrders().then(()=>admin())};
+ document.querySelector('#admin-orders-prev').onclick=()=>{adminOrdersOffset=Math.max(0,adminOrdersOffset-20);loadAdminOrders().then(()=>admin())};
+ document.querySelector('#admin-orders-next').onclick=()=>{if(!adminOrdersHasMore)return;adminOrdersOffset+=20;loadAdminOrders().then(()=>admin())};
  document.querySelector('#v3-toggle-store').onclick=async()=>{
   const store=v3Stores.find(x=>x.id===v3SelectedStore);if(!store)return;
   if(!confirm((store.active?'Deactivate ':'Activate ')+store.name+'?'))return;
