@@ -708,3 +708,35 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-mobile-payment-split small{font-size:11px;color:#b6c9e3}
  .bo-mobile-payment-split strong{font-size:clamp(12px,3.6vw,17px);white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
 }
+
+/* Per-restaurant overview cards */
+.bo-store-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;margin:14px 0 20px}
+.bo-store-card{min-width:0;padding:18px;border:1px solid #dfe6ef;border-radius:17px;background:#fff;color:#1d2b42;box-shadow:0 2px 8px #182c4810}
+.bo-store-card-header,.bo-store-main,.bo-store-footer{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.bo-store-card-header small{display:block;font-size:10px;letter-spacing:.08em;color:#77849a;font-weight:700}
+.bo-store-card-header h4{font-size:18px;margin:5px 0 0;line-height:1.2}
+.bo-store-orders{display:grid;text-align:right;gap:2px}
+.bo-store-orders strong{font-size:24px;font-variant-numeric:tabular-nums}
+.bo-store-orders small{letter-spacing:0}
+.bo-store-main{background:#f2f6fc;border-radius:12px;padding:14px;margin:16px 0;align-items:start}
+.bo-store-main>div{display:grid;gap:6px;min-width:0}
+.bo-store-main small,.bo-store-field small{font-size:11px;color:#687890}
+.bo-store-main strong{font-size:clamp(16px,2vw,23px);font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:-.025em}
+.bo-store-section{border-top:1px solid #e8edf4;padding:13px 0}
+.bo-store-section h5{margin:0 0 12px;font-size:12px;color:#52647d}
+.bo-store-section h5 small{font-weight:400;color:#7b8798}
+.bo-store-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.bo-store-fields.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.bo-store-field{display:grid;gap:5px;min-width:0}
+.bo-store-field strong{font-size:clamp(12px,1.8vw,16px);white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.025em}
+.bo-store-footer{border-top:1px solid #e8edf4;padding-top:13px;font-size:12px;color:#65738b}
+.bo-store-footer strong{color:#1d2b42;font-variant-numeric:tabular-nums}
+.bo-store-warning{font-size:11px;color:#a04b16;margin:10px 0 0}
+.bo-store-legacy-table{display:none}
+@media(max-width:760px){
+ .bo-store-cards{grid-template-columns:minmax(0,1fr);gap:12px}
+ .bo-store-card{padding:15px}
+ .bo-store-main strong{font-size:clamp(15px,4.6vw,21px)}
+ .bo-store-fields.three{gap:5px}
+ .bo-store-field strong{font-size:clamp(11px,3.2vw,15px)}
+}
