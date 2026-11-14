@@ -497,3 +497,10 @@ body.kitchen #app>header + #v3-current-store{border-top:0}
 /* Official brand artwork on staff sign-in, responsive without cropping. */
 .role-brand-logo{display:block;width:min(220px,65vw);height:160px;object-fit:contain;margin:0 auto 10px}
 @media(max-width:560px){.role-brand-logo{width:min(190px,60vw);height:138px}}
+
+/* Paid tickets remain visible until table release; visually separate from unpaid tickets. */
+.foh-ticket.foh-ticket-paid{background:#ecfdf5;border:2px solid #16a34a;box-shadow:0 3px 14px #16a34a1a}
+.foh-ticket.foh-ticket-paid .foh-payment{color:#166534}
+.foh-ticket.foh-ticket-paid [data-release-table]{background:#15803d;color:#fff;border:0;font-weight:750}
+.foh-ticket.foh-ticket-unpaid{border-left:4px solid #f59e0b}
+.foh-ticket.foh-ticket-unpaid .foh-payment{color:#b45309}
