@@ -883,8 +883,15 @@ function bindBoWorkload(){
 
   cursor.setAttribute('x1',String(xFromSlot(slot)));cursor.setAttribute('x2',String(xFromSlot(slot)));cursor.setAttribute('visibility','visible');
  };
- svg.onpointermove=e=>{if(!isMobile())show(e);};
- svg.onclick=show;
+ const plot=svg.closest('.bo-workload-plot');
+ let touchStart=null,suppressClick=false;
+ if(plot){
+  plot.addEventListener('touchstart',e=>{if(e.touches.length===1)touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY,moved:false};},{passive:true});
+  plot.addEventListener('touchmove',e=>{if(!touchStart||e.touches.length!==1)return;const dx=e.touches[0].clientX-touchStart.x,dy=e.touches[0].clientY-touchStart.y;if(Math.abs(dx)>8||Math.abs(dy)>8){touchStart.moved=true;suppressClick=true;}},{passive:true});
+  plot.addEventListener('touchend',()=>{if(touchStart?.moved)suppressClick=true;touchStart=null;},{passive:true});
+ }
+ svg.onpointermove=e=>{if(!isMobile()&&e.pointerType!=='touch')show(e);};
+ svg.onclick=e=>{if(suppressClick){suppressClick=false;return;}show(e);};
  svg.onpointerleave=()=>{};
 
 }
