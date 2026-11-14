@@ -90,3 +90,18 @@ test('one paired restaurant device can renew independent POS and Kitchen session
  assert.match(app,/JSON\.stringify\(storeId\?\{role:page,store_id:storeId\}:\{role:page\}\)/);
  assert.match(app,/JSON\.stringify\(\{role:page,store_id:selected\}\)/);
 });
+
+test('reservation create and edits broadcast details to their restaurant only',()=>{
+ assert.match(api,/broadcastStore\(env,b\.store_id,'reservations',\{action:'created',reservation:/);
+ assert.match(api,/broadcastStore\(env,storeId,'reservations',\{action:status==='cancelled'/);
+ assert.match(api,/broadcastStore\(env,existing\.store_id,'reservations',\{action:'cancelled'/);
+});
+test('POS receives immediate booking notifications and reconnect catch-up',()=>{
+ assert.match(app,/queueReservationEvent\(m\.data\);loadPosReservations\(\)/);
+ assert.match(app,/NEW RESERVATION/);
+ assert.match(app,/RESERVATION UPDATED/);
+ assert.match(app,/RESERVATION CANCELLED/);
+ assert.match(app,/sound\(\)/);
+ assert.match(app,/catchUpReservationEvents\(\)/);
+ assert.match(api,/updated_at>\? ORDER BY updated_at ASC/);
+});
