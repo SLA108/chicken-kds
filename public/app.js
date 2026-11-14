@@ -664,7 +664,7 @@ function admin(){
 function scanner(){shell(`<div class="panel"><h2>Delivery Scanner (coming soon)</h2><p>Future support for delivery-platform order scanning.</p><div class="warning"><strong>Not available: </strong>Scanning and AI recognition are not enabled in this version.</div><p class="muted">Enter delivery orders manually in the POS for now.</p><a href="/pos">Go to POS</a></div>`);}
 async function start(){try{await refresh(true);connect()}catch(e){notify(e.message)}}
 (async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(token)start();else login()})();
-setInterval(async()=>{if(deviceMode())await renewDeviceSession()},60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
+setInterval(async()=>{if(deviceMode())await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
 let kitchenSyncBusy=false;
 setInterval(async()=>{if(!token||page!=='kitchen'||document.hidden||kitchenSyncBusy)return;kitchenSyncBusy=true;try{await refresh()}finally{kitchenSyncBusy=false}},5000);
