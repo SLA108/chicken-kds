@@ -600,7 +600,17 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   const byOrder=new Map(),byItem=new Map();
   for(const m of modifiers){if(!byItem.has(m.order_item_id))byItem.set(m.order_item_id,[]);byItem.get(m.order_item_id).push(m);}
   for(const i of items){if(!byOrder.has(i.order_id))byOrder.set(i.order_id,[]);byOrder.get(i.order_id).push({...i,modifiers:byItem.get(i.id)||[]});}
-  for(const o of visible)o.items=byOrder.get(o.id)||[];
+  const payments=(await env.DB.prepare('SELECT order_id,COALESCE(SUM(amount_cents),0) AS paid_cents FROM payments WHERE order_id IN ('+marks+') GROUP BY order_id').bind(...ids).all()).results;
+  const paymentByOrder=new Map(payments.map(p=>[p.order_id,Number(p.paid_cents)||0]));
+  for(const o of visible){
+   o.items=byOrder.get(o.id)||[];
+   o.total_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.price_cents)||0),0);
+   o.discount_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.discount_cents)||0),0);
+   o.original_total_cents=o.total_cents+o.discount_cents;
+   o.paid_cents=paymentByOrder.get(o.id)||0;
+   o.unpaid_cents=Math.max(0,o.total_cents-o.paid_cents);
+   o.has_unpriced_items=o.items.some(i=>i.price_cents==null);
+  }
  }
  const summaryWhere=period==='current'?"WHERE (o.created_at>=? AND o.created_at<? OR (o.created_at<? AND o.status IN ('new','cooking')))":"WHERE o.created_at>=? AND o.created_at<?";
  const summaryArgs=period==='current'?[from,to,from]:[from,to];
