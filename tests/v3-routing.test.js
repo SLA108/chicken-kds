@@ -99,3 +99,13 @@ test('reopening kitchen completion preserves status implied by dish completion',
  assert.ok(section.includes('kitchen_completed_at=NULL'));
  assert.ok(section.includes("AND store_id=? AND kitchen_completed_at IS NOT NULL"));
 });
+
+test('bulk pickup acknowledgement rejects orders outside device store and cancelled orders',()=>{
+ const start=api.indexOf('const scopedPickupAll='),end=api.indexOf("if(path==='/api/store/kitchen/history'",start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes('SELECT status FROM orders WHERE id=? AND store_id=?'));
+ assert.ok(section.includes("return json({error:'Order not found'},404)"));
+ assert.ok(section.includes("return json({error:'Order cancelled'},409)"));
+ assert.ok(section.includes('picked_up_at IS NULL'));
+});
