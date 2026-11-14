@@ -37,3 +37,13 @@ test('order-item preparation uses effective store price without duplicate column
  assert.ok(!section.includes('SELECT m.*,COALESCE(o.price_cents,m.price_cents) AS price_cents'));
  assert.ok(section.includes('m.price_cents+extra'));
 });
+
+test('add-items checkout race returns recoverable conflict',()=>{
+ const start=api.indexOf('const scopedAddItems=');
+ const end=api.indexOf('const scopedPickupAll=',start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes('try{result=await env.DB.batch(statements);}'));
+ assert.ok(section.includes("current.paid_at||current.kitchen_completed_at"));
+ assert.ok(section.includes("return json({error:'Order changed; refresh'},409)"));
+});
