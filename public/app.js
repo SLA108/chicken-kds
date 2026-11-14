@@ -441,7 +441,8 @@ function v3StorePanel(){
  '<button type="button" class="alt" id="v3-load-stores">Refresh stores</button>'+
  '<label>Store <select id="v3-store-select">'+v3Stores.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===v3SelectedStore?'selected':'')+'>'+esc(x.name)+' ('+esc(x.code)+') · '+(x.active?'Active':'Inactive')+'</option>').join('')+'</select></label>'+
  '<div class="admin-dish-list">'+v3StoreMenu.map(m=>'<div class="admin-dish"><div class="admin-dish-info"><strong>'+esc(m.name)+'</strong><small>'+esc(m.category)+' · Base '+money(m.base_price_cents)+' · '+(m.sold_out?'Sold out':'Available')+'</small></div><label>Store price (PLN)<input type="number" min="0" max="100000" step=".01" data-v3-price="'+esc(m.id)+'" value="'+(m.override_price_cents===null?'':(m.override_price_cents/100).toFixed(2))+'" placeholder="Use base price"></label><label>Status<select data-v3-active="'+esc(m.id)+'"><option value="inherit" '+(m.override_active===null?'selected':'')+'>Inherit</option><option value="true" '+(m.override_active===1?'selected':'')+'>Active</option><option value="false" '+(m.override_active===0?'selected':'')+'>Inactive</option></select></label><label>Sold out<input type="checkbox" data-v3-sold="'+esc(m.id)+'" '+(m.sold_out?'checked':'')+'></label><button type="button" class="alt" data-v3-save="'+esc(m.id)+'">Save</button></div>').join('')+'</div>'+
- '<h3>Registered devices</h3><div class="admin-dish-list">'+v3Devices.filter(d=>d.store_id===v3SelectedStore).map(d=>'<div class="admin-dish"><strong>'+esc(d.label)+'</strong><small>'+esc(d.id)+' · '+(d.active?'Active':'Revoked')+'</small></div>').join('')+'</div></section>';
+ '<div class="toolbar"><button type="button" class="alt" id="v3-toggle-store" '+(!v3SelectedStore?'disabled':'')+'>'+((v3Stores.find(x=>x.id===v3SelectedStore)?.active)?'Deactivate store':'Activate store')+'</button></div>'+
+ '<h3>Registered devices</h3><form id="v3-device-form" class="admin-inline-form"><label>New device label<input id="v3-device-label" maxlength="100" required placeholder="e.g. Kitchen tablet 1"></label><button type="submit" '+(!v3SelectedStore?'disabled':'')+'>Register device</button></form><div id="v3-device-credential" class="admin-inline-form" hidden></div><div class="admin-dish-list">'+v3Devices.filter(d=>d.store_id===v3SelectedStore).map(d=>'<div class="admin-dish"><div><strong>'+esc(d.label)+'</strong><small>'+esc(d.id)+' · '+(d.active?'Active':'Revoked')+'</small></div>'+(d.active?'<button type="button" class="alt" data-v3-revoke="'+esc(d.id)+'">Revoke</button>':'')+'</div>').join('')+'</div></section>';
 }
 function admin(){
  const filtered=adminMenu.filter(m=>!adminFilter||m.category===adminFilter);
@@ -457,6 +458,28 @@ function admin(){
  '<div '+(adminTab==='stores'?'':'hidden')+'>'+v3StorePanel()+'</div>'+'<div id="menu-editor-backdrop" class="admin-modal-backdrop" hidden><section id="menu-editor" class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="editor-title"><div class="admin-modal-head"><div><span class="admin-eyebrow">MENU EDITOR</span><h2 id="editor-title">Add dish</h2></div><button type="button" class="alt" id="menu-cancel">Close</button></div><form id="menu-form"><div class="menu-form-grid"><label>Dish name<input id="menu-name" required maxlength="100"></label><label>Category<select id="menu-category" required><option value="">Select category</option>'+cats+'</select></label><label>Gross price (PLN)<input id="menu-price" required type="number" min="0" max="100000" step=".01"></label><label>VAT rate<select id="menu-vat"><option value="8">8%</option><option value="23">23%</option><option value="5">5%</option><option value="0">0%</option></select></label><label>Sort order<input id="menu-sort" type="number" step="1" value="0"></label><label>Availability<select id="menu-active"><option value="1">Active</option><option value="0">Inactive</option></select></label></div><div class="menu-upload"><label>Dish photo · converted to WebP<input id="menu-image-file" type="file" accept="image/*,.heic,.heif,.avif"></label><img id="menu-image-preview" class="admin-preview" hidden alt="Dish preview"><button type="button" class="alt" id="menu-image-remove">Remove photo</button><p class="muted small" id="menu-upload-status"></p></div><div class="admin-modal-actions"><button id="menu-save" type="submit">Save dish</button><button type="button" class="alt" id="menu-cancel-bottom">Cancel</button></div></form></section></div>');
  document.querySelector('#sync').onclick=()=>refresh();
  document.querySelectorAll('[data-admin-tab]').forEach(el=>el.onclick=()=>{adminTab=el.dataset.adminTab;if(adminTab==='stores'&&!v3Loaded){loadV3Stores().then(()=>admin());}admin()});
+ document.querySelector('#v3-toggle-store').onclick=async()=>{
+  const store=v3Stores.find(x=>x.id===v3SelectedStore);if(!store||store.code==='TEST'&&store.active){notify('TEST store must remain active');return;}
+  if(!confirm((store.active?'Deactivate ':'Activate ')+store.name+'?'))return;
+  try{await api('/admin/stores/'+encodeURIComponent(store.id)+'/config','PATCH',{active:!store.active});await loadV3Stores();admin();notify('Store status updated')}catch(err){notify(err.message)}
+ };
+ document.querySelector('#v3-device-form').onsubmit=async e=>{
+  e.preventDefault();const label=document.querySelector('#v3-device-label').value.trim();if(!label||!v3SelectedStore)return;
+  const btn=e.currentTarget.querySelector('[type=submit]');btn.disabled=true;
+  try{
+   const result=await api('/admin/devices','POST',{store_id:v3SelectedStore,label});
+   const target=document.querySelector('#v3-device-credential');target.hidden=false;target.replaceChildren();
+   const title=document.createElement('strong');title.textContent='Copy these credentials now; the secret is shown only once.';
+   const field=document.createElement('textarea');field.readOnly=true;field.rows=4;field.value='Device ID: '+result.id+'\\nEnrollment secret: '+result.enrollment_secret;
+   const copy=document.createElement('button');copy.type='button';copy.textContent='Copy credentials';copy.onclick=()=>navigator.clipboard.writeText(field.value).then(()=>notify('Copied')).catch(()=>notify('Copy failed'));
+   target.append(title,field,copy);v3Devices=(await api('/admin/devices')).devices||[];
+   notify('Device registered. Save the secret before leaving this page.');
+  }catch(err){notify(err.message)}finally{btn.disabled=false}
+ };
+ document.querySelectorAll('[data-v3-revoke]').forEach(btn=>btn.onclick=async()=>{
+  if(!confirm('Revoke this device? Existing sessions will stop working.'))return;
+  btn.disabled=true;try{await api('/admin/devices/'+encodeURIComponent(btn.dataset.v3Revoke)+'/revoke','POST');v3Devices=(await api('/admin/devices')).devices||[];admin();notify('Device revoked')}catch(err){notify(err.message);btn.disabled=false}
+ });
  document.querySelector('#v3-load-stores').onclick=async()=>{await loadV3Stores();admin()};
  document.querySelector('#v3-store-select').onchange=async e=>{v3SelectedStore=e.target.value;try{await loadV3StoreMenu();admin()}catch(err){notify(err.message)}};
  document.querySelectorAll('[data-v3-save]').forEach(btn=>btn.onclick=async()=>{
