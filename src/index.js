@@ -6,12 +6,17 @@ const roles={pos:['pos','admin'],kitchen:['kitchen','admin'],admin:['admin'],sca
 const encoder=new TextEncoder();
 async function tokenFor(pin,secret){const key=await crypto.subtle.importKey('raw',encoder.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,encoder.encode(pin)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function identify(req,env){const header=req.headers.get('authorization')||'';const protocol=req.headers.get('sec-websocket-protocol')||'';const supplied=header.startsWith('Bearer ')?header.slice(7):protocol.startsWith('ckauth.')?protocol.slice(7):'';if(!supplied)return null;for(const role of ['admin']){if(!env[role.toUpperCase()+'_PIN'])continue;const expected=await tokenFor(env[role.toUpperCase()+'_PIN'],env.AUTH_SECRET);if(supplied.length===expected.length){let diff=0;for(let i=0;i<supplied.length;i++)diff|=supplied.charCodeAt(i)^expected.charCodeAt(i);if(!diff)return role;}}return null;}
-// Admin notifications use the management room; restaurant devices use store-scoped rooms.
-function room(env,storeId=null){
- const key=storeId===null?'main':'store:'+storeId;
- return env.ROOM.get(env.ROOM.idFromName(key));
+// Each restaurant uses its own isolated WebSocket room.
+function room(env,storeId){
+ if(!storeId)throw Error('Store ID required for WebSocket room');
+ return env.ROOM.get(env.ROOM.idFromName('store:'+storeId));
 }
-async function broadcast(env,type,data){try{const response=await room(env).fetch('https://room.internal/broadcast',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({type,data})});if(!response.ok)console.error('broadcast failed',response.status,await response.text());}catch(e){console.error('broadcast error',e);}}
+async function broadcast(env,type,data){
+ try{
+  const stores=(await env.DB.prepare('SELECT id FROM stores WHERE active=1').all()).results;
+  await Promise.all(stores.map(store=>broadcastStore(env,store.id,type,data)));
+ }catch(e){console.error('store broadcast fanout failed',e);}
+}
 async function disconnectDeviceStore(env,storeId,deviceId){try{await room(env,storeId).fetch('https://room.internal/disconnect-device',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({device_id:deviceId})});}catch(e){console.error('device disconnect failed',e);}}
 async function broadcastStore(env,storeId,type,data){try{const response=await room(env,storeId).fetch('https://room.internal/broadcast',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({type,data})});if(!response.ok)console.error('store broadcast failed',response.status);}catch(e){console.error('store broadcast error',e);}}
 async function parse(req){try{return await req.json();}catch{return null;}}
