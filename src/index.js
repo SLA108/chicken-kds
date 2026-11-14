@@ -435,7 +435,7 @@ if(sessionToken){
   return json({order:{...order,table_occupied:!!occupancy},items:items.map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)})),payments:paymentsResult.results,events:eventsResult.results});
  }
  // Fail closed: do not grant access to unscoped legacy APIs.
- return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
+ return json({error:'Unknown store-scoped API endpoint'},404);
 }
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
@@ -601,7 +601,7 @@ if(storeDetailMatch&&req.method==='GET'){
  const rows=(await env.DB.prepare('SELECT id,source,table_no,status,created_at,paid_at,kitchen_completed_at FROM orders WHERE store_id=? ORDER BY created_at DESC,id DESC LIMIT ?').bind(storeId,limit).all()).results;
  return json({store,orders:rows,limit});
 }
-if(path==='/ws')return json({error:'Use a paired device for store-scoped WebSocket access'},403);
+
 // Modifier configuration endpoints. Existing Phase 2 foundation tables are reused.
 if(path==='/api/menu/modifiers'&&req.method==='GET'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
@@ -760,208 +760,6 @@ if(menuMatch&&req.method==='PATCH'){
 }
 if(path==='/api/menu'&&req.method==='GET')return json((await env.DB.prepare('SELECT * FROM menu WHERE active=1 ORDER BY sort_order,category,name').all()).results);
 if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate) VALUES(?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8).run();await broadcast(env,'menu',{});return json({id},201);}
-if(path==='/api/orders'&&req.method==='GET'){
- const list=await getOrders(env);
- if(!allowed(role,'pos'))return json(list);
- const occupied=(await env.DB.prepare('SELECT order_id FROM table_occupancy').all()).results;
- const set=new Set(occupied.map(x=>x.order_id)),ids=list.map(x=>x.id);
- const payments=ids.length?(await env.DB.prepare('SELECT order_id,method,amount_cents,created_at FROM payments WHERE order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY created_at DESC').bind(...ids).all()).results:[];
- return json(list.map(o=>({...o,table_occupied:set.has(o.id),payment:payments.find(p=>p.order_id===o.id)||null})));
-}
-if(path==='/api/kitchen/categories'&&req.method==='GET'){
- if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
- return json((await env.DB.prepare('SELECT name,sort_order FROM menu_categories ORDER BY sort_order,name').all()).results);
-}
-if(path==='/api/kitchen/history'&&req.method==='GET'){
- if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
- const u=new URL(req.url),range=u.searchParams.get('range')||'today',query=(u.searchParams.get('q')||'').trim().slice(0,80),page=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page')||'1',10)||1)),size=15;
- if(!['today','yesterday','all'].includes(range))return json({error:'Invalid range'},400);
- const now=new Date(),warsawDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
- const dayOffset=range==='yesterday'?-1:0;
- const localDay=new Date(warsawDate+'T12:00:00Z');localDay.setUTCDate(localDay.getUTCDate()+dayOffset);
- const day=localDay.toISOString().slice(0,10);
- const dateClause=range==='all'?'':" AND date(kitchen_completed_at, '+1 hour')= ?"; 
- // Date filtering uses the actual Warsaw calendar boundaries, including DST.
- const fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'});
- const matchDate=range==='all'?null:day;
- const searchClause=query?" AND (table_no LIKE ? OR id LIKE ?)":"";
- const where="kitchen_completed_at IS NOT NULL AND status!='cancelled'"+searchClause;
- const args=query?['%'+query+'%','%'+query+'%']:[];
- // Fetch a bounded recent window and filter Warsaw dates in JS to avoid fixed-offset DST errors.
- const scanLimit=range==='all'?500:1500;
- const rows=(await env.DB.prepare('SELECT id,source,table_no,created_at,kitchen_completed_at,paid_at FROM orders WHERE '+where+' ORDER BY kitchen_completed_at DESC LIMIT ?').bind(...args,scanLimit).all()).results;
- const filtered=matchDate?rows.filter(o=>fmt.format(new Date(o.kitchen_completed_at))===matchDate):rows;
- const total=filtered.length,selected=filtered.slice((page-1)*size,page*size);
- const ids=selected.map(o=>o.id);
- const items=ids.length?(await env.DB.prepare('SELECT id,order_id,name,quantity,is_done FROM order_items WHERE order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY created_at').bind(...ids).all()).results:[];
- return json({page,size,total,has_more:page*size<total,limited:rows.length===scanLimit,orders:selected.map(o=>({...o,items:items.filter(i=>i.order_id===o.id)}))});
-}
-const kitchenCompleteMatch=path.match(/^\/api\/kitchen\/orders\/([^/]+)\/(complete|reopen)$/);
-if(kitchenCompleteMatch&&req.method==='POST'){
- if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
- const [_,id,action]=kitchenCompleteMatch;
- const order=await env.DB.prepare('SELECT id,status,kitchen_completed_at FROM orders WHERE id=?').bind(id).first();
- if(!order)return json({error:'Order not found'},404);
- if(order.status==='cancelled')return json({error:'Cancelled order'},409);
- const now=new Date().toISOString();
- if(action==='complete'){
-  if(order.kitchen_completed_at)return json({ok:true,already_completed:true});
-  const result=await env.DB.prepare("UPDATE orders SET kitchen_completed_at=?,updated_at=? WHERE id=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_items WHERE order_id=?) AND NOT EXISTS(SELECT 1 FROM order_items WHERE order_id=? AND is_done=0)").bind(now,now,id,id,id).run();
-  if(result.meta.changes!==1)return json({error:'All dishes must be done before completing this order'},409);
- }else{
-  if(!order.kitchen_completed_at)return json({ok:true,already_open:true});
-  const result=await env.DB.prepare("UPDATE orders SET kitchen_completed_at=NULL,updated_at=? WHERE id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'").bind(now,id).run();
-  if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
- }
- await event(env,id,action==='complete'?'kitchen_completed':'kitchen_reopened',role,{});
- await broadcast(env,'orders',{id});
- return json({ok:true});
-}
-
-if(path==='/api/tables'&&req.method==='GET'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const active=(await env.DB.prepare("SELECT id,table_no,status,created_at FROM orders WHERE source='dinein' AND id IN (SELECT order_id FROM table_occupancy) AND status!='cancelled' AND table_no IN ("+Array.from({length:20},(_,i)=>"'"+String(i+1).padStart(2,'0')+"'").join(',')+") ORDER BY created_at DESC").all()).results;
- return json(Array.from({length:20},(_,i)=>{const number=String(i+1).padStart(2,'0'),matches=active.filter(o=>o.table_no===number);return {number,occupied:matches.length>0,order_id:matches[0]?.id||null,conflict:matches.length>1,status:matches[0]?.status||null}}));
-}
-const releaseMatch=path.match(/^\/api\/orders\/([^/]+)\/release-table$/);
-if(releaseMatch&&req.method==='POST'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const id=releaseMatch[1],order=await env.DB.prepare('SELECT id,source,table_no FROM orders WHERE id=?').bind(id).first();
- if(!order||order.source!=='dinein')return json({error:'Dine-in order not found'},404);
- const result=await env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=?').bind(id).run();
- if(!result.meta.changes)return json({error:'Table already released'},409);
- await event(env,id,'table_released',role,{table_no:order.table_no});
- await broadcast(env,'orders',{id});return json({ok:true});
-}
-const posDetailMatch=path.match(/^\/api\/pos\/history\/([^/]+)$/);
-if(posDetailMatch&&req.method==='GET'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const id=decodeURIComponent(posDetailMatch[1]);
- const order=await env.DB.prepare('SELECT id,source,table_no,status,note,created_at,paid_at,kitchen_completed_at FROM orders WHERE id=? AND paid_at IS NOT NULL').bind(id).first();
- if(!order)return json({error:'Paid order not found'},404);
- const [itemsResult,paymentsResult,eventsResult,occupancy]=await Promise.all([
-  env.DB.prepare('SELECT id,name,quantity,note,price_cents,is_done,created_at FROM order_items WHERE order_id=? ORDER BY created_at,id').bind(id).all(),
-  env.DB.prepare('SELECT id,method,amount_cents,created_at FROM payments WHERE order_id=? ORDER BY created_at').bind(id).all(),
-  env.DB.prepare('SELECT event,actor,detail,created_at FROM events WHERE order_id=? ORDER BY created_at').bind(id).all(),
-  env.DB.prepare('SELECT table_no FROM table_occupancy WHERE order_id=?').bind(id).first()
- ]);
- const items=itemsResult.results;
- const ids=items.map(i=>i.id);
- const modifiers=ids.length?(await env.DB.prepare('SELECT order_item_id,name,price_cents FROM order_item_modifiers WHERE order_item_id IN ('+ids.map(()=>'?').join(',')+')').bind(...ids).all()).results:[];
- return json({order:{...order,table_occupied:!!occupancy},items:items.map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)})),payments:paymentsResult.results,events:eventsResult.results});
-}
-if(path==='/api/pos/history'&&req.method==='GET'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const u=new URL(req.url),range=u.searchParams.get('range')||'today',method=u.searchParams.get('method')||'all',q=(u.searchParams.get('q')||'').trim().slice(0,80);
- const page=Math.max(1,Math.min(100000,Number.parseInt(u.searchParams.get('page')||'1',10)||1)),size=15;
- if(!['today','yesterday','custom','all'].includes(range)||!['all','cash','card','other'].includes(method))return json({error:'Invalid filters'},400);
- const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T12:00:00Z'))&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;
- const dateFmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'});
- const warsawDay=d=>{const parts=Object.fromEntries(dateFmt.formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return parts.year+'-'+parts.month+'-'+parts.day};
- const shiftDay=(day,days)=>{const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)};
- // Convert a Warsaw midnight to UTC using the timezone's actual offset (including DST).
- const midnightUtc=day=>{
-  const target=Date.parse(day+'T00:00:00Z');
-  const partsFmt=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  let t=target;
-  for(let i=0;i<3;i++){
-   const p=Object.fromEntries(partsFmt.formatToParts(new Date(t)).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
-   const local=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
-   t+=target-local;
-  }
-  return new Date(t).toISOString();
- };
- let from=null,to=null;
- if(range!=='all'){
-  const today=warsawDay(new Date());
-  from=range==='custom'?u.searchParams.get('from'):range==='today'?today:shiftDay(today,-1);
-  to=range==='custom'?u.searchParams.get('to'):from;
-  if(!validDate(from)||!validDate(to)||from>to)return json({error:'Invalid date range'},400);
- }
- const filters=["o.paid_at IS NOT NULL"],params=[];
- if(from){filters.push('o.paid_at >= ? AND o.paid_at < ?');params.push(midnightUtc(from),midnightUtc(shiftDay(to,1)))}
- if(q){filters.push('(o.id LIKE ? OR o.table_no LIKE ?)');params.push('%'+q+'%','%'+q+'%')}
- if(method!=='all'){filters.push('p.method=?');params.push(method)}
- const joined=" FROM orders o LEFT JOIN payments p ON p.id=(SELECT p2.id FROM payments p2 WHERE p2.order_id=o.id ORDER BY p2.created_at DESC,p2.id DESC LIMIT 1) WHERE "+filters.join(' AND ');
- const summary=(await env.DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(p.amount_cents),0) AS total_cents,COALESCE(SUM(CASE WHEN p.method='cash' THEN p.amount_cents ELSE 0 END),0) AS cash_cents,COALESCE(SUM(CASE WHEN p.method='card' THEN p.amount_cents ELSE 0 END),0) AS card_cents,COALESCE(SUM(CASE WHEN p.method='other' THEN p.amount_cents ELSE 0 END),0) AS other_cents"+joined).bind(...params).first());
- const orders=(await env.DB.prepare("SELECT o.id,o.source,o.table_no,o.paid_at,o.kitchen_completed_at,p.method,p.amount_cents"+joined+" ORDER BY o.paid_at DESC,o.id DESC LIMIT ? OFFSET ?").bind(...params,size,(page-1)*size).all()).results;
- return json({orders,total:Number(summary.total),page,size,summary:{total_cents:Number(summary.total_cents),cash_cents:Number(summary.cash_cents),card_cents:Number(summary.card_cents),other_cents:Number(summary.other_cents)},filters:{range,method,from,to}});
-}
-const checkoutMatch=path.match(/^\/api\/orders\/([^/]+)\/checkout$/);
-if(checkoutMatch&&req.method==='POST'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const b=await parse(req);
- if(!['cash','card','other'].includes(b?.method))return json({error:'Invalid payment method'},400);
- const id=checkoutMatch[1],order=await env.DB.prepare('SELECT id,source,status,paid_at FROM orders WHERE id=?').bind(id).first();
- if(!order)return json({error:'Ticket not found'},404);
- if(order.paid_at)return json({error:'Ticket already paid'},409);
- if(order.status==='cancelled')return json({error:'Cancelled ticket cannot be paid'},409);
- const amount=await env.DB.prepare('SELECT COALESCE(SUM(quantity*COALESCE(price_cents,0)),0) AS total FROM order_items WHERE order_id=?').bind(id).first();
- const unpriced=await env.DB.prepare('SELECT COUNT(*) AS n FROM order_items WHERE order_id=? AND price_cents IS NULL').bind(id).first();
- if(unpriced.n)return json({error:'Legacy ticket has unpriced items; cannot safely checkout'},409);
- const total=Number(amount.total);
- if(!Number.isSafeInteger(total)||total<0)return json({error:'Invalid ticket amount'},409);
- const now=new Date().toISOString(),paymentId=uid();
- const statements=[
-  env.DB.prepare('INSERT INTO payments(id,order_id,method,amount_cents,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND paid_at IS NULL AND status!=\'cancelled\')').bind(paymentId,id,b.method,total,now,id),
-  env.DB.prepare("UPDATE orders SET paid_at=?,updated_at=? WHERE id=? AND paid_at IS NULL AND status!='cancelled'").bind(now,now,id),
-  env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'paid',role,JSON.stringify({method:b.method,amount_cents:total}),now)
- ];
- const result=await env.DB.batch(statements);
- if(result[1].meta.changes!==1)return json({error:'Ticket already closed; refresh'},409);
- await broadcast(env,'orders',{id});return json({ok:true,amount_cents:total,paid_at:now});
-}
-
-if(path==='/api/orders'&&req.method==='POST'){if(!allowed(role,'pos'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!Array.isArray(b.items)||!b.items.length||b.items.length>100||typeof b.client_key!=='string'||b.client_key.length<16||!['dinein','takeaway','delivery'].includes(b.source))return json({error:'Invalid order'},400);const existing=await env.DB.prepare('SELECT id FROM orders WHERE client_key=?').bind(b.client_key).first();if(existing)return json({id:existing.id,duplicate:true});const ids=b.items.map(x=>x.menu_id);if(ids.some(x=>typeof x!=='string'))return json({error:'Invalid menu IDs'},400);const unique=[...new Set(ids)];const rows=(await env.DB.prepare(`SELECT * FROM menu WHERE active=1 AND id IN (${unique.map(()=>'?').join(',')})`).bind(...unique).all()).results;const lookup=new Map(rows.map(x=>[x.id,x]));if(unique.some(id=>!lookup.has(id))||b.items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))return json({error:'Invalid items'},400);if(b.source==='dinein'){
- if(!/^(0[1-9]|1[0-9]|20)$/.test(String(b.table_no||'')))return json({error:'Choose a table from 01 to 20'},400);
- const occupied=await env.DB.prepare("SELECT id FROM orders WHERE source='dinein' AND table_no=? AND paid_at IS NULL AND status!='cancelled' LIMIT 1").bind(b.table_no).first();
- if(occupied)return json({error:'Table already has an open ticket',order_id:occupied.id},409);
-}
-const id=uid(),now=new Date().toISOString();const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,b.source,String(b.table_no||'').slice(0,30),'new',String(b.note||'').slice(0,500),now,now,role,b.client_key)];if(b.source==='dinein')statements.push(env.DB.prepare('INSERT INTO table_occupancy(table_no,order_id,created_at) VALUES(?,?,?)').bind(b.table_no,id,now));try{statements.push(...await prepareOrderItems(env,b.items,id,now));}catch(e){return json({error:e.message},400);}statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',role,'{}',now));statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created','{}',now));try{await env.DB.batch(statements);}catch(e){console.error('ORDER_CREATE_D1_ERROR:',e?.message,e?.stack);const dup=await env.DB.prepare('SELECT id FROM orders WHERE client_key=?').bind(b.client_key).first();if(dup)return json({id:dup.id,duplicate:true});if(b.source==='dinein'&&String(e).includes('UNIQUE'))return json({error:'Table already occupied; refresh'},409);throw e;}await broadcast(env,'orders',{id});return json({id},201);}
-if(path==='/api/pos/pickups'&&req.method==='GET'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").all()).results;
- return json({items:rows});
-}
-const pickupAllMatch=path.match(/^\/api\/pos\/pickups\/orders\/([^/]+)\/ack-all$/);
-if(pickupAllMatch&&req.method==='POST'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const id=pickupAllMatch[1],now=new Date().toISOString();
- const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS (SELECT 1 FROM orders WHERE id=? AND status!='cancelled')").bind(now,id,id).run();
- if(result.meta.changes)await broadcast(env,'pickup',{order_id:id,acknowledged:result.meta.changes});
- return json({ok:true,count:result.meta.changes||0});
-}
-const pickupMatch=path.match(/^\/api\/pos\/pickups\/([^/]+)\/ack$/);
-if(pickupMatch&&req.method==='POST'){
- if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
- const now=new Date().toISOString();
- const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE id=? AND is_done=1 AND picked_up_at IS NULL AND order_id IN (SELECT id FROM orders WHERE status!='cancelled')").bind(now,pickupMatch[1]).run();
- if(!result.meta.changes)return json({error:'Dish is already picked up or no longer ready'},409);
- await broadcast(env,'pickup',{item_id:pickupMatch[1]});
- return json({ok:true});
-}
-const itemMatch=path.match(/^\/api\/order-items\/([^/]+)\/done$/);
-if(itemMatch&&req.method==='PATCH'){
- if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);
-   const item=await env.DB.prepare('SELECT oi.id,oi.order_id,o.status,o.paid_at,o.kitchen_completed_at FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE oi.id=?').bind(itemMatch[1]).first();
-  if(!item)return json({error:'Item not found'},404);
-  if(item.status==='cancelled')return json({error:'Cancelled order'},409);if(item.kitchen_completed_at)return json({error:'Reopen the completed order first'},409);
-  const now=new Date().toISOString();
-  const updated=await env.DB.prepare('UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END,picked_up_at=NULL WHERE id=? RETURNING is_done').bind(now,item.id).first();
-  if(!updated)return json({error:'Item not found'},404);
-  const next=updated.is_done;
-  await env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),item.order_id,next?'item_done':'item_undone',role,JSON.stringify({item_id:item.id}),now).run();
-  const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) done FROM order_items WHERE order_id=?').bind(item.order_id).first();
-  const newStatus=summary.total===summary.done?'done':'new';
-  await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=? AND status!='cancelled'").bind(newStatus,now,item.order_id).run();
-  await broadcast(env,'orders',{id:item.order_id,item_id:item.id});await broadcast(env,'pickup',{item_id:item.id,ready:!!next});return json({ok:true,is_done:next,order_status:newStatus});
-}
-const statusMatch=path.match(/^\/api\/orders\/([^/]+)\/status$/);
-if(statusMatch&&req.method==='PATCH'){if(!allowed(role,'kitchen'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!['cooking','done','cancelled'].includes(b.status))return json({error:'Invalid status'},400);if(b.status==='cancelled'&&role!=='admin')return json({error:'Admin only'},403);const id=statusMatch[1],old=await env.DB.prepare('SELECT status,paid_at FROM orders WHERE id=?').bind(id).first();if(!old)return json({error:'Not found'},404);if(old.paid_at&&b.status==='cancelled')return json({error:'Paid ticket cannot be cancelled'},409);if(old.status===b.status)return json({ok:true});const transitions={new:['cooking','cancelled'],cooking:['done','cancelled'],done:[],cancelled:[]};if(!transitions[old.status]?.includes(b.status))return json({error:'Invalid transition'},409);const now=new Date().toISOString();const result=await env.DB.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND status=?').bind(b.status,now,id,old.status).run();if(result.meta.changes!==1)return json({error:'Order changed, refresh'},409);if(b.status==='cancelled')await env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=?').bind(id).run();await event(env,id,'status',role,{from:old.status,to:b.status});await broadcast(env,'orders',{id});return json({ok:true});}
-const addMatch=path.match(/^\/api\/orders\/([^/]+)\/items$/);
-if(addMatch&&req.method==='POST'){if(!allowed(role,'pos'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||!Array.isArray(b.items)||!b.items.length||b.items.length>30)return json({error:'Invalid items'},400);const o=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=?').bind(addMatch[1]).first();if(!o||o.status==='cancelled'||o.paid_at||o.kitchen_completed_at)return json({error:'Order closed'},409);const keys=[...new Set(b.items.map(x=>x.menu_id))];if(keys.some(x=>typeof x!=='string'))return json({error:'Invalid menu'},400);const rows=(await env.DB.prepare(`SELECT * FROM menu WHERE active=1 AND id IN (${keys.map(()=>'?').join(',')})`).bind(...keys).all()).results;const map=new Map(rows.map(x=>[x.id,x]));if(keys.some(x=>!map.has(x))||b.items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))return json({error:'Invalid items'},400);const now=new Date().toISOString();let stmts;try{stmts=await prepareOrderItems(env,b.items,addMatch[1],now)}catch(e){return json({error:e.message},400)};stmts.push(env.DB.prepare("UPDATE orders SET status='new',updated_at=? WHERE id=?").bind(now,addMatch[1]));stmts.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),addMatch[1],'items_added',role,JSON.stringify({count:b.items.length}),now));await env.DB.batch(stmts);await broadcast(env,'orders',{id:addMatch[1]});return json({ok:true});}
-if(path==='/api/events'&&req.method==='GET'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);return json((await env.DB.prepare('SELECT * FROM events ORDER BY created_at DESC LIMIT 200').all()).results);}
-if(path==='/api/ws-diagnostics'&&req.method==='GET'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const response=await room(env).fetch('https://room.internal/diagnostics',{headers:{'x-room-secret':env.AUTH_SECRET}});return json(await response.json(),response.status);}
 if(path==='/api/health'&&req.method==='GET')return json({ok:true,time:new Date().toISOString()});
 if(path==='/api/scanner/reserve'&&req.method==='GET')return json({ready:false,message:'Scanner OCR is reserved for a later release; no external orders are imported.'});
 return json({error:'Not found'},404);
