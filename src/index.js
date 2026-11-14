@@ -369,6 +369,39 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
   return json({error:'Multi-store schema not installed',code:'MULTISTORE_SCHEMA_MISSING'},503);
  }
 }
+
+const storeConfigMatch=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/config$/);
+if(storeConfigMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ if(env.ENABLE_V3_STORE_ADMIN!=='true')return json({error:'Store configuration is disabled until V3 staging verification'},503);
+ const id=storeConfigMatch[1],b=await parse(req);
+ if(!b||typeof b.active!=='boolean')return json({error:'Expected active boolean'},400);
+ const store=await env.DB.prepare('SELECT id,code,active FROM stores WHERE id=?').bind(id).first();
+ if(!store)return json({error:'Store not found'},404);
+ if(store.code==='TEST'&&!b.active)return json({error:'Test store must remain available'},409);
+ const result=await env.DB.prepare('UPDATE stores SET active=? WHERE id=?').bind(b.active?1:0,id).run();
+ return json({ok:true,id,active:b.active,changed:result.meta.changes});
+}
+const storeMenuMatch=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/menu$/);
+if(storeMenuMatch&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const id=storeMenuMatch[1],store=await env.DB.prepare('SELECT id,code,name,active FROM stores WHERE id=?').bind(id).first();
+ if(!store)return json({error:'Store not found'},404);
+ const items=(await env.DB.prepare('SELECT m.id,m.name,m.category,m.price_cents AS base_price_cents,m.active AS base_active,o.price_cents AS override_price_cents,o.active AS override_active,COALESCE(o.sold_out,0) AS sold_out,o.updated_at FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? ORDER BY m.category,m.sort_order,m.name').bind(id).all()).results;
+ return json({store,items});
+}
+const storeMenuItemMatch=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/menu\/([^/]+)$/);
+if(storeMenuItemMatch&&req.method==='PUT'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ if(env.ENABLE_V3_STORE_ADMIN!=='true')return json({error:'Store menu editing is disabled until V3 staging verification'},503);
+ const storeId=storeMenuItemMatch[1],menuId=decodeURIComponent(storeMenuItemMatch[2]),b=await parse(req);
+ if(!b||!Number.isInteger(b.price_cents)&&b.price_cents!==null||b.price_cents!==null&&(b.price_cents<0||b.price_cents>10000000)||![null,true,false].includes(b.active)||typeof b.sold_out!=='boolean')return json({error:'Invalid menu override'},400);
+ const [store,item]=await Promise.all([env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first(),env.DB.prepare('SELECT id FROM menu WHERE id=?').bind(menuId).first()]);
+ if(!store||!item)return json({error:'Store or menu item not found'},404);
+ await env.DB.prepare('INSERT INTO store_menu_overrides(store_id,menu_id,price_cents,active,sold_out,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(store_id,menu_id) DO UPDATE SET price_cents=excluded.price_cents,active=excluded.active,sold_out=excluded.sold_out,updated_at=excluded.updated_at').bind(storeId,menuId,b.price_cents,b.active===null?null:b.active?1:0,b.sold_out?1:0,new Date().toISOString()).run();
+ await broadcastStore(env,storeId,'menu',{menu_id:menuId});
+ return json({ok:true});
+}
 // Cross-store paid sales report. TEST is excluded unless explicitly requested.
 if(path==='/api/admin/store-sales'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
