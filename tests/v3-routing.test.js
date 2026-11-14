@@ -14,7 +14,8 @@ test('device POS pickup paths map to backend scoped pickup routes',()=>{
 
 test('device mode rejects unknown API routes rather than falling back to legacy',()=>{
  assert.match(ui,/throw Error\('Device mode does not permit this endpoint:/);
- assert.match(api,/STORE_API_NOT_READY/);
+ assert.doesNotMatch(api,/STORE_API_NOT_READY/);
+ assert.match(api,/Unknown store-scoped API endpoint/);
 });
 
 test('store administration is not blocked by obsolete staging flags',()=>{
