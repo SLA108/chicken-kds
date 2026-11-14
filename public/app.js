@@ -822,20 +822,38 @@ function connectAdminWs(){
 }
 let overviewData=null,overviewError='',overviewBusy=false;
 async function loadOverview(){if(overviewBusy)return;overviewBusy=true;try{overviewData=await api('/admin/overview');overviewError='';}catch(e){overviewError=e.message;}finally{overviewBusy=false;}}
-function boWorkloadChart(rows,stores,key,title,subtitle){
- const points=Array.from({length:96},(_,i)=>i);
- const max=Math.max(1,...rows.map(r=>key==='avg'?r.completed?r.total_kitchen_minutes/r.completed:0:Number(r[key])||0));
- const colors=['#3183ce','#d18a30','#43a58a','#8b6ac9','#d35e76'];
- const paths=stores.map((store,j)=>{
-  const data=new Map(rows.filter(r=>r.store_id===store.store_id).map(r=>[r.slot,r]));
-  const pts=points.map(i=>{const r=data.get(i);const v=r?(key==='avg'?(r.completed?r.total_kitchen_minutes/r.completed:0):Number(r[key])||0):0;return (32+i*6)+','+(134-v/max*115);}).join(' ');
-  return '<polyline points="'+pts+'" fill="none" stroke="'+colors[j%colors.length]+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
- }).join('');
- return '<div class="bo-workload-chart"><h4>'+title+'</h4><p class="muted small">'+subtitle+'</p><svg viewBox="0 0 620 164" role="img" aria-label="'+title+'" preserveAspectRatio="none"><path d="M32 19 V134 H602" fill="none" stroke="#cbd5e1"/><path d="M32 77 H602" stroke="#e2e8f0" stroke-dasharray="4 4"/>'+paths+'<text x="32" y="156" font-size="12" fill="#64748b">00:00</text><text x="282" y="156" font-size="12" fill="#64748b">12:00</text><text x="564" y="156" font-size="12" fill="#64748b">24:00</text><text x="4" y="22" font-size="11" fill="#64748b">'+Math.ceil(max)+'</text></svg><div class="bo-workload-legend">'+stores.map((st,j)=>'<span><i style="background:'+colors[j%colors.length]+'"></i>'+esc(st.name)+'</span>').join('')+'</div></div>';
-}
+let boWorkloadMetrics=['orders','dishes'],boWorkloadStores=null;
+const boWorkloadDefs={orders:{label:'Orders',unit:'orders'},dishes:{label:'Dishes',unit:'dishes'},avg:{label:'Kitchen time',unit:'min'}};
+function boWorkloadValue(r,key){if(!r)return null;if(key==='avg')return r.completed?Number(r.total_kitchen_minutes)/Number(r.completed):null;return Number(r[key])||0;}
 function boWorkloadPanel(data){
- const rows=data?.workload||[],stores=data?.stores||[];
- return '<section class="bo-workload"><h3>Kitchen workload</h3><p class="muted small">Today · Europe/Warsaw · 15-minute intervals · excludes cancelled orders and TEST restaurant</p>'+(rows.length?boWorkloadChart(rows,stores,'orders','Incoming orders','New orders per 15 minutes')+boWorkloadChart(rows,stores,'dishes','Incoming dishes','New dish quantities per 15 minutes')+boWorkloadChart(rows,stores,'avg','Order → kitchen completed','Average minutes for completed orders, grouped by order creation time'):'<p class="muted small">No orders recorded today.</p>')+'<p class="muted small">Historical pending-dish workload will be added after event-history validation. Missing completion timestamps are excluded from the time average.</p></section>';
+ const rows=data?.workload||[],stores=data?.stores||[],colors=['#3183ce','#d18a30','#43a58a','#8b6ac9','#d35e76'];
+ if(boWorkloadStores===null)boWorkloadStores=stores.map(s=>s.store_id);
+ const active=stores.filter(s=>boWorkloadStores.includes(s.store_id)),metrics=boWorkloadMetrics;
+ const byStore=new Map(stores.map(s=>[s.store_id,new Map(rows.filter(r=>r.store_id===s.store_id).map(r=>[Number(r.slot),r]))]));
+ const left=metrics.filter(k=>k!=='avg'),right=metrics.includes('avg');
+ const maxLeft=Math.max(1,...rows.flatMap(r=>left.map(k=>boWorkloadValue(r,k)||0))),maxRight=Math.max(1,...rows.map(r=>boWorkloadValue(r,'avg')||0));
+ const x=i=>54+i*8.2,y=(v,max)=>200-(v/max)*164;
+ const lines=active.map(st=>{const si=stores.findIndex(s=>s.store_id===st.store_id),data=byStore.get(st.store_id);return metrics.map((k,mi)=>{
+  const pts=[];for(let i=0;i<96;i++){const v=boWorkloadValue(data.get(i),k);if(v===null){if(pts.length)pts.push(null);continue;}pts.push([x(i),y(v,k==='avg'?maxRight:maxLeft)]);}
+  const segments=[];let part=[];for(const p of pts){if(!p){if(part.length)segments.push(part);part=[];}else part.push(p);}if(part.length)segments.push(part);
+  return segments.map(part=>'<polyline points="'+part.map(p=>p.join(',')).join(' ')+'" fill="none" stroke="'+colors[si%colors.length]+'" stroke-width="2.8" stroke-dasharray="'+(k==='orders'?'none':k==='dishes'?'7 4':'2 5')+'" stroke-linejoin="round" stroke-linecap="round"/>').join('');
+ }).join('')}).join('');
+ const checks=Object.entries(boWorkloadDefs).map(([k,d])=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-metric="'+k+'" '+(metrics.includes(k)?'checked':'')+'>'+d.label+'</label>').join('');
+ const storeChecks=stores.map((st,i)=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-store="'+esc(st.store_id)+'" '+(boWorkloadStores.includes(st.store_id)?'checked':'')+'><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</label>').join('');
+ return '<section class="bo-workload"><h3>Kitchen workload</h3><p class="muted small">Today · Europe/Warsaw · 15-minute intervals · excludes cancelled orders and TEST restaurant</p><div class="bo-workload-chart"><div class="bo-workload-controls"><div><strong>Metrics</strong><div class="bo-workload-options">'+checks+'</div></div><div><strong>Restaurants</strong><div class="bo-workload-options">'+storeChecks+'</div></div></div><div class="bo-workload-plot"><svg id="bo-workload-svg" viewBox="0 0 890 245" role="img" aria-label="Interactive restaurant workload comparison" preserveAspectRatio="none"><path d="M54 36 V200 H834" fill="none" stroke="#b7c6d8"/><path d="M54 118 H834" fill="none" stroke="#e1e7ef" stroke-dasharray="4 5"/>'+lines+'<line id="bo-workload-cursor" x1="54" x2="54" y1="36" y2="200" stroke="#64748b" stroke-dasharray="3 3" visibility="hidden"/><rect x="54" y="36" width="780" height="164" fill="transparent" id="bo-workload-hit"/><text x="54" y="225" font-size="13" fill="#64748b">00:00</text><text x="430" y="225" font-size="13" fill="#64748b">12:00</text><text x="790" y="225" font-size="13" fill="#64748b">24:00</text><text x="6" y="39" font-size="12" fill="#64748b">'+Math.ceil(maxLeft)+'</text>'+(right?'<text x="848" y="39" font-size="12" fill="#64748b">'+Math.ceil(maxRight)+'m</text>':'')+'</svg><div id="bo-workload-tooltip" class="bo-workload-tooltip" hidden></div></div><p class="muted small">Solid: Orders · Dashed: Dishes · Dotted: Kitchen time. Left axis: counts · Right axis: minutes. Hover or tap for exact values.</p></div><p class="muted small">Kitchen time uses only orders with a recorded completion timestamp. Historical pending-dish load is not yet shown.</p></section>';
+}
+function bindBoWorkload(){
+ document.querySelectorAll('[data-bo-metric]').forEach(el=>el.onchange=()=>{const k=el.dataset.boMetric;boWorkloadMetrics=el.checked?[...new Set([...boWorkloadMetrics,k])]:boWorkloadMetrics.filter(v=>v!==k);admin();});
+ document.querySelectorAll('[data-bo-store]').forEach(el=>el.onchange=()=>{const k=el.dataset.boStore;boWorkloadStores=el.checked?[...new Set([...boWorkloadStores,k])]:boWorkloadStores.filter(v=>v!==k);admin();});
+ const svg=document.querySelector('#bo-workload-svg'),tip=document.querySelector('#bo-workload-tooltip');if(!svg||!tip||!overviewData)return;
+ const rows=overviewData.workload||[],stores=overviewData.stores||[];
+ const map=new Map(rows.map(r=>[r.store_id+':'+r.slot,r]));
+ const show=e=>{const rect=svg.getBoundingClientRect(),px=(e.clientX-rect.left)/rect.width*890,slot=Math.max(0,Math.min(95,Math.round((px-54)/8.2)));if(px<45||px>845){tip.hidden=true;svg.querySelector('#bo-workload-cursor').setAttribute('visibility','hidden');return;}
+  const time=String(Math.floor(slot/4)).padStart(2,'0')+':'+String(slot%4*15).padStart(2,'0');
+  const content=(boWorkloadStores||[]).map(id=>{const st=stores.find(s=>s.store_id===id),r=map.get(id+':'+slot);return st?'<div><strong>'+esc(st.name)+'</strong> · '+boWorkloadMetrics.map(k=>boWorkloadDefs[k].label+': '+(boWorkloadValue(r,k)===null?'—':(k==='avg'?boWorkloadValue(r,k).toFixed(1):boWorkloadValue(r,k)))+' '+boWorkloadDefs[k].unit).join(' · ')+'</div>':'';}).join('');
+  tip.innerHTML='<strong>'+time+'</strong>'+content;tip.hidden=false;svg.querySelector('#bo-workload-cursor').setAttribute('x1',String(54+slot*8.2));svg.querySelector('#bo-workload-cursor').setAttribute('x2',String(54+slot*8.2));svg.querySelector('#bo-workload-cursor').setAttribute('visibility','visible');
+ };
+ svg.onpointermove=show;svg.onclick=show;svg.onpointerleave=()=>{tip.hidden=true;svg.querySelector('#bo-workload-cursor').setAttribute('visibility','hidden');};
 }
 function overviewPanel(){
  const t=overviewData?.total||{paid_cents:0,unpaid_cents:0,total_cents:0,orders:0,unpriced_orders:0};
@@ -1008,6 +1026,7 @@ function admin(){
  const done=document.getElementById('super-config-done');if(done)done.onclick=()=>{const line=superCart.find(x=>x.configuring);if(!line)return;for(const g of superLinks.filter(x=>x.menu_id===line.menu_id)){const count=line.option_ids.filter(id=>superOptions.some(o=>o.id===id&&o.group_id===g.group_id)).length;if(count<g.min_select||count>g.max_select){notify('Select '+g.min_select+' to '+g.max_select+' options for '+g.name);return;}}delete line.configuring;admin()};
  const cancel=document.getElementById('super-config-cancel');if(cancel)cancel.onclick=()=>{superCart=superCart.filter(x=>!x.configuring);admin()};
  const submit=document.getElementById('super-submit');if(submit)submit.onclick=async()=>{if(superBusy||!superStore||!superCart.length||superCart.some(x=>x.configuring))return;superBusy=true;submit.disabled=true;try{const result=await api('/admin/super-pos/orders','POST',{store_id:superStore,source:superSource,table_no:superSource==='dinein'?superTable:'',customer_name:superCustomer,customer_phone:superPhone,note:superNote,client_key:superKey,items:superCart.map(x=>({menu_id:x.menu_id,quantity:x.quantity,option_ids:x.option_ids,note:x.note}))});superCart=[];superKey=crypto.randomUUID();superCustomer='';superPhone='';superNote='';superError='';notify('Order sent to restaurant · '+result.id.slice(0,8));}catch(e){superError=e.message;}finally{superBusy=false;admin()}};
+ if(adminTab==='overview')bindBoWorkload();
  const overviewRefresh=document.querySelector('#bo-overview-refresh');if(overviewRefresh)overviewRefresh.onclick=async()=>{await loadOverview();if(adminTab==='overview')admin();};
  const reloadOrders=()=>{adminOrdersOffset=0;adminOrdersLoaded=false;loadAdminOrders().then(()=>{if(adminTab==='orders')admin()})};
  document.querySelector('#admin-orders-limit').onchange=e=>{adminOrdersLimit=Number(e.target.value);reloadOrders()};
