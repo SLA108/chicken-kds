@@ -79,10 +79,11 @@ test('Warsaw reservation reminders use calendar components instead of host-local
  assert.doesNotMatch(block,/Date\.parse\(/);
 });
 
-test('POS and Kitchen device cookies and pairing sessions remain independent',()=>{
- assert.match(api,/const roleCookie=\(role\)=>'ck_device_'\+role/);
- assert.match(api,/const rolePairCookie=\(role\)=>'ck_pair_'\+role/);
- assert.match(api,/device\.role!==role/);
+test('one paired restaurant device can renew independent POS and Kitchen sessions',()=>{
+ assert.match(api,/const roleCookie=\(role\)=>'ck_device'/);
+ assert.match(api,/const rolePairCookie=\(role\)=>'ck_pair'/);
+ assert.match(api,/issueStoreSession\(env\.AUTH_SECRET,\{role,storeId:store\.id,deviceId:device\.id\}\)/);
+ assert.match(api,/session\.role!=='scanner'&&boundRole\.role==='scanner'/);
  assert.match(api,/renewalCookie\(role,device\.id,match\.credential\)/);
  assert.match(app,/pair\/start\?role=/);
  assert.match(app,/pair\/status\?role=/);
