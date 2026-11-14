@@ -432,3 +432,6 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .bo-nav button.selected{background:#dbeafe;color:#1d4ed8}
 .bo-content{min-width:0}
 @media(max-width:850px){.bo-layout{grid-template-columns:minmax(0,1fr)}.bo-sidebar{position:static;padding:10px}.bo-brand{padding:4px 8px 10px}.bo-nav{display:flex;overflow-x:auto;gap:6px}.bo-nav button{width:auto;flex:0 0 auto;white-space:nowrap;padding:10px 12px}}
+
+/* Distinct Back Office workspaces share stable form handlers. */
+.bo-restaurants-view .bo-device-section,.bo-devices-view .bo-restaurant-section{display:none}
