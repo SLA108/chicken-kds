@@ -128,10 +128,10 @@ if(sessionToken){
   const total=Number(totalRow.total);
   if(!Number.isSafeInteger(total)||total<0)return json({error:'Invalid total'},409);
   const now=new Date().toISOString(),paymentId=uid();
-  // D1 batch is transactional; the unique paid_at update guards duplicate checkout.
+  // D1 batch is transactional. changes() ties payment insertion to the immediately preceding successful checkout UPDATE; the V3 unique index also prevents duplicate payments.
   const result=await env.DB.batch([
    env.DB.prepare("UPDATE orders SET paid_at=?,updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND status!='cancelled'").bind(now,now,id,storeId),
-   env.DB.prepare("INSERT INTO payments(id,order_id,method,amount_cents,created_at,store_id) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND paid_at=?)").bind(paymentId,id,b.method,total,now,storeId,id,storeId,now),
+   env.DB.prepare("INSERT INTO payments(id,order_id,method,amount_cents,created_at,store_id) SELECT ?,?,?,?,?,? WHERE changes()=1 AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND paid_at=?)").bind(paymentId,id,b.method,total,now,storeId,id,storeId,now),
    env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'paid',?,?,? WHERE EXISTS(SELECT 1 FROM payments WHERE id=? AND store_id=?)").bind(uid(),id,session.role,JSON.stringify({method:b.method,amount_cents:total,store_id:storeId}),now,paymentId,storeId)
   ]);
   if(result[0].meta.changes!==1)return json({error:'Ticket already closed; refresh'},409);
