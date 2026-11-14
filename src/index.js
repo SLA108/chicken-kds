@@ -623,6 +623,12 @@ if(reservationMatch&&req.method==='PATCH'){
 }
 if(path==='/api/store/reservations'&&req.method==='GET'){
  if(session.role!=='pos')return json({error:'Forbidden'},403);
+ const changedSince=new URL(req.url).searchParams.get('changed_since');
+ if(changedSince!==null){
+  if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(changedSince))return json({error:'Invalid change cursor'},400);
+  const changes=(await env.DB.prepare('SELECT id,store_id,starts_at,party_size,guest_name,phone,note,status,created_at,updated_at FROM reservations WHERE store_id=? AND updated_at>? ORDER BY updated_at ASC,id ASC LIMIT 200').bind(session.storeId,changedSince).all()).results;
+  return json({changes});
+ }
  const q=new URL(req.url).searchParams,from=q.get('from')||'',to=q.get('to')||'';
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)return json({error:'Invalid date range'},400);
  const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? AND status!='cancelled' ORDER BY starts_at ASC LIMIT 200").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999999').all()).results;
