@@ -603,7 +603,7 @@ if(path==='/api/admin/reservations'&&req.method==='POST'){
  if(!store)return json({error:'Restaurant unavailable'},404);
  const now=new Date().toISOString(),id=uid();
  await env.DB.prepare('INSERT INTO reservations(id,store_id,starts_at,party_size,guest_name,phone,note,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,b.store_id,b.starts_at,b.party_size,String(b.guest_name||'').slice(0,120),String(b.phone||'').slice(0,80),String(b.note||'').slice(0,500),'booked',now,now).run();
- await broadcastStore(env,b.store_id,'reservations',{id});
+ await broadcastStore(env,b.store_id,'reservations',{action:'created',reservation:{id,store_id:b.store_id,starts_at:b.starts_at,party_size:b.party_size,guest_name:String(b.guest_name||'').slice(0,120),phone:String(b.phone||'').slice(0,80),note:String(b.note||'').slice(0,500),status:'booked'}});
  return json({ok:true,id},201);
 }
 const reservationMatch=path.match(/^\/api\/admin\/reservations\/([^/]+)$/);
@@ -616,7 +616,9 @@ if(reservationMatch&&req.method==='PATCH'){
  if(typeof storeId!=='string'||typeof startsAt!=='string'||!/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(startsAt)||!Number.isInteger(party)||party<1||party>50||!['booked','arrived','cancelled','no_show'].includes(status))return json({error:'Invalid reservation'},400);
  const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first();if(!store)return json({error:'Restaurant unavailable'},404);
  await env.DB.prepare('UPDATE reservations SET store_id=?,starts_at=?,party_size=?,guest_name=?,phone=?,note=?,status=?,updated_at=? WHERE id=?').bind(storeId,startsAt,party,String(b.guest_name??existing.guest_name).slice(0,120),String(b.phone??existing.phone).slice(0,80),String(b.note??existing.note).slice(0,500),status,new Date().toISOString(),id).run();
- await broadcastStore(env,existing.store_id,'reservations',{id});if(storeId!==existing.store_id)await broadcastStore(env,storeId,'reservations',{id});
+ const updatedReservation={id,store_id:storeId,starts_at:startsAt,party_size:party,guest_name:String(b.guest_name??existing.guest_name).slice(0,120),phone:String(b.phone??existing.phone).slice(0,80),note:String(b.note??existing.note).slice(0,500),status};
+ if(storeId!==existing.store_id)await broadcastStore(env,existing.store_id,'reservations',{action:'cancelled',reservation:{...updatedReservation,store_id:existing.store_id,status:'cancelled'}});
+ await broadcastStore(env,storeId,'reservations',{action:status==='cancelled'?'cancelled':existing.status==='cancelled'?'created':'updated',reservation:updatedReservation});
  return json({ok:true,id});
 }
 if(path==='/api/store/reservations'&&req.method==='GET'){
