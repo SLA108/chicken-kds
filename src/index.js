@@ -1,3 +1,4 @@
+import {issueStoreSession,verifyStoreSession,sha256Hex,activeDeviceStore} from './store-auth.js';
 const json=(x,status=200,extra={})=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',...extra}});
 const uid=()=>crypto.randomUUID();
 const roles={pos:['pos','admin'],kitchen:['kitchen','admin'],admin:['admin'],scanner:['scanner','pos','admin']};
@@ -42,6 +43,33 @@ export default {async fetch(req,env){const url=new URL(req.url);const path=url.p
 if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitchen','/admin','/scanner','/'].includes(path))assetPath='/';return env.ASSETS.fetch(new Request(new URL(assetPath,url),req));}
 if(!env.AUTH_SECRET||!env.POS_PIN||!env.KITCHEN_PIN||!env.ADMIN_PIN||!env.SCANNER_PIN)return json({error:'Server secrets not configured'},503);
 if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||!['pos','kitchen','admin','scanner'].includes(b.role))return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
+// Device exchange requires BOTH the role PIN and the per-device secret.
+// Existing role PINs remain for legacy routes until the full cutover.
+if(path==='/api/device/session'&&req.method==='POST'){
+ const b=await parse(req);
+ if(!b||!['pos','kitchen','scanner'].includes(b.role)||typeof b.pin!=='string'||typeof b.device_id!=='string'||typeof b.enrollment_secret!=='string'||!/^[0-9a-f]{64}$/.test(b.enrollment_secret))return json({error:'Invalid device login'},400);
+ const expected=env[b.role.toUpperCase()+'_PIN'];
+ if(!expected||b.pin!==expected)return json({error:'Invalid credentials'},401);
+ const tokenHash=await sha256Hex(b.enrollment_secret);
+ const device=await env.DB.prepare('SELECT id,store_id FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(b.device_id,tokenHash).first();
+ if(!device)return json({error:'Invalid credentials'},401);
+ const store=await activeDeviceStore(env,device.id,device.store_id);
+ if(!store)return json({error:'Store unavailable'},403);
+ const token=await issueStoreSession(env.AUTH_SECRET,{role:b.role,storeId:store.store_id,deviceId:store.id});
+ return json({token,role:b.role,store:{id:store.store_id,code:store.code,name:store.name},expires_in:28800,api_enabled:false});
+}
+const bearer=(req.headers.get('authorization')||'').replace(/^Bearer /,'');
+const wsProtocol=req.headers.get('sec-websocket-protocol')||'';
+const sessionToken=bearer.startsWith('cks1.')?bearer:wsProtocol.startsWith('ckauth.cks1.')?wsProtocol.slice('ckauth.'.length):'';
+if(sessionToken){
+ const session=await verifyStoreSession(env.AUTH_SECRET,sessionToken);
+ if(!session)return json({error:'Invalid or expired device session'},401);
+ const device=await activeDeviceStore(env,session.deviceId,session.storeId);
+ if(!device)return json({error:'Device revoked or store inactive'},403);
+ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},expires_at:session.expiresAt,api_enabled:false});
+ // Fail closed: do not grant access to unscoped legacy APIs.
+ return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
+}
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
 // V3.0 read-only store inventory. Requires migration 0007.
