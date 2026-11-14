@@ -850,7 +850,7 @@ function boWorkloadPanel(data){
  const choices=Object.entries(boWorkloadDefs).map(([k,d])=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-metric="'+k+'" '+(metrics.includes(k)?'checked':'')+'>'+d.label+'</label>').join('');
  const storeChoices=stores.map((st,i)=>'<label class="bo-workload-choice"><input type="checkbox" data-bo-store="'+esc(st.store_id)+'" '+(boWorkloadStores.includes(st.store_id)?'checked':'')+'><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</label>').join('');
  const samples=Object.entries(boWorkloadDefs).map(([k,d])=>'<span class="bo-workload-sample'+(metrics.includes(k)?'':' muted')+'"><svg viewBox="0 0 44 12" width="44" height="12" aria-hidden="true"><line x1="2" x2="42" y1="6" y2="6" stroke="#3183ce" stroke-width="3" stroke-dasharray="'+(d.dash||'none')+'" stroke-linecap="round"/></svg>'+d.label+'</span>').join('');
- return '<section class="bo-workload"><h3>Kitchen workload</h3><div class="bo-workload-datebar"><label for="bo-workload-date">Date</label><button type="button" data-bo-date-step="-1" aria-label="Previous day">‹</button><input id="bo-workload-date" type="date" value="'+boWorkloadDate+'" max="'+warsawToday()+'"><button type="button" data-bo-date-step="1" aria-label="Next day" '+(boWorkloadDate>=warsawToday()?'disabled':'')+'>›</button><button type="button" data-bo-date-today>Today</button><span>Europe/Warsaw · 10:00–00:00 · 15-minute intervals</span></div><div class="bo-workload-chart"><div class="bo-workload-controls"><div><strong>Metrics</strong><div class="bo-workload-options">'+choices+'</div></div><div><strong>Restaurants</strong><div class="bo-workload-options">'+storeChoices+'</div></div></div><div class="bo-workload-chart-heading"><strong>Restaurant workload comparison</strong><span>Counts (left) · Minutes (right)</span></div><div class="bo-workload-plot"><svg id="bo-workload-svg" viewBox="0 0 870 252" role="img" aria-label="Workload by restaurant and metric" preserveAspectRatio="xMidYMid meet">'+ticks+lines+'<line id="bo-workload-cursor" x1="60" x2="60" y1="50" y2="205" stroke="#64748b" stroke-dasharray="3 3" visibility="hidden"/><rect x="60" y="50" width="760" height="155" fill="transparent"/>'+hours+'<text x="60" y="18" font-size="12" fill="#64748b">Orders / Dishes</text>'+(metrics.includes('avg')?'<text x="820" y="18" text-anchor="end" font-size="12" fill="#64748b">Kitchen min</text>':'')+'</svg><div id="bo-workload-tooltip" class="bo-workload-tooltip" hidden></div></div><div class="bo-workload-samples">'+samples+'</div><div class="bo-workload-legend">'+active.map(st=>{const i=stores.findIndex(s=>s.store_id===st.store_id);return '<span><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</span>';}).join('')+'</div></div><p class="muted small">Kitchen time: order creation to kitchen completion. Cancelled orders excluded.</p></section>';
+ return '<section class="bo-workload"><h3>Kitchen workload</h3><div class="bo-workload-datebar"><label for="bo-workload-date">Date</label><button type="button" data-bo-date-step="-1" aria-label="Previous day">‹</button><input id="bo-workload-date" type="date" value="'+boWorkloadDate+'" max="'+warsawToday()+'"><button type="button" data-bo-date-step="1" aria-label="Next day" '+(boWorkloadDate>=warsawToday()?'disabled':'')+'>›</button><button type="button" data-bo-date-today>Today</button><span>Europe/Warsaw · 10:00–00:00 · 15-minute intervals</span></div><div class="bo-workload-chart"><div class="bo-workload-controls"><div><strong>Metrics</strong><div class="bo-workload-options">'+choices+'</div></div><div><strong>Restaurants</strong><div class="bo-workload-options">'+storeChoices+'</div></div></div><div class="bo-workload-chart-heading"><strong>Restaurant workload comparison</strong><span>Counts (left) · Minutes (right)</span></div><div id="bo-workload-mobile-detail" class="bo-workload-mobile-detail" hidden></div><div class="bo-workload-plot"><svg id="bo-workload-svg" viewBox="0 0 870 252" role="img" aria-label="Workload by restaurant and metric" preserveAspectRatio="xMidYMid meet">'+ticks+lines+'<line id="bo-workload-cursor" x1="60" x2="60" y1="50" y2="205" stroke="#64748b" stroke-dasharray="3 3" visibility="hidden"/><rect x="60" y="50" width="760" height="155" fill="transparent"/>'+hours+'<text x="60" y="18" font-size="12" fill="#64748b">Orders / Dishes</text>'+(metrics.includes('avg')?'<text x="820" y="18" text-anchor="end" font-size="12" fill="#64748b">Kitchen min</text>':'')+'</svg></div><div id="bo-workload-tooltip" class="bo-workload-tooltip" hidden></div><div class="bo-workload-samples">'+samples+'</div><div class="bo-workload-legend">'+active.map(st=>{const i=stores.findIndex(s=>s.store_id===st.store_id);return '<span><i style="background:'+colors[i%colors.length]+'"></i>'+esc(st.name)+'</span>';}).join('')+'</div></div><p class="muted small">Kitchen time: order creation to kitchen completion. Cancelled orders excluded.</p></section>';
 }
 function bindBoWorkload(){
  const setDay=async day=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||day>warsawToday()||day===boWorkloadDate)return;boWorkloadDate=day;await loadOverview();admin();};
@@ -859,18 +859,41 @@ function bindBoWorkload(){
  const todayButton=document.querySelector('[data-bo-date-today]');if(todayButton)todayButton.onclick=()=>setDay(warsawToday());
  document.querySelectorAll('[data-bo-metric]').forEach(el=>el.onchange=()=>{const k=el.dataset.boMetric;boWorkloadMetrics=el.checked?[...new Set([...boWorkloadMetrics,k])]:boWorkloadMetrics.filter(v=>v!==k);admin();});
  document.querySelectorAll('[data-bo-store]').forEach(el=>el.onchange=()=>{const k=el.dataset.boStore;boWorkloadStores=el.checked?[...new Set([...boWorkloadStores,k])]:boWorkloadStores.filter(v=>v!==k);admin();});
- const svg=document.querySelector('#bo-workload-svg'),tip=document.querySelector('#bo-workload-tooltip');if(!svg||!tip||!overviewData)return;
+ const svg=document.querySelector('#bo-workload-svg'),tip=document.querySelector('#bo-workload-tooltip'),mobile=document.querySelector('#bo-workload-mobile-detail');if(!svg||!tip||!overviewData)return;
  const rows=overviewData.workload||[],stores=overviewData.workload_stores||overviewData.stores||[],map=new Map(rows.map(r=>[r.store_id+':'+r.slot,r])),cursor=svg.querySelector('#bo-workload-cursor');
+ const isMobile=()=>window.matchMedia('(max-width:700px)').matches;
+ const xFromSlot=slot=>60+(slot-40)*760/56;
  const show=e=>{
   const ctm=svg.getScreenCTM();if(!ctm)return;const point=svg.createSVGPoint();point.x=e.clientX;point.y=e.clientY;const px=point.matrixTransform(ctm.inverse()).x;
-  if(px<60||px>820){tip.hidden=true;cursor.setAttribute('visibility','hidden');return;}
+  if(px<60||px>820)return;
   const slot=Math.max(40,Math.min(95,Math.floor((px-60)/(760/56)+40))),start=String(Math.floor(slot/4)).padStart(2,'0')+':'+String(slot%4*15).padStart(2,'0');
   const end=String((Math.floor(slot/4)+(slot%4===3?1:0))%24).padStart(2,'0')+':'+String((slot%4+1)%4*15).padStart(2,'0');
-  tip.innerHTML='<strong>'+start+' – '+end+'</strong>'+(boWorkloadStores||[]).map(id=>{const st=stores.find(s=>s.store_id===id),r=map.get(id+':'+slot);return st?'<div class="bo-workload-tip-store"><strong>'+esc(st.name)+'</strong>'+boWorkloadMetrics.map(k=>{const v=boWorkloadValue(r,k);return '<div class="bo-workload-tip-row"><span>'+boWorkloadDefs[k].label+'</span><b>'+(v===null?'—':k==='avg'?v.toFixed(1)+' min':v)+'</b></div>';}).join('')+'</div>':'';}).join('');
-  tip.hidden=false;cursor.setAttribute('x1',String(xFromSlot(slot)));cursor.setAttribute('x2',String(xFromSlot(slot)));cursor.setAttribute('visibility','visible');
+  const selected=stores.filter(st=>(boWorkloadStores||[]).includes(st.store_id));
+  const details=selected.map(st=>({st,r:map.get(st.store_id+':'+slot)}));
+  if(isMobile()){
+   tip.hidden=true;
+   if(mobile){
+    const header='<div class="bo-workload-mobile-head"><strong>'+start+' – '+end+'</strong><button type="button" data-workload-close aria-label="Close details">×</button></div>';
+    const head='<div class="bo-workload-mobile-grid bo-workload-mobile-label"><span>Restaurant</span><span>Orders</span><span>Dishes</span><span>Min</span></div>';
+    const body=details.map(({st,r})=>{const i=stores.findIndex(x=>x.store_id===st.store_id),v=boWorkloadValue(r,'avg');return '<div class="bo-workload-mobile-grid"><span><i style="background:'+['#3183ce','#d18a30','#43a58a','#8b6ac9','#d35e76'][i%5]+'"></i>'+esc(st.name)+'</span><b>'+(boWorkloadValue(r,'orders')||0)+'</b><b>'+(boWorkloadValue(r,'dishes')||0)+'</b><b>'+(v===null?'—':v.toFixed(1))+'</b></div>';}).join('');
+    mobile.innerHTML=header+head+body;mobile.hidden=false;
+    mobile.querySelector('[data-workload-close]').onclick=()=>{mobile.hidden=true;cursor.setAttribute('visibility','hidden');};
+   }
+  }else{
+   if(mobile)mobile.hidden=true;
+   tip.innerHTML='<strong>'+start+' – '+end+'</strong>'+details.map(({st,r})=>'<div class="bo-workload-tip-store"><strong>'+esc(st.name)+'</strong>'+boWorkloadMetrics.map(k=>{const v=boWorkloadValue(r,k);return '<div class="bo-workload-tip-row"><span>'+boWorkloadDefs[k].label+'</span><b>'+(v===null?'—':k==='avg'?v.toFixed(1)+' min':v)+'</b></div>';}).join('')+'</div>').join('');
+   tip.hidden=false;
+   const plot=svg.parentElement,svgRect=svg.getBoundingClientRect(),plotRect=plot.getBoundingClientRect();
+   const left=Math.max(4,Math.min(plot.clientWidth-tip.offsetWidth-4,e.clientX-plotRect.left+12));
+   const top=Math.max(4,Math.min(plot.clientHeight-tip.offsetHeight-4,e.clientY-plotRect.top+12));
+   tip.style.left=left+'px';tip.style.top=top+'px';
+  }
+  cursor.setAttribute('x1',String(xFromSlot(slot)));cursor.setAttribute('x2',String(xFromSlot(slot)));cursor.setAttribute('visibility','visible');
  };
- const xFromSlot=slot=>60+(slot-40)*760/56;
- svg.onpointermove=show;svg.onclick=show;svg.onpointerleave=()=>{tip.hidden=true;cursor.setAttribute('visibility','hidden');};
+ svg.onpointermove=e=>{if(!isMobile())show(e);};
+ svg.onclick=show;
+ svg.onpointerleave=()=>{if(!isMobile()){tip.hidden=true;cursor.setAttribute('visibility','hidden');}};
+
 }
 function overviewPanel(){
  const t=overviewData?.total||{paid_cents:0,unpaid_cents:0,total_cents:0,orders:0,unpriced_orders:0};
