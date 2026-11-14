@@ -9,7 +9,7 @@ function scopedApiPath(path){
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
  throw Error('Device mode does not permit this endpoint: '+path);
 }
-let deviceStores=[],currentDeviceStore=null,renewalPending=null,storeSelectionPending=false;
+let deviceStores=[],currentDeviceStore=null,renewalPending=null,storeSelectionPending=false,storeEpoch=0;
 const lastStoreKey='ck_last_store_'+page;
 async function renewDeviceSession(){
  if(!['pos','kitchen'].includes(page))return false;
@@ -32,6 +32,7 @@ async function renewDeviceSession(){
    deviceStores=result.stores||[];currentDeviceStore=result.store||null;
    storeSelectionPending=!localStorage.getItem(lastStoreKey)&&deviceStores.length>1;
    if(oldStoreId&&currentDeviceStore?.id!==oldStoreId){
+    storeEpoch++;kitchenRefreshSerial++;
     // Server changed the active store: invalidate the old socket and UI.
     disconnect();
     sessionStorage.removeItem('ck_token_'+page);
@@ -143,16 +144,16 @@ function login(){
  }
  if(!selected)return;const form=document.querySelector('#role-login-form');form.onsubmit=async e=>{e.preventDefault();const btn=document.querySelector('#enter');btn.disabled=true;btn.textContent='Signing in…';try{const deviceId=document.querySelector('#device-id')?.value.trim()||'',deviceSecret=document.querySelector('#device-secret')?.value.trim()||'';if(Boolean(deviceId)!==Boolean(deviceSecret))throw Error('Enter both device ID and enrollment secret');const deviceLogin=Boolean(deviceId);const r=await fetch(deviceLogin?'/api/device/session':'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value,...(deviceLogin?{device_id:deviceId,enrollment_secret:deviceSecret}:{})})});const b=await r.json();if(!r.ok)throw Error(b.error||'Sign-in failed');token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start()}catch(err){document.querySelector('#loginerr').textContent=err.message}finally{btn.disabled=false;btn.textContent='Sign in'}};
 }
-async function refresh(initial=false){const serial=++kitchenRefreshSerial;try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}if(page==='kitchen'){
+async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=storeEpoch,store=currentDeviceStore?.id;const stale=()=>epoch!==storeEpoch||store!==currentDeviceStore?.id||serial!==kitchenRefreshSerial;try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);if(stale())return;menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}if(stale())return;if(page==='kitchen'){
   // Ignore stale overlapping responses and preserve optimistic dish states until save settles.
-  if(serial!==kitchenRefreshSerial)return;
+  if(stale())return;
   for(const order of o)for(const item of order.items||[]){
    if(kitchenPending.has(item.id))item.is_done=kitchenPending.get(item.id)?1:0;
   }
  }
- const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();lastIds=current;lastItemIds=currentItemIds;orders=o;if(page==='pos'){try{tableState=await api('/tables')}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial)}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+ const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();lastIds=current;lastItemIds=currentItemIds;orders=o;if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let reconnectTimer=null,wsGeneration=0;
-function disconnect(){pickupInitialized=false;pickupItems=[];pickupSerial++;document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
+function disconnect(){storeEpoch++;kitchenRefreshSerial++;pickupInitialized=false;pickupItems=[];pickupSerial++;document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
 function connect(){
  if(!token)return;
  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
