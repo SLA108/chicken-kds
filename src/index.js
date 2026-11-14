@@ -602,11 +602,22 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   for(const i of items){if(!byOrder.has(i.order_id))byOrder.set(i.order_id,[]);byOrder.get(i.order_id).push({...i,modifiers:byItem.get(i.id)||[]});}
   const payments=(await env.DB.prepare('SELECT order_id,COALESCE(SUM(amount_cents),0) AS paid_cents FROM payments WHERE order_id IN ('+marks+') GROUP BY order_id').bind(...ids).all()).results;
   const paymentByOrder=new Map(payments.map(p=>[p.order_id,Number(p.paid_cents)||0]));
+  const tipRows=(await env.DB.prepare('SELECT order_id,method,COALESCE(SUM(amount_cents),0) AS amount_cents FROM order_tips WHERE order_id IN ('+marks+') GROUP BY order_id,method').bind(...ids).all()).results;
+  const tipsByOrder=new Map();
+  for(const t of tipRows){
+   const entry=tipsByOrder.get(t.order_id)||{cash:0,card:0};
+   if(t.method==='cash'||t.method==='card')entry[t.method]+=Number(t.amount_cents)||0;
+   tipsByOrder.set(t.order_id,entry);
+  }
   for(const o of visible){
    o.items=byOrder.get(o.id)||[];
    o.total_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.price_cents)||0),0);
    o.discount_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.discount_cents)||0),0);
    o.original_total_cents=o.total_cents+o.discount_cents;
+   const orderTips=tipsByOrder.get(o.id)||{cash:0,card:0};
+   o.cash_tips_cents=orderTips.cash;
+   o.card_tips_cents=orderTips.card;
+   o.tips_total_cents=orderTips.cash+orderTips.card;
    o.paid_cents=paymentByOrder.get(o.id)||0;
    o.unpaid_cents=Math.max(0,o.total_cents-o.paid_cents);
    o.has_unpriced_items=o.items.some(i=>i.price_cents==null);
