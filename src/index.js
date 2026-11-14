@@ -65,15 +65,19 @@ if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitc
 if(!env.AUTH_SECRET||!env.ADMIN_PIN)return json({error:'Server secrets not configured'},503);
 if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||b.role!=='admin')return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
 // Pairing approval issues an HttpOnly device cookie used for scoped session renewal.
-const renewalCookie=(id,secret)=>'ck_device='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=31536000';
-const clearRenewalCookie='ck_device=; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=0';
-// Device pairing: no user-visible credentials. Pending request is bound to a
-// browser-only HttpOnly secret, never to the six-digit display code alone.
-const pairCookie=(secret)=>'ck_pair='+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=600';
-const clearPairCookie='ck_pair=; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=0';
-const pairSecret=req.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('ck_pair='))?.slice(8)||'';
+// Independent, HttpOnly role credentials prevent POS/Kitchen overwriting each other.
+const deviceRoles=['pos','kitchen','scanner'];
+const roleCookie=(role)=>'ck_device_'+role;
+const rolePairCookie=(role)=>'ck_pair_'+role;
+const cookieValue=(name)=>(req.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1)||'';
+const renewalCookie=(role,id,secret)=>roleCookie(role)+'='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=31536000';
+const clearRenewalCookie=(role)=>roleCookie(role)+'=; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=0';
+const pairCookie=(role,secret)=>rolePairCookie(role)+'='+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=600';
+const clearPairCookie=(role)=>rolePairCookie(role)+'=; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=0';
+const legacyCookie=cookieValue('ck_device');
 if(path==='/api/device/pair/start'&&req.method==='POST'){
  if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
+ const role=url.searchParams.get('role');if(!deviceRoles.includes(role))return json({error:'Invalid device role'},400);
  const secret=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
  const id=uid(),code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,'0');
  const now=new Date(),expiry=new Date(now.getTime()+10*60*1000);
@@ -83,12 +87,15 @@ if(path==='/api/device/pair/start'&&req.method==='POST'){
 }
 if(path==='/api/device/pair/status'&&req.method==='GET'){
  if(req.headers.get('sec-fetch-site')==='cross-site')return json({error:'Forbidden'},403);
+ const role=url.searchParams.get('role');if(!deviceRoles.includes(role))return json({error:'Invalid device role'},400);
+ const pairSecret=cookieValue(rolePairCookie(role));
  if(!/^[0-9a-f]{64}$/.test(pairSecret))return json({error:'Pairing not started'},401);
  const request=await env.DB.prepare("SELECT id,status,device_id,expires_at FROM device_pair_requests WHERE secret_hash=? ORDER BY created_at DESC LIMIT 1").bind(await sha256Hex(pairSecret)).first();
- if(!request||pairingExpired(request.expires_at))return json({status:'expired'},410,{'set-cookie':clearPairCookie});
+ if(!request||pairingExpired(request.expires_at))return json({status:'expired'},410,{'set-cookie':clearPairCookie(role)});
  if(request.status!=='approved')return json({status:'pending'});
  const device=await env.DB.prepare("SELECT id,store_id,role,token_hash FROM pos_devices WHERE id=? AND active=1").bind(request.device_id).first();
  if(!device)return json({error:'Device unavailable'},403);
+ if(device.role!==role)return json({error:'Device role mismatch'},403);
  const allowedStores=await listAllowedDeviceStores(env,device.id);
  if(!allowedStores.length)return json({error:'No authorized active stores'},403);
  const initialStore=allowedStores.find(s=>s.id===device.store_id)||allowedStores[0];
@@ -98,36 +105,37 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  if(!updated.meta.changes)return json({error:'Pairing already claimed'},409);
  await env.DB.prepare("UPDATE device_pair_requests SET status='expired' WHERE id=?").bind(request.id).run();
  const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:initialStore.id,deviceId:device.id});
- const response=json({status:'approved',token,role:device.role,store:initialStore,stores:allowedStores});response.headers.append('set-cookie',renewalCookie(device.id,credential));response.headers.append('set-cookie',clearPairCookie);return response;
+ const response=json({status:'approved',token,role:device.role,store:initialStore,stores:allowedStores});response.headers.append('set-cookie',renewalCookie(role,device.id,credential));response.headers.append('set-cookie',clearPairCookie(role));return response;
 }
 if(path==='/api/device/renew'&&req.method==='POST'){
  const origin=req.headers.get('origin');
  if(origin!==url.origin)return json({error:'Invalid origin'},403);
- const cookie=(req.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('ck_device='));
- const match=parseDeviceCookie(cookie);
+ const body=req.headers.get('content-type')?.includes('application/json')?await parse(req):{};
+ const role=body?.role;if(!deviceRoles.includes(role))return json({error:'Invalid device role'},400);
+ const named=cookieValue(roleCookie(role));
+ const match=parseDeviceCookie(named?roleCookie(role)+'='+named:legacyCookie?'ck_device='+legacyCookie:'');
  if(!match)return json({error:'Device enrollment required'},401);
  const digest=await sha256Hex(match.credential);
  const device=await env.DB.prepare('SELECT id,store_id,role FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(match.deviceId,digest).first();
- if(!device||!['pos','kitchen','scanner'].includes(device.role))return json({error:'Device revoked or invalid'},401,{'set-cookie':clearRenewalCookie});
+ if(!device||device.role!==role)return json({error:'Device revoked or role mismatch'},401);
  const stores=await listAllowedDeviceStores(env,device.id);
  if(!stores.length)return json({error:'No authorized active stores'},403);
  let selectedId=device.store_id,explicitStore=false;
- if(req.headers.get('content-type')?.includes('application/json')){
-  const body=await parse(req);
-  if(body?.store_id!==undefined){
+ if(body?.store_id!==undefined){
    if(typeof body.store_id!=='string')return json({error:'Invalid store selection'},400);
    selectedId=body.store_id;explicitStore=true;
-  }
  }
  const store=stores.find(s=>s.id===selectedId)||(!explicitStore?stores[0]:null);
  if(!store)return json({error:'Store not authorized'},403);
  const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:store.id,deviceId:device.id});
- return json({token,role:device.role,store,stores,expires_in:28800},200,{'set-cookie':renewalCookie(device.id,match.credential)});
+ return json({token,role:device.role,store,stores,expires_in:28800},200,{'set-cookie':renewalCookie(role,device.id,match.credential)});
 }
 if(path==='/api/device/logout'&&req.method==='POST'){
  const origin=req.headers.get('origin');
  if(origin!==url.origin)return json({error:'Invalid origin'},403);
- return json({ok:true},200,{'set-cookie':clearRenewalCookie});
+ const body=req.headers.get('content-type')?.includes('application/json')?await parse(req):{};
+ const role=body?.role;if(!deviceRoles.includes(role))return json({error:'Invalid device role'},400);
+ return json({ok:true},200,{'set-cookie':clearRenewalCookie(role)});
 }
 const bearer=(req.headers.get('authorization')||'').replace(/^Bearer /,'');
 const wsProtocol=req.headers.get('sec-websocket-protocol')||'';
