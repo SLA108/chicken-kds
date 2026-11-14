@@ -17,9 +17,9 @@ test('device mode rejects unknown API routes rather than falling back to legacy'
  assert.match(api,/STORE_API_NOT_READY/);
 });
 
-test('admin V3 store configuration requires explicit feature flag',()=>{
- assert.match(api,/ENABLE_V3_STORE_ADMIN!=='true'/);
- assert.match(api,/Store configuration is disabled until V3 staging verification/);
+test('store administration is not blocked by obsolete staging flags',()=>{
+ assert.doesNotMatch(api,/ENABLE_V3_STORE_ADMIN/);
+ assert.match(api,/multistore_enabled:true/);
 });
 
 test('store-specific paid order detail scopes all lookups',()=>{
