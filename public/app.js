@@ -48,10 +48,18 @@ async function renewDeviceSession(){
  try{return await renewalPending}finally{renewalPending=null;}
 }
 async function api(path,method='GET',data){
+ const epoch=storeEpoch,store=currentDeviceStore?.id;
+ const valid=()=>epoch===storeEpoch&&store===currentDeviceStore?.id;
  const request=()=>fetch('/api'+scopedApiPath(path),{method,headers:{'authorization':'Bearer '+token,'content-type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});
  let r=await request();
- if((r.status===401||r.status===403)&&deviceMode()&&await renewDeviceSession())r=await request();
- const out=await r.json();if(!r.ok)throw Error(out.error||'Request failed');return out;
+ if(!valid())throw Error('Store changed; request discarded');
+ if((r.status===401||r.status===403)&&deviceMode()&&await renewDeviceSession()){
+  if(!valid())throw Error('Store changed; request discarded');
+  r=await request();
+ }
+ if(!valid())throw Error('Store changed; request discarded');
+ const out=await r.json();if(!valid())throw Error('Store changed; request discarded');
+ if(!r.ok)throw Error(out.error||'Request failed');return out;
 }
 function notify(msg){const el=document.createElement('div');el.className='notice';el.style.cssText='position:fixed;bottom:15px;right:15px;z-index:99;box-shadow:0 8px 30px #0002;max-width:350px';el.textContent=msg;document.body.append(el);setTimeout(()=>el.remove(),3800)}
 function sound(){if(!beepEnabled||!audio)return;try{const t=audio.currentTime;const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.setValueAtTime(880,t);osc.frequency.setValueAtTime(660,t+.17);gain.gain.setValueAtTime(.15,t);gain.gain.exponentialRampToValueAtTime(.001,t+.4);osc.connect(gain).connect(audio.destination);osc.start(t);osc.stop(t+.4)}catch{}}
