@@ -112,3 +112,11 @@ test('restaurant device approval has no POS Kitchen role selection',()=>{
  assert.match(api,/b\.role==='scanner'\?'scanner':'pos'/);
  assert.match(api,/b\.role!==undefined/);
 });
+
+test('Super POS mobile separates order cart and reservation navigation',()=>{
+ assert.match(app,/data-super-mobile-tab="order"/);
+ assert.match(app,/data-super-mobile-tab="cart"/);
+ assert.match(app,/data-super-mobile-tab="reservations"/);
+ assert.match(app,/data-super-active=/);
+ assert.match(app,/super-mobile-reservations/);
+});
