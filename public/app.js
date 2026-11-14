@@ -18,7 +18,7 @@ async function renewDeviceSession(){
  renewalPending=(async()=>{
   try{
    const preferredStore=localStorage.getItem(lastStoreKey);
-   const request=storeId=>fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(storeId?{store_id:storeId}:{})});
+   const request=storeId=>fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(storeId?{role:page,store_id:storeId}:{role:page})});
    let r=await request(preferredStore);
    // A previously selected store may have been revoked. Retry without a
    // selection so the server chooses a currently authorized active store.
@@ -154,14 +154,14 @@ async function acknowledgePickupAll(orderId){
 function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div class="ck-header-brand"><img class="ck-header-logo" src="/chicken-i-kimchi-logo-web.webp" alt="" onerror="this.hidden=true"><span><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</span></div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${page==='admin'?'online':connected?'online':'offline'}">● ${page==='admin'?'Back Office':connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=async()=>{if(deviceMode()){if(!confirm('This device will stay paired. Return to the staff sign-in screen?'))return;sessionStorage.removeItem('ck_token_'+page);token='';disconnect();await renewDeviceSession();if(token)start();else login();return;}sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};storeBanner();}
 let pairPoll=null;
 async function beginPairing(){
- const r=await fetch('/api/device/pair/start',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'}});
+ const r=await fetch('/api/device/pair/start?role='+encodeURIComponent(page),{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'}});
  const b=await r.json();if(!r.ok)throw Error(b.error||'Pairing unavailable');
  const box=document.querySelector('#pairing-box');if(!box)return;
  box.innerHTML='<strong>Device pairing code: '+esc(b.code)+'</strong><p>Ask a Back Office administrator to approve this code. Expires in 10 minutes.</p>';
  clearInterval(pairPoll);
  pairPoll=setInterval(async()=>{
   try{
-   const response=await fetch('/api/device/pair/status',{credentials:'same-origin'});
+   const response=await fetch('/api/device/pair/status?role='+encodeURIComponent(page),{credentials:'same-origin'});
    if(response.status===410){clearInterval(pairPoll);box.textContent='Pairing expired. Click Pair this device to try again.';return;}
    if(!response.ok){if(response.status===409||response.status===403){clearInterval(pairPoll);box.textContent='Pairing unavailable. Please request a new code.';}return;}
    const data=await response.json();if(data.status!=='approved')return;
@@ -281,7 +281,7 @@ function storeBanner(){
    const button=overlay.querySelector('button[type="submit"]');button.disabled=true;
    try{
     // Verify the target grant with the server before changing local selection.
-    const response=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({store_id:selected})});
+    const response=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,store_id:selected})});
     if(!response.ok)throw Error('This store is no longer authorized or the network is unavailable.');
     const result=await response.json();
     if(result.store?.id!==selected||result.role!==page)throw Error('Store authorization could not be verified.');
