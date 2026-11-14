@@ -231,14 +231,25 @@ if(sessionToken){
  const scopedRelease=path.match(/^\/api\/store\/orders\/([^/]+)\/release-table$/);
  if(scopedRelease&&req.method==='POST'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const body=await parse(req),tipAmount=body?.tip_amount_cents??0;
+  if(!Number.isSafeInteger(tipAmount)||tipAmount<0||tipAmount>10000000||(tipAmount>0&&!['cash','card'].includes(body?.tip_method)))return json({error:'Invalid tip'},400);
   const id=scopedRelease[1],storeId=session.storeId;
-  const order=await env.DB.prepare("SELECT id,table_no FROM orders WHERE id=? AND store_id=? AND source='dinein'").bind(id,storeId).first();
+  const order=await env.DB.prepare("SELECT id,table_no,paid_at FROM orders WHERE id=? AND store_id=? AND source='dinein'").bind(id,storeId).first();
   if(!order)return json({error:'Dine-in order not found'},404);
-  const result=await env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=? AND store_id=?').bind(id,storeId).run();
-  if(!result.meta.changes)return json({error:'Table already released'},409);
+  if(tipAmount>0&&!order.paid_at)return json({error:'Checkout the order before adding a tip'},409);
+  const now=new Date().toISOString(),statements=[
+   env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=? AND store_id=?').bind(id,storeId)
+  ];
+  if(tipAmount>0){
+   const requestKey=body?.tip_request_key;
+   if(typeof requestKey!=='string'||requestKey.length<16||requestKey.length>128)return json({error:'Invalid tip request key'},400);
+   statements.push(env.DB.prepare("INSERT INTO order_tips(id,order_id,store_id,amount_cents,method,stage,created_at,actor,request_key) SELECT ?,?,?,?,?,?,?,?,? WHERE changes()=1 AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND paid_at IS NOT NULL)").bind(uid(),id,storeId,tipAmount,body.tip_method,'release',now,session.role,requestKey,id,storeId));
+  }
+  const result=await env.DB.batch(statements);
+  if(result[0].meta.changes!==1)return json({error:'Table already released'},409);
   await event(env,id,'table_released',session.role,{table_no:order.table_no,store_id:storeId});
   await broadcastStore(env,storeId,'orders',{id});
-  return json({ok:true});
+  return json({ok:true,tip_amount_cents:tipAmount});
  }
 
  const orderLookup=path.match(/^\/api\/store\/orders\/by-client-key\/([^/]+)$/);
