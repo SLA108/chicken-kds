@@ -97,23 +97,6 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:initialStore.id,deviceId:device.id});
  const response=json({status:'approved',token,role:device.role,store:initialStore,stores:allowedStores});response.headers.append('set-cookie',renewalCookie(device.id,credential));response.headers.append('set-cookie',clearPairCookie);return response;
 }
-if(path==='/api/device/session'&&req.method==='POST'){
- const b=await parse(req);
- if(!b||!isDeviceRole(b.role)||typeof b.pin!=='string'||typeof b.device_id!=='string'||typeof b.enrollment_secret!=='string'||!/^[0-9a-f]{64}$/.test(b.enrollment_secret))return json({error:'Invalid device login'},400);
- const expected=env[b.role.toUpperCase()+'_PIN'];
- if(!expected||b.pin!==expected)return json({error:'Invalid credentials'},401);
- const tokenHash=await sha256Hex(b.enrollment_secret);
- const device=await env.DB.prepare('SELECT id,store_id,role FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(b.device_id,tokenHash).first();
- if(!device||device.role&&device.role!==b.role)return json({error:'Invalid credentials'},401);
- if(!device.role){
-  const claimed=await env.DB.prepare('UPDATE pos_devices SET role=? WHERE id=? AND role IS NULL AND active=1').bind(b.role,device.id).run();
-  if(!claimed.meta.changes)return json({error:'Device role already assigned; retry with its original role'},409);
- }
- const store=await allowedDeviceStore(env,device.id,device.store_id);
- if(!store)return json({error:'Store unavailable'},403);
- const token=await issueStoreSession(env.AUTH_SECRET,{role:b.role,storeId:store.store_id,deviceId:device.id});
- return json({token,role:b.role,store:{id:store.store_id,code:store.code,name:store.name},expires_in:28800,api_enabled:true},200,{'set-cookie':renewalCookie(device.id,b.enrollment_secret)});
-}
 if(path==='/api/device/renew'&&req.method==='POST'){
  const origin=req.headers.get('origin');
  if(origin!==url.origin)return json({error:'Invalid origin'},403);
@@ -602,22 +585,6 @@ if(path==='/api/admin/devices'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const devices=(await env.DB.prepare("SELECT d.id,d.store_id,s.code AS store_code,s.name AS store_name,d.label,d.active,d.created_at,d.revoked_at FROM pos_devices d JOIN stores s ON s.id=d.store_id ORDER BY d.created_at DESC LIMIT 200").all()).results;
  return json({devices,device_auth_enabled:false});
-}
-if(path==='/api/admin/devices'&&req.method==='POST'){
- if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- const b=await parse(req);
- if(!b||typeof b.store_id!=='string'||typeof b.label!=='string'||!b.label.trim()||b.label.length>100)return json({error:'Invalid device registration'},400);
- const store=await env.DB.prepare('SELECT id,code,name,active FROM stores WHERE id=?').bind(b.store_id).first();
- if(!store||!store.active)return json({error:'Active store not found'},404);
- const deviceId=uid(),credential=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
- const digest=await crypto.subtle.digest('SHA-256',encoder.encode(credential));
- const tokenHash=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');
- const createdAt=new Date().toISOString();
- await env.DB.batch([
-  env.DB.prepare('INSERT INTO pos_devices(id,store_id,label,token_hash,active,created_at) VALUES(?,?,?,?,1,?)').bind(deviceId,store.id,b.label.trim(),tokenHash,createdAt),
-  env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,store.id,createdAt)
- ]);
- return json({id:deviceId,store_id:store.id,label:b.label.trim(),enrollment_secret:credential,device_auth_enabled:false},201);
 }
 const revokeDeviceMatch=path.match(/^\/api\/admin\/devices\/([0-9a-f-]{36})\/revoke$/);
 if(revokeDeviceMatch&&req.method==='POST'){
