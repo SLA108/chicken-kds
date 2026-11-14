@@ -238,7 +238,15 @@ if(sessionToken){
   try{statements=await prepareOrderItems(env,b.items,id,now,storeId);}catch(e){return json({error:e.message},400);}
   statements.push(env.DB.prepare("UPDATE orders SET status='new',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(now,id,storeId));
   statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'items_added',session.role,JSON.stringify({count:b.items.length,store_id:storeId}),now));
-  const result=await env.DB.batch(statements);
+  let result;
+  try{result=await env.DB.batch(statements);}
+  catch(e){
+   // Migration 0009 rejects additions when checkout or kitchen completion wins
+   // the race. Report a recoverable conflict, not an internal server error.
+   const current=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
+   if(!current||current.status==='cancelled'||current.paid_at||current.kitchen_completed_at)return json({error:'Order changed; refresh'},409);
+   throw e;
+  }
   if(result[result.length-2].meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await broadcastStore(env,storeId,'orders',{id});
   return json({ok:true});
