@@ -62,6 +62,35 @@ if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typ
 // It is restricted to the renewal endpoint; JS cannot read the long-lived credential.
 const renewalCookie=(id,secret)=>'ck_device='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device/renew; Max-Age=31536000';
 const clearRenewalCookie='ck_device=; HttpOnly; Secure; SameSite=Strict; Path=/api/device/renew; Max-Age=0';
+// Device pairing: no user-visible credentials. Pending request is bound to a
+// browser-only HttpOnly secret, never to the six-digit display code alone.
+const pairCookie=(secret)=>'ck_pair='+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=600';
+const clearPairCookie='ck_pair=; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=0';
+const pairSecret=req.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('ck_pair='))?.slice(8)||'';
+if(path==='/api/device/pair/start'&&req.method==='POST'){
+ if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
+ const secret=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+ const id=uid(),code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,'0');
+ const now=new Date(),expiry=new Date(now.getTime()+10*60*1000);
+ try{await env.DB.prepare("INSERT INTO device_pair_requests(id,code,secret_hash,created_at,expires_at) VALUES(?,?,?,?,?)").bind(id,code,await sha256Hex(secret),now.toISOString(),expiry.toISOString()).run();}
+ catch{return json({error:'Please retry pairing'},409);}
+ return json({code,expires_at:expiry.toISOString()},200,{'set-cookie':pairCookie(secret)});
+}
+if(path==='/api/device/pair/status'&&req.method==='GET'){
+ if(!/^[0-9a-f]{64}$/.test(pairSecret))return json({error:'Pairing not started'},401);
+ const request=await env.DB.prepare("SELECT id,status,device_id,expires_at FROM device_pair_requests WHERE secret_hash=? ORDER BY created_at DESC LIMIT 1").bind(await sha256Hex(pairSecret)).first();
+ if(!request||Date.parse(request.expires_at)<=Date.now())return json({status:'expired'},410,{'set-cookie':clearPairCookie});
+ if(request.status!=='approved')return json({status:'pending'});
+ const device=await env.DB.prepare("SELECT d.id,d.store_id,d.role,d.token_hash,s.code,s.name FROM pos_devices d JOIN stores s ON s.id=d.store_id WHERE d.id=? AND d.active=1 AND s.active=1").bind(request.device_id).first();
+ if(!device)return json({error:'Device unavailable'},403);
+ // Rotate the pairing secret into a long-lived credential only after approval.
+ const credential=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+ const updated=await env.DB.prepare('UPDATE pos_devices SET token_hash=? WHERE id=? AND token_hash IS NULL AND active=1').bind(await sha256Hex(credential),device.id).run();
+ if(!updated.meta.changes)return json({error:'Pairing already claimed'},409);
+ await env.DB.prepare("UPDATE device_pair_requests SET status='expired' WHERE id=?").bind(request.id).run();
+ const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:device.store_id,deviceId:device.id});
+ return json({status:'approved',token,role:device.role,store:{id:device.store_id,code:device.code,name:device.name}},200,{'set-cookie':renewalCookie(device.id,credential)+', '+clearPairCookie});
+}
 if(path==='/api/device/session'&&req.method==='POST'){
  const b=await parse(req);
  if(!b||!['pos','kitchen','scanner'].includes(b.role)||typeof b.pin!=='string'||typeof b.device_id!=='string'||typeof b.enrollment_secret!=='string'||!/^[0-9a-f]{64}$/.test(b.enrollment_secret))return json({error:'Invalid device login'},400);
@@ -481,6 +510,31 @@ if(path==='/api/admin/store-sales'&&req.method==='GET'){
 // V3 device enrollment foundation: admin-only; credentials are stored hashed.
 // Device credentials do not authorize any POS/KDS endpoint until the
 // store-scoped session and authorization rollout is complete.
+if(path==='/api/admin/device-pairings'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const rows=(await env.DB.prepare("SELECT code,created_at,expires_at FROM device_pair_requests WHERE status='pending' AND expires_at>? ORDER BY created_at DESC LIMIT 30").bind(new Date().toISOString()).all()).results;
+ return json({requests:rows});
+}
+if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
+ const b=await parse(req);
+ if(!b||!/^[0-9]{6}$/.test(b.code||'')||!['pos','kitchen','scanner'].includes(b.role)||typeof b.label!=='string'||!b.label.trim()||b.label.length>100||typeof b.secondary_pin!=='string')return json({error:'Invalid approval'},400);
+ if(!env.DEVICE_APPROVAL_PIN||env.DEVICE_APPROVAL_PIN.length<8)return json({error:'Secondary approval password not configured'},503);
+ if(await sha256Hex(b.secondary_pin)!==await sha256Hex(env.DEVICE_APPROVAL_PIN))return json({error:'Incorrect secondary password'},403);
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(b.store_id).first();
+ if(!store)return json({error:'Active store not found'},404);
+ const now=new Date().toISOString(),deviceId=uid();
+ // Transactional, single-use claim: only one administrator can approve a code.
+ const pairing=await env.DB.prepare("SELECT id FROM device_pair_requests WHERE code=? AND status='pending' AND expires_at>?").bind(b.code,now).first();
+ if(!pairing)return json({error:'Code expired or already used'},409);
+ const result=await env.DB.batch([
+  env.DB.prepare('INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) VALUES(?,?,?,?,?,1,?)').bind(deviceId,store.id,b.label.trim(),null,b.role,now),
+  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now)
+ ]);
+ if(!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
+ return json({ok:true,device_id:deviceId});
+}
 if(path==='/api/admin/devices'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const devices=(await env.DB.prepare("SELECT d.id,d.store_id,s.code AS store_code,s.name AS store_name,d.label,d.active,d.created_at,d.revoked_at FROM pos_devices d JOIN stores s ON s.id=d.store_id ORDER BY d.created_at DESC LIMIT 200").all()).results;
