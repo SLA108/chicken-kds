@@ -530,7 +530,7 @@ if(path==='/api/admin/store-sales'&&req.method==='GET'){
 if(/^\/api\/admin\/devices\/[^/]+\/stores$/.test(path)&&['GET','PUT'].includes(req.method)){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const deviceId=decodeURIComponent(path.split('/')[4]);
- const device=await env.DB.prepare('SELECT id,active FROM pos_devices WHERE id=?').bind(deviceId).first();
+ const device=await env.DB.prepare('SELECT id,store_id,active FROM pos_devices WHERE id=?').bind(deviceId).first();
  if(!device)return json({error:'Device not found'},404);
  if(req.method==='GET'){
   const stores=(await env.DB.prepare('SELECT s.id,s.code,s.name,s.active FROM device_store_access a JOIN stores s ON s.id=a.store_id WHERE a.device_id=? ORDER BY s.name').bind(deviceId).all()).results;
