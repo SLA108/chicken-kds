@@ -179,6 +179,50 @@ if(sessionToken){
   await broadcastStore(env,storeId,'orders',{id});
   return json({id},201);
  }
+
+ const scopedItemDone=path.match(/^\/api\/store\/order-items\/([^/]+)\/done$/);
+ if(scopedItemDone&&req.method==='PATCH'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const item=await env.DB.prepare("SELECT i.id,i.order_id,o.status,o.kitchen_completed_at FROM order_items i JOIN orders o ON o.id=i.order_id WHERE i.id=? AND o.store_id=?").bind(scopedItemDone[1],session.storeId).first();
+  if(!item)return json({error:'Item not found'},404);
+  if(item.status==='cancelled'||item.kitchen_completed_at)return json({error:'Order is closed'},409);
+  const now=new Date().toISOString();
+  const updated=await env.DB.prepare("UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END,picked_up_at=NULL WHERE id=? AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL) RETURNING is_done").bind(now,item.id,item.order_id,session.storeId).first();
+  if(!updated)return json({error:'Order changed; refresh'},409);
+  const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) done FROM order_items WHERE order_id=?').bind(item.order_id).first();
+  const nextStatus=summary.total===summary.done?'done':'new';
+  await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status!='cancelled'").bind(nextStatus,now,item.order_id,session.storeId).run();
+  await event(env,item.order_id,updated.is_done?'item_done':'item_undone',session.role,{item_id:item.id,store_id:session.storeId});
+  await broadcastStore(env,session.storeId,'orders',{id:item.order_id,item_id:item.id});
+  await broadcastStore(env,session.storeId,'pickup',{item_id:item.id,ready:!!updated.is_done});
+  return json({ok:true,is_done:updated.is_done,order_status:nextStatus});
+ }
+ const scopedStatus=path.match(/^\/api\/store\/orders\/([^/]+)\/status$/);
+ if(scopedStatus&&req.method==='PATCH'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const b=await parse(req);
+  if(!['cooking','done'].includes(b?.status))return json({error:'Invalid status'},400);
+  const id=scopedStatus[1],old=await env.DB.prepare('SELECT status,paid_at FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
+  if(!old)return json({error:'Not found'},404);
+  if(old.status===b.status)return json({ok:true});
+  const transitions={new:['cooking'],cooking:['done']};
+  if(!transitions[old.status]?.includes(b.status))return json({error:'Invalid transition'},409);
+  const now=new Date().toISOString();
+  const result=await env.DB.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status=?').bind(b.status,now,id,session.storeId,old.status).run();
+  if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  await event(env,id,'status',session.role,{from:old.status,to:b.status,store_id:session.storeId});
+  await broadcastStore(env,session.storeId,'orders',{id});
+  return json({ok:true});
+ }
+ const scopedPickup=path.match(/^\/api\/store\/pickups\/([^/]+)\/ack$/);
+ if(scopedPickup&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const now=new Date().toISOString();
+  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS (SELECT 1 FROM orders WHERE id=order_items.order_id AND store_id=? AND status!='cancelled')").bind(now,scopedPickup[1],session.storeId).run();
+  if(!result.meta.changes)return json({error:'Dish unavailable'},409);
+  await broadcastStore(env,session.storeId,'pickup',{item_id:scopedPickup[1]});
+  return json({ok:true});
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
