@@ -92,10 +92,34 @@ async function acknowledgePickupAll(orderId){
  }catch(e){notify('Pick Up All: '+e.message);await loadPickups(false)}
 }
 function shell(content){document.body.className=page==='kitchen'?'kitchen':'';app.innerHTML=`<header><div><strong>Chicken i Kimchi</strong> · ${esc(labels[page]||'POS')}</div><nav>${Object.keys(labels).map(p=>`<a class="${page===p?'active':''}" href="/${p}">${labels[p]}</a>`).join('')}</nav><div class="toolbar"><span class="status ${connected?'online':'offline'}">● ${connected?'Live':'Connecting / Offline'}</span><button class="alt" id="logout">Log out</button></div></header><main>${content}</main>`;document.querySelector('#logout').onclick=async()=>{if(deviceMode())await fetch('/api/device/logout',{method:'POST',credentials:'same-origin'}).catch(()=>{});sessionStorage.removeItem('ck_token_'+page);token='';disconnect();render()};}
+let pairPoll=null;
+async function beginPairing(){
+ const r=await fetch('/api/device/pair/start',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'}});
+ const b=await r.json();if(!r.ok)throw Error(b.error||'Pairing unavailable');
+ const box=document.querySelector('#pairing-box');if(!box)return;
+ box.innerHTML='<strong>Device pairing code: '+esc(b.code)+'</strong><p>Ask a Back Office administrator to approve this code. Expires in 10 minutes.</p>';
+ clearInterval(pairPoll);
+ pairPoll=setInterval(async()=>{
+  try{
+   const response=await fetch('/api/device/pair/status',{credentials:'same-origin'});
+   if(response.status===410){clearInterval(pairPoll);box.textContent='Pairing expired. Click Pair this device to try again.';return;}
+   if(!response.ok)return;
+   const data=await response.json();if(data.status!=='approved')return;
+   clearInterval(pairPoll);
+   if(data.role!==page){box.textContent='Approved for '+data.role+'. Open the corresponding role page.';return;}
+   token=data.token;sessionStorage.setItem('ck_token_'+page,token);await start();
+  }catch(e){console.warn('Pairing check failed',e)}
+ },2500);
+}
 function login(){
  const choices=[{id:'pos',icon:'🧾',name:'Front of House POS',desc:'Sales and open tickets'},{id:'kitchen',icon:'👨‍🍳',name:'Kitchen Display',desc:'Orders and completed dishes'},{id:'admin',icon:'📊',name:'Back Office',desc:'Reports and menu'},{id:'scanner',icon:'📷',name:'Delivery Scanner',desc:'Coming soon'}];
  const selected=choices.find(x=>x.id===page);document.body.className='role-login-body';
  app.innerHTML=`<div class="role-login-screen"><section class="role-login-box"><div class="role-brand"><div class="role-brand-mark">C<span>&</span>K</div><h1>Chicken i Kimchi</h1><p>RESTAURANT MANAGEMENT SYSTEM</p></div><h2>${selected?selected.name:'Select your role'}</h2><p class="role-subtitle">${selected?'Enter your PIN to continue':'Select a role to sign in'}</p><div class="role-selection">${choices.map(r=>`<a class="role-choice ${selected?.id===r.id?'role-selected':''}" href="/${r.id}"><span class="role-icon">${r.icon}</span><span class="role-info"><strong>${r.name}</strong><small>${r.desc}</small></span></a>`).join('')}</div>${selected?`<form id="role-login-form" class="role-pin-section"><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN" required>${['pos','kitchen'].includes(page)?'<label for="device-id">Device ID (optional for existing system)</label><input id="device-id" autocomplete="off" placeholder="Registered device ID"><label for="device-secret">Enrollment secret</label><input id="device-secret" type="password" autocomplete="off" placeholder="Device enrollment secret">':''}<button id="enter" type="submit">Sign in</button><p id="loginerr" class="role-login-error" role="alert"></p></form>`:'<p class="role-login-hint">Each role has its own PIN.</p>'}<div class="role-login-footer">Chicken i Kimchi · Staff Access</div></section></div>`;
+ if(['pos','kitchen'].includes(page)){
+  const formBox=document.querySelector('#role-login-form');
+  formBox.insertAdjacentHTML('beforebegin','<div class="panel"><button type="button" class="alt" id="pair-start">Pair this device via Back Office</button><div id="pairing-box" aria-live="polite"></div></div>');
+  document.querySelector('#pair-start').onclick=()=>beginPairing().catch(e=>notify(e.message));
+ }
  if(!selected)return;const form=document.querySelector('#role-login-form');form.onsubmit=async e=>{e.preventDefault();const btn=document.querySelector('#enter');btn.disabled=true;btn.textContent='Signing in…';try{const deviceId=document.querySelector('#device-id')?.value.trim()||'',deviceSecret=document.querySelector('#device-secret')?.value.trim()||'';if(Boolean(deviceId)!==Boolean(deviceSecret))throw Error('Enter both device ID and enrollment secret');const deviceLogin=Boolean(deviceId);const r=await fetch(deviceLogin?'/api/device/session':'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,pin:document.querySelector('#pin').value,...(deviceLogin?{device_id:deviceId,enrollment_secret:deviceSecret}:{})})});const b=await r.json();if(!r.ok)throw Error(b.error||'Sign-in failed');token=b.token;sessionStorage.setItem('ck_token_'+page,token);await start()}catch(err){document.querySelector('#loginerr').textContent=err.message}finally{btn.disabled=false;btn.textContent='Sign in'}};
 }
 async function refresh(initial=false){const serial=++kitchenRefreshSerial;try{const previousPosSnapshot=page==='pos'?JSON.stringify([menu,orders,modifierCatalog,tableState]):null;const [m,o,mods]=await Promise.all([api('/menu'),api('/orders'),...(page==='pos'?[api('/menu/modifiers')]:[])]);menu=m;if(mods)modifierCatalog=mods;if(page==='kitchen'){try{kitchenCategories=await api('/kitchen/categories')}catch(e){console.warn('Kitchen categories unavailable',e)}}if(page==='admin'){try{await loadAdminMenu()}catch(e){console.warn('Menu management sync failed',e)}}if(page==='kitchen'){
