@@ -47,3 +47,10 @@ test('add-items checkout race returns recoverable conflict',()=>{
  assert.ok(section.includes("current.paid_at||current.kitchen_completed_at"));
  assert.ok(section.includes("return json({error:'Order changed; refresh'},409)"));
 });
+
+test('store-specific active override controls both menu visibility and order item validation',()=>{
+ const matches=api.match(/WHERE COALESCE\(o\.active,m\.active\)=1/g)||[];
+ assert.equal(matches.length,3);
+ assert.ok(!api.includes('WHERE m.active=1 AND COALESCE(o.active,1)=1'));
+ assert.ok(api.includes('COALESCE(o.sold_out,0)=0'));
+});
