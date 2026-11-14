@@ -944,3 +944,15 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .bo-workload-options{display:flex;flex-wrap:wrap;gap:8px 15px}.bo-workload-choice{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#42566e;cursor:pointer}.bo-workload-choice input{accent-color:#3183ce;width:15px;height:15px}.bo-workload-choice i{width:9px;height:9px;border-radius:50%}
 .bo-workload-plot{position:relative}.bo-workload-plot svg{height:260px;touch-action:pan-y}.bo-workload-tooltip{position:absolute;top:8px;right:8px;max-width:min(430px,85%);padding:10px 12px;border:1px solid #d3deeb;border-radius:10px;background:rgba(255,255,255,.96);box-shadow:0 5px 22px rgba(26,45,76,.12);font-size:11px;color:#354962;pointer-events:none;line-height:1.7}.bo-workload-tooltip[hidden]{display:none}
 @media(max-width:700px){.bo-workload-chart{padding:10px}.bo-workload-plot svg{height:220px}.bo-workload-tooltip{font-size:10px;max-width:90%}}
+
+/* Workload chart: clear single-metric comparison and undistorted mobile axes */
+.bo-workload-tabs{display:flex;flex-wrap:wrap;gap:7px}
+.bo-workload-tab{border:1px solid #d8e2ed;background:#f6f8fb;color:#435774;padding:8px 13px;border-radius:9px;font-size:12px;font-weight:650;cursor:pointer}
+.bo-workload-tab.active{background:#286fc0;border-color:#286fc0;color:#fff}
+.bo-workload-chart-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:8px 0}
+.bo-workload-chart-heading strong{font-size:15px;color:#203550}.bo-workload-chart-heading span{font-size:11px;color:#72829a}
+.bo-workload-svg-scroll{width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.bo-workload-svg-scroll svg{display:block;width:100%;height:auto;aspect-ratio:850/252;min-width:0}
+.bo-workload-tip-row{display:flex;justify-content:space-between;gap:16px;white-space:nowrap}
+.bo-workload-tip-row b{font-variant-numeric:tabular-nums}
+@media(max-width:700px){.bo-workload-svg-scroll svg{width:850px;min-width:850px;height:252px;aspect-ratio:auto}.bo-workload-plot{overflow:visible}.bo-workload-tooltip{position:relative;top:auto;right:auto;max-width:100%;margin:6px 0;box-shadow:none}.bo-workload-controls{gap:12px}.bo-workload-tab{padding:9px 12px}}
