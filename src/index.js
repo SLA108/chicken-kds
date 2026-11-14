@@ -6,9 +6,7 @@ const roles={pos:['pos','admin'],kitchen:['kitchen','admin'],admin:['admin'],sca
 const encoder=new TextEncoder();
 async function tokenFor(pin,secret){const key=await crypto.subtle.importKey('raw',encoder.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,encoder.encode(pin)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function identify(req,env){const header=req.headers.get('authorization')||'';const protocol=req.headers.get('sec-websocket-protocol')||'';const supplied=header.startsWith('Bearer ')?header.slice(7):protocol.startsWith('ckauth.')?protocol.slice(7):'';if(!supplied)return null;for(const role of ['admin','pos','kitchen','scanner']){if(!env[role.toUpperCase()+'_PIN'])continue;const expected=await tokenFor(env[role.toUpperCase()+'_PIN'],env.AUTH_SECRET);if(supplied.length===expected.length){let diff=0;for(let i=0;i<supplied.length;i++)diff|=supplied.charCodeAt(i)^expected.charCodeAt(i);if(!diff)return role;}}return null;}
-// V3 foundation: existing clients stay on the legacy 'main' room.
-// Store-scoped rooms are reserved for the authenticated store session rollout.
-// Never select a store room from an unverified browser query/header.
+// Admin notifications use the management room; restaurant devices use store-scoped rooms.
 function room(env,storeId=null){
  const key=storeId===null?'main':'store:'+storeId;
  return env.ROOM.get(env.ROOM.idFromName(key));
@@ -57,11 +55,8 @@ async function prepareOrderItems(env,items,orderId,now,storeId=null){
 export default {async fetch(req,env){const url=new URL(req.url);const path=url.pathname;if(path.startsWith('/images/')){if(req.method!=='GET')return new Response('Method not allowed',{status:405});const key=path.slice('/images/'.length);if(!/^[0-9a-f-]{36}\.(webp|png|jpg)$/.test(key))return new Response('Not found',{status:404});if(!env.MENU_IMAGES)return new Response('Image storage unavailable',{status:503});const object=await env.MENU_IMAGES.get(key);if(!object)return new Response('Not found',{status:404});return new Response(object.body,{headers:{'content-type':object.httpMetadata?.contentType||'image/webp','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'}});}
 if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitchen','/admin','/scanner','/'].includes(path))assetPath='/';return env.ASSETS.fetch(new Request(new URL(assetPath,url),req));}
 if(!env.AUTH_SECRET||!env.POS_PIN||!env.KITCHEN_PIN||!env.ADMIN_PIN||!env.SCANNER_PIN)return json({error:'Server secrets not configured'},503);
-if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||!['pos','kitchen','admin','scanner'].includes(b.role))return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
-// Device exchange requires BOTH the role PIN and the per-device secret.
-// Existing role PINs remain for legacy routes until the full cutover.
-// A per-device HttpOnly renewal cookie is set only after PIN + enrollment secret verification.
-// It is restricted to the renewal endpoint; JS cannot read the long-lived credential.
+if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||b.role!=='admin')return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
+// Pairing approval issues an HttpOnly device cookie used for scoped session renewal.
 const renewalCookie=(id,secret)=>'ck_device='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=31536000';
 const clearRenewalCookie='ck_device=; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=0';
 // Device pairing: no user-visible credentials. Pending request is bound to a
@@ -584,7 +579,7 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
 if(path==='/api/admin/devices'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const devices=(await env.DB.prepare("SELECT d.id,d.store_id,s.code AS store_code,s.name AS store_name,d.label,d.active,d.created_at,d.revoked_at FROM pos_devices d JOIN stores s ON s.id=d.store_id ORDER BY d.created_at DESC LIMIT 200").all()).results;
- return json({devices,device_auth_enabled:false});
+ return json({devices});
 }
 const revokeDeviceMatch=path.match(/^\/api\/admin\/devices\/([0-9a-f-]{36})\/revoke$/);
 if(revokeDeviceMatch&&req.method==='POST'){
@@ -606,7 +601,7 @@ if(storeDetailMatch&&req.method==='GET'){
  const rows=(await env.DB.prepare('SELECT id,source,table_no,status,created_at,paid_at,kitchen_completed_at FROM orders WHERE store_id=? ORDER BY created_at DESC,id DESC LIMIT ?').bind(storeId,limit).all()).results;
  return json({store,orders:rows,limit});
 }
-if(path==='/ws'){if(req.headers.get('upgrade')!=='websocket')return json({error:'WebSocket required'},426);return room(env).fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'x-client-role':role,'sec-websocket-protocol':req.headers.get('sec-websocket-protocol')||''}}));}
+if(path==='/ws')return json({error:'Use a paired device for store-scoped WebSocket access'},403);
 // Modifier configuration endpoints. Existing Phase 2 foundation tables are reused.
 if(path==='/api/menu/modifiers'&&req.method==='GET'){
  if(!allowed(role,'pos'))return json({error:'Forbidden'},403);
