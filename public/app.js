@@ -9,16 +9,20 @@ function scopedApiPath(path){
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
  throw Error('Device mode does not permit this endpoint: '+path);
 }
-let renewalPending=null;
+let deviceStores=[],currentDeviceStore=null,renewalPending=null;
+const lastStoreKey='ck_last_store_'+page;
 async function renewDeviceSession(){
  if(!['pos','kitchen'].includes(page))return false;
  if(renewalPending)return renewalPending;
  renewalPending=(async()=>{
   try{
-   const r=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'}});
+   const preferredStore=localStorage.getItem(lastStoreKey);
+   const r=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(preferredStore?{store_id:preferredStore}:{})});
    if(!r.ok)return false;
    const result=await r.json();
    if(result.role!==page)return false;
+   deviceStores=result.stores||[];currentDeviceStore=result.store||null;
+   if(currentDeviceStore)localStorage.setItem(lastStoreKey,currentDeviceStore.id);
    token=result.token;sessionStorage.setItem('ck_token_'+page,token);
    return true;
   }catch{return false;}
@@ -107,7 +111,7 @@ async function beginPairing(){
    const data=await response.json();if(data.status!=='approved')return;
    clearInterval(pairPoll);
    if(data.role!==page){box.textContent='Approved for '+data.role+'. Open the corresponding role page.';return;}
-   token=data.token;sessionStorage.setItem('ck_token_'+page,token);await start();
+   token=data.token;sessionStorage.setItem('ck_token_'+page,token);await renewDeviceSession();await start();
   }catch(e){console.warn('Pairing check failed',e)}
  },2500);
 }
@@ -147,7 +151,30 @@ function connect(){
  socket.onerror=()=>{if(!current())return;console.warn('Kitchen WebSocket connection error');};
 }
 
-function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();else scanner();}
+function storeBanner(){
+ document.querySelector('#v3-current-store')?.remove();
+ if(!deviceMode()||!currentDeviceStore||!['pos','kitchen'].includes(page))return;
+ const banner=document.createElement('div');
+ banner.id='v3-current-store';banner.className='v3-current-store '+(page==='kitchen'?'v3-current-store-kitchen':'');
+ banner.innerHTML='<div><small>CURRENT STORE</small><strong>'+esc(currentDeviceStore.name)+'</strong></div><button type="button" id="v3-switch-store" '+(deviceStores.length<2?'disabled':'')+'>Switch store</button>';
+ app.prepend(banner);
+ banner.querySelector('#v3-switch-store').onclick=()=>{
+  const overlay=document.createElement('div');overlay.className='v3-grants-overlay';
+  overlay.innerHTML='<section class="v3-grants-dialog" role="dialog" aria-modal="true"><h2>Switch store</h2><p class="muted">Select an authorized restaurant.</p><form id="v3-store-switch-form"><select name="store_id">'+deviceStores.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===currentDeviceStore.id?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select><div class="toolbar"><button type="button" id="v3-switch-cancel" class="alt">Cancel</button><button type="submit">Switch store</button></div></form></section>';
+  document.body.append(overlay);
+  overlay.querySelector('#v3-switch-cancel').onclick=()=>overlay.remove();
+  overlay.querySelector('#v3-store-switch-form').onsubmit=e=>{
+   e.preventDefault();const selected=new FormData(e.currentTarget).get('store_id');
+   if(!deviceStores.some(x=>x.id===selected))return;
+   // Reload closes the old WebSocket, clears all in-memory order/menu state,
+   // and obtains a fresh server-authorized session for the selected store.
+   sessionStorage.removeItem('ck_token_'+page);
+   localStorage.setItem(lastStoreKey,selected);
+   location.reload();
+  };
+ };
+}
+function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();else scanner();storeBanner();}
 function categoryButtons(){return `<div class="chips">${['All',...new Set(menu.map(x=>x.category))].map(x=>`<button data-cat="${esc(x)}" class="${category===x?'selected':''}">${esc(x)}</button>`).join('')}</div>`;}
 
 function money(c){return (c/100).toFixed(2)+' zł'}
