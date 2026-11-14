@@ -85,11 +85,11 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  if(!device)return json({error:'Device unavailable'},403);
  // Rotate the pairing secret into a long-lived credential only after approval.
  const credential=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
- const updated=await env.DB.prepare('UPDATE pos_devices SET token_hash=? WHERE id=? AND token_hash IS NULL AND active=1').bind(await sha256Hex(credential),device.id).run();
+ const updated=await env.DB.prepare('UPDATE pos_devices SET token_hash=? WHERE id=? AND token_hash=? AND active=1').bind(await sha256Hex(credential),device.id,'pending:'+device.id).run();
  if(!updated.meta.changes)return json({error:'Pairing already claimed'},409);
  await env.DB.prepare("UPDATE device_pair_requests SET status='expired' WHERE id=?").bind(request.id).run();
  const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:device.store_id,deviceId:device.id});
- return json({status:'approved',token,role:device.role,store:{id:device.store_id,code:device.code,name:device.name}},200,{'set-cookie':renewalCookie(device.id,credential)+', '+clearPairCookie});
+ const response=json({status:'approved',token,role:device.role,store:{id:device.store_id,code:device.code,name:device.name}});response.headers.append('set-cookie',renewalCookie(device.id,credential));response.headers.append('set-cookie',clearPairCookie);return response;
 }
 if(path==='/api/device/session'&&req.method==='POST'){
  const b=await parse(req);
@@ -529,7 +529,7 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  const pairing=await env.DB.prepare("SELECT id FROM device_pair_requests WHERE code=? AND status='pending' AND expires_at>?").bind(b.code,now).first();
  if(!pairing)return json({error:'Code expired or already used'},409);
  const result=await env.DB.batch([
-  env.DB.prepare('INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) VALUES(?,?,?,?,?,1,?)').bind(deviceId,store.id,b.label.trim(),null,b.role,now),
+  env.DB.prepare('INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) VALUES(?,?,?,?,?,1,?)').bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now),
   env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now)
  ]);
  if(!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
