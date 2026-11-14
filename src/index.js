@@ -300,7 +300,7 @@ if(sessionToken){
   const now=new Date().toISOString();
   const result=await env.DB.prepare(action==='complete'
    ?"UPDATE orders SET kitchen_completed_at=?,status='done',updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NULL AND status!='cancelled'"
-   :"UPDATE orders SET kitchen_completed_at=NULL,status='new',updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'"
+   :"UPDATE orders SET kitchen_completed_at=NULL,status=CASE WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id=orders.id AND is_done=0) THEN 'new' ELSE 'done' END,updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'"
   ).bind(...(action==='complete'?[now,now,id,storeId]:[now,id,storeId])).run();
   if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await event(env,id,action==='complete'?'kitchen_completed':'kitchen_reopened',session.role,{store_id:storeId});
