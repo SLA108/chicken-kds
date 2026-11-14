@@ -90,3 +90,12 @@ test('kitchen status transition cannot overwrite completed order',()=>{
  assert.ok(section.includes("AND status=? AND kitchen_completed_at IS NULL"));
  assert.ok(section.includes("result.meta.changes!==1"));
 });
+
+test('reopening kitchen completion preserves status implied by dish completion',()=>{
+ const start=api.indexOf('const scopedKitchenFinish='),end=api.indexOf("if(path==='/api/store/pos/history'",start);
+ assert.ok(start>=0&&end>start);
+ const section=api.slice(start,end);
+ assert.ok(section.includes("status=CASE WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id=orders.id AND is_done=0) THEN 'new' ELSE 'done' END"));
+ assert.ok(section.includes('kitchen_completed_at=NULL'));
+ assert.ok(section.includes("AND store_id=? AND kitchen_completed_at IS NOT NULL"));
+});
