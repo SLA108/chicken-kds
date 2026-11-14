@@ -526,7 +526,7 @@ function kitchen(){
      (new Date(i.created_at).getTime()>new Date(o.created_at).getTime()+30000?'<small class="kds-added">ADDED '+warsawClock(i.created_at)+'</small>':'')+
     '</span><span class="kds-check">'+(i.is_done?'✓':'○')+'</span></button>';
    }).join('')+
-   (o.note?'<p class="warning">Note: '+esc(o.note)+'</p>':'')+'</article>';
+   (o.note?'<p class="kds-order-note">Note: '+esc(o.note)+'</p>':'')+'</article>';
  };
  shell('<div class="panel toolbar"><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
  '<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')+
