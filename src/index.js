@@ -442,6 +442,31 @@ if(sessionToken){
 }
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
+if(path==='/api/admin/orders'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'';
+ if(status&&!['new','cooking','done','cancelled'].includes(status))return json({error:'Invalid status'},400);
+ if(storeId){
+  const found=await env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first();
+  if(!found)return json({error:'Store not found'},404);
+ }
+ const limit=100,offset=Math.min(100000,Math.max(0,Number.parseInt(params.get('offset')||'0',10)||0));
+ const where=[],args=[];
+ if(storeId){where.push('o.store_id=?');args.push(storeId);}
+ if(status){where.push('o.status=?');args.push(status);}
+ const clause=where.length?'WHERE '+where.join(' AND '):'';
+ const orders=(await env.DB.prepare('SELECT o.*,s.name AS store_name,s.code AS store_code FROM orders o JOIN stores s ON s.id=o.store_id '+clause+' ORDER BY o.created_at DESC,o.id DESC LIMIT ? OFFSET ?').bind(...args,limit+1,offset).all()).results;
+ const has_more=orders.length>limit,visible=orders.slice(0,limit);
+ if(visible.length){
+  const ids=visible.map(o=>o.id),marks=ids.map(()=>'?').join(',');
+  const items=(await env.DB.prepare('SELECT i.* FROM order_items i WHERE i.order_id IN ('+marks+') ORDER BY i.created_at ASC').bind(...ids).all()).results;
+  const itemIds=items.map(i=>i.id);
+  const modifiers=itemIds.length?(await env.DB.prepare('SELECT m.* FROM order_item_modifiers m WHERE m.order_item_id IN ('+itemIds.map(()=>'?').join(',')+')').bind(...itemIds).all()).results:[];
+  for(const o of visible)o.items=items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}));
+ }
+ const summary=(await env.DB.prepare('SELECT o.status,COUNT(*) AS count FROM orders o '+clause+' GROUP BY o.status').bind(...args).all()).results;
+ return json({orders:visible,summary,has_more,next_offset:has_more?offset+limit:null,limit});
+}
 if(path==='/api/admin/stores'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  try{
