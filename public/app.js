@@ -603,8 +603,8 @@ async function uploadAdminImage(file){
  }finally{image.close();}
 }
 let v3Stores=[],v3SelectedStore='',v3StoreMenu=[],v3Devices=[],v3StoreError='',v3Loaded=false,v3PairAllowedStores=null,v3RevokedOpen=false,v3StoreMenuOpen=false;
-let adminOrders=[],adminOrdersSummary=[],adminOrdersStore='',adminOrdersStatus='',adminOrdersOffset=0,adminOrdersHasMore=false,adminOrdersLoaded=false,adminOrdersError='',adminOrdersRequest=0;
-async function loadAdminOrders(){const request=++adminOrdersRequest;const q=new URLSearchParams({offset:String(adminOrdersOffset)});if(adminOrdersStore)q.set('store_id',adminOrdersStore);if(adminOrdersStatus)q.set('status',adminOrdersStatus);try{const data=await api('/admin/orders?'+q);if(request!==adminOrdersRequest)return;adminOrders=data.orders||[];adminOrdersSummary=data.summary||[];adminOrdersHasMore=Boolean(data.has_more);adminOrdersLoaded=true;adminOrdersError='';}catch(e){if(request===adminOrdersRequest){adminOrdersError=e.message;adminOrdersLoaded=true;}}}
+let adminOrders=[],adminOrdersSummary=[],adminOrdersStore='',adminOrdersStatus='',adminOrdersOffset=0,adminOrdersHasMore=false,adminOrdersLoaded=false,adminOrdersError='',adminOrdersRequest=0,adminOrdersLastSync=null,adminOrdersBusy=false;
+async function loadAdminOrders(){if(adminOrdersBusy)return;adminOrdersBusy=true;const request=++adminOrdersRequest;const q=new URLSearchParams({offset:String(adminOrdersOffset)});if(adminOrdersStore)q.set('store_id',adminOrdersStore);if(adminOrdersStatus)q.set('status',adminOrdersStatus);try{const data=await api('/admin/orders?'+q);if(request!==adminOrdersRequest)return;adminOrders=data.orders||[];adminOrdersSummary=data.summary||[];adminOrdersHasMore=Boolean(data.has_more);adminOrdersLoaded=true;adminOrdersLastSync=new Date();adminOrdersError='';}catch(e){if(request===adminOrdersRequest){adminOrdersError=e.message;adminOrdersLoaded=true;}}finally{adminOrdersBusy=false;}}
 
 async function loadV3Stores(){
  try{const [stores,devices]=await Promise.all([api('/admin/stores'),api('/admin/devices')]);v3Stores=stores.stores||[];v3Devices=devices.devices||[];v3StoreError='';v3Loaded=true;if(!v3Stores.some(x=>x.id===v3SelectedStore))v3SelectedStore=v3Stores[0]?.id||'';if(v3SelectedStore)await loadV3StoreMenu();}
@@ -641,15 +641,28 @@ function v3StorePanel(){
  '</section></section>';
 }
 
+function adminOrderCard(o){
+ const items=o.items||[],done=items.filter(i=>Number(i.is_done)===1),picked=items.filter(i=>i.picked_up_at);
+ const kitchen=o.status==='cancelled'?'Cancelled':o.kitchen_completed_at||o.status==='done'?'Completed':done.length?'Preparing':'Waiting';
+ const kitchenColor=o.status==='cancelled'?'gray':o.kitchen_completed_at||o.status==='done'?'green':done.length?'yellow':'red';
+ const pickup=items.length&&picked.length===items.length?'Collected':picked.length?'Partially collected':'Not collected';
+ const payment=o.paid_at?'Paid':'Unpaid';
+ const table=o.source!=='dinein'?'N/A':Number(o.table_occupied)?'Occupied':'Released';
+ return '<article class="bo-order-card"><div class="bo-order-head"><div><strong>'+esc(o.store_name||o.store_code||'Restaurant')+'</strong><small>'+esc(o.source==='dinein'?'Table '+(o.table_no||'—'):(sourceName[o.source]||o.source||'Order'))+' · #'+esc(o.id.slice(0,8))+'</small></div><b>'+money(Number(o.total_cents||0))+'</b></div>'+
+ '<div class="bo-order-flags"><span class="bo-flag bo-'+kitchenColor+'">Kitchen: '+kitchen+'</span><span class="bo-flag">Pickup: '+pickup+'</span><span class="bo-flag '+(o.paid_at?'bo-green':'')+'">'+payment+'</span><span class="bo-flag">Table: '+table+'</span></div>'+
+ '<div class="bo-order-items">'+items.map(i=>'<div class="bo-order-item"><span>'+(Number(i.is_done)?'✓ ':'○ ')+Number(i.quantity)+' × '+esc(i.name)+(i.modifiers?.length?' <small>'+esc(i.modifiers.map(m=>m.name).join(', '))+'</small>':'')+(i.note?' <small>('+esc(i.note)+')</small>':'')+'</span><small>'+(i.picked_up_at?'Collected':i.is_done?'Ready':'Preparing / pending')+'</small></div>').join('')+'</div>'+
+ (o.note?'<p class="warning">Note: '+esc(o.note)+'</p>':'')+
+ '<div class="bo-order-foot"><small>'+posDetailTime(o.created_at)+'</small><small>'+done.length+'/'+items.length+' item lines ready · '+picked.length+'/'+items.length+' collected</small></div></article>';
+}
 function adminOrderPanel(){
  const count=k=>Number(adminOrdersSummary.find(x=>x.status===k)?.count||0);
  const choices='<option value="">All restaurants</option>'+v3Stores.map(x=>'<option value="'+esc(x.id)+'" '+(adminOrdersStore===x.id?'selected':'')+'>'+esc(x.name)+'</option>').join('');
  const statuses='<option value="">All statuses</option>'+['new','cooking','done','cancelled'].map(x=>'<option value="'+x+'" '+(adminOrdersStatus===x?'selected':'')+'>'+esc(statusName[x]||x)+'</option>').join('');
- return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Orders</h2><p>Read-only order history across restaurants. Latest orders first.</p></div><button type="button" class="alt" id="admin-orders-refresh">Refresh orders</button></div>'+
- '<div class="toolbar"><label>Restaurant <select id="admin-orders-store">'+choices+'</select></label><label>Status <select id="admin-orders-status">'+statuses+'</select></label></div>'+
+ return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Orders</h2><p>Read-only order monitoring across restaurants. Updates automatically every 10 seconds while this tab is open.</p></div><button type="button" class="alt" id="admin-orders-refresh">Refresh orders</button></div>'+
+ '<p class="muted small">'+(adminOrdersLastSync?'Last updated: '+adminOrdersLastSync.toLocaleTimeString('en-GB',{timeZone:'Europe/Warsaw'}):'Waiting for first update')+'</p><div class="toolbar"><label>Restaurant <select id="admin-orders-store">'+choices+'</select></label><label>Status <select id="admin-orders-status">'+statuses+'</select></label></div>'+
  (adminOrdersError?'<p class="warning" role="alert">'+esc(adminOrdersError)+'</p>':'')+
  '<div class="admin-overview">'+['new','cooking','done','cancelled'].map(k=>'<div class="admin-metric"><strong>'+count(k)+'</strong><span>'+esc(statusName[k]||k)+'</span></div>').join('')+'</div>'+
- (!adminOrdersLoaded?'<p>Loading orders…</p>':adminOrders.length?'<div class="grid">'+adminOrders.map(o=>'<div><p class="muted small">'+esc(o.store_name||o.store_code||'')+' · '+esc(o.id.slice(0,8))+' · '+money(Number(o.total_cents||0))+'</p>'+ticket(o)+'</div>').join('')+'</div>':'<p>No orders match these filters.</p>')+
+ (!adminOrdersLoaded?'<p>Loading orders…</p>':adminOrders.length?'<div class="grid">'+adminOrders.map(adminOrderCard).join('')+'</div>':'<p>No orders match these filters.</p>')+
  '<div class="toolbar"><button type="button" class="alt" id="admin-orders-prev" '+(adminOrdersOffset===0?'disabled':'')+'>Previous</button><span>Page '+(Math.floor(adminOrdersOffset/100)+1)+'</span><button type="button" class="alt" id="admin-orders-next" '+(!adminOrdersHasMore?'disabled':'')+'>Next</button></div></section>';
 }
 function admin(){
@@ -801,3 +814,6 @@ setInterval(async()=>{if(!token||page!=='kitchen'||document.hidden||kitchenSyncB
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&token&&page==='kitchen')refresh()});
 window.addEventListener('focus',()=>{if(token&&page==='kitchen')refresh()});
 setInterval(()=>{if(token&&page!=='kitchen')refresh()},60000);
+
+// Back Office order monitoring uses a read-only poll; POS/Kitchen sockets are unchanged.
+setInterval(async()=>{if(page!=='admin'||!token||adminTab!=='orders'||document.hidden||adminOrdersBusy)return;const before=JSON.stringify([adminOrders,adminOrdersSummary,adminOrdersHasMore,adminOrdersError]);await loadAdminOrders();if(page==='admin'&&adminTab==='orders'&&before!==JSON.stringify([adminOrders,adminOrdersSummary,adminOrdersHasMore,adminOrdersError]))admin();},10000);
