@@ -18,7 +18,7 @@ async function broadcast(env,type,data){
  }catch(e){console.error('store broadcast fanout failed',e);}
 }
 async function disconnectDeviceStore(env,storeId,deviceId){try{await room(env,storeId).fetch('https://room.internal/disconnect-device',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({device_id:deviceId})});}catch(e){console.error('device disconnect failed',e);}}
-async function broadcastStore(env,storeId,type,data){try{const response=await room(env,storeId).fetch('https://room.internal/broadcast',{method:'POST',headers:{'content-type':'application/json','x-room-secret':env.AUTH_SECRET},body:JSON.stringify({type,data})});if(!response.ok)console.error('store broadcast failed',response.status);}catch(e){console.error('store broadcast error',e);}}
+async function broadcastStore(env,storeId,type,data){try{const headers={'content-type':'application/json','x-room-secret':env.AUTH_SECRET};const response=await room(env,storeId).fetch('https://room.internal/broadcast',{method:'POST',headers,body:JSON.stringify({type,data})});if(!response.ok)console.error('store broadcast failed',response.status);if(type==='orders'||type==='pickup'){await room(env,'__admin__').fetch('https://room.internal/broadcast',{method:'POST',headers,body:JSON.stringify({type:'store_event',store_id:storeId,event:type})});}}catch(e){console.error('store broadcast error',e);}}
 async function parse(req){try{return await req.json();}catch{return null;}}
 function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
@@ -442,6 +442,11 @@ if(sessionToken){
 }
 const role=await identify(req,env);if(!role)return json({error:'Unauthorized'},401);
 try{
+if(path==='/ws'){
+ if(role!=='admin')return json({error:'Forbidden'},403);
+ if(req.headers.get('upgrade')!=='websocket'||req.headers.get('origin')!==url.origin)return json({error:'Invalid WebSocket request'},403);
+ return room(env,'__admin__').fetch(new Request('https://room.internal/ws',{headers:{upgrade:'websocket','x-room-secret':env.AUTH_SECRET,'sec-websocket-protocol':wsProtocol}}));
+}
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'';
