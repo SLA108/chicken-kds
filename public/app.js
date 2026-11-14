@@ -167,7 +167,8 @@ function connect(){
  socket.onclose=async event=>{if(!current())return;ws=null;connected=false;
  if(event.code===1008&&deviceMode()){
   const recovered=await renewDeviceSession();
-  if(!current())return;
+  // Renewal can intentionally reload the page after an access change.
+  if(generation!==wsGeneration)return;
   if(!recovered){disconnect();token='';sessionStorage.removeItem('ck_token_'+page);menu=[];orders=[];tableState=[];render();return;}
  }
  if(page==='pos'){const status=document.querySelector('header .status');if(status){status.className='status offline';status.textContent='● Connecting / Offline'}else render()}else render();
