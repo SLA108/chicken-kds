@@ -58,6 +58,33 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
  }
 }
 // V3 admin-only store detail. Does not grant access to POS/KDS store routing.
+// V3 device enrollment foundation: admin-only; credentials are stored hashed.
+// Device credentials do not authorize any POS/KDS endpoint until the
+// store-scoped session and authorization rollout is complete.
+if(path==='/api/admin/devices'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const devices=(await env.DB.prepare("SELECT d.id,d.store_id,s.code AS store_code,s.name AS store_name,d.label,d.active,d.created_at,d.revoked_at FROM pos_devices d JOIN stores s ON s.id=d.store_id ORDER BY d.created_at DESC LIMIT 200").all()).results;
+ return json({devices,device_auth_enabled:false});
+}
+if(path==='/api/admin/devices'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req);
+ if(!b||typeof b.store_id!=='string'||typeof b.label!=='string'||!b.label.trim()||b.label.length>100)return json({error:'Invalid device registration'},400);
+ const store=await env.DB.prepare('SELECT id,code,name,active FROM stores WHERE id=?').bind(b.store_id).first();
+ if(!store||!store.active)return json({error:'Active store not found'},404);
+ const deviceId=uid(),credential=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
+ const digest=await crypto.subtle.digest('SHA-256',encoder.encode(credential));
+ const tokenHash=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');
+ await env.DB.prepare('INSERT INTO pos_devices(id,store_id,label,token_hash,active,created_at) VALUES(?,?,?,?,1,?)').bind(deviceId,store.id,b.label.trim(),tokenHash,new Date().toISOString()).run();
+ return json({id:deviceId,store_id:store.id,label:b.label.trim(),enrollment_secret:credential,device_auth_enabled:false},201);
+}
+const revokeDeviceMatch=path.match(/^\/api\/admin\/devices\/([0-9a-f-]{36})\/revoke$/);
+if(revokeDeviceMatch&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const result=await env.DB.prepare("UPDATE pos_devices SET active=0,revoked_at=? WHERE id=? AND active=1").bind(new Date().toISOString(),revokeDeviceMatch[1]).run();
+ if(!result.meta.changes)return json({error:'Active device not found'},404);
+ return json({ok:true});
+}
 const storeDetailMatch=path.match(/^\/api\/admin\/stores\/([^/]+)\/orders$/);
 if(storeDetailMatch&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
