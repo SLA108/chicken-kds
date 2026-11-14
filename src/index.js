@@ -1,3 +1,4 @@
+import {isPairingCode,isDeviceRole,pairingExpired,approvalAttemptPolicy,parseDeviceCookie} from './device-pairing.js';
 import {issueStoreSession,verifyStoreSession,sha256Hex,activeDeviceStore} from './store-auth.js';
 const json=(x,status=200,extra={})=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',...extra}});
 const uid=()=>crypto.randomUUID();
@@ -80,7 +81,7 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
  if(req.headers.get('sec-fetch-site')==='cross-site')return json({error:'Forbidden'},403);
  if(!/^[0-9a-f]{64}$/.test(pairSecret))return json({error:'Pairing not started'},401);
  const request=await env.DB.prepare("SELECT id,status,device_id,expires_at FROM device_pair_requests WHERE secret_hash=? ORDER BY created_at DESC LIMIT 1").bind(await sha256Hex(pairSecret)).first();
- if(!request||Date.parse(request.expires_at)<=Date.now())return json({status:'expired'},410,{'set-cookie':clearPairCookie});
+ if(!request||pairingExpired(request.expires_at))return json({status:'expired'},410,{'set-cookie':clearPairCookie});
  if(request.status!=='approved')return json({status:'pending'});
  const device=await env.DB.prepare("SELECT d.id,d.store_id,d.role,d.token_hash,s.code,s.name FROM pos_devices d JOIN stores s ON s.id=d.store_id WHERE d.id=? AND d.active=1 AND s.active=1").bind(request.device_id).first();
  if(!device)return json({error:'Device unavailable'},403);
@@ -94,7 +95,7 @@ if(path==='/api/device/pair/status'&&req.method==='GET'){
 }
 if(path==='/api/device/session'&&req.method==='POST'){
  const b=await parse(req);
- if(!b||!['pos','kitchen','scanner'].includes(b.role)||typeof b.pin!=='string'||typeof b.device_id!=='string'||typeof b.enrollment_secret!=='string'||!/^[0-9a-f]{64}$/.test(b.enrollment_secret))return json({error:'Invalid device login'},400);
+ if(!b||!isDeviceRole(b.role)||typeof b.pin!=='string'||typeof b.device_id!=='string'||typeof b.enrollment_secret!=='string'||!/^[0-9a-f]{64}$/.test(b.enrollment_secret))return json({error:'Invalid device login'},400);
  const expected=env[b.role.toUpperCase()+'_PIN'];
  if(!expected||b.pin!==expected)return json({error:'Invalid credentials'},401);
  const tokenHash=await sha256Hex(b.enrollment_secret);
@@ -113,15 +114,15 @@ if(path==='/api/device/renew'&&req.method==='POST'){
  const origin=req.headers.get('origin');
  if(origin!==url.origin)return json({error:'Invalid origin'},403);
  const cookie=(req.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('ck_device='));
- const match=/^ck_device=([0-9a-f-]{36})\.([0-9a-f]{64})$/.exec(cookie||'');
+ const match=parseDeviceCookie(cookie);
  if(!match)return json({error:'Device enrollment required'},401);
- const digest=await sha256Hex(match[2]);
- const device=await env.DB.prepare('SELECT id,store_id,role FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(match[1],digest).first();
+ const digest=await sha256Hex(match.credential);
+ const device=await env.DB.prepare('SELECT id,store_id,role FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(match.deviceId,digest).first();
  if(!device||!['pos','kitchen','scanner'].includes(device.role))return json({error:'Device revoked or invalid'},401,{'set-cookie':clearRenewalCookie});
  const store=await activeDeviceStore(env,device.id,device.store_id);
  if(!store)return json({error:'Store unavailable'},403);
  const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:store.store_id,deviceId:device.id});
- return json({token,role:device.role,store:{id:store.store_id,code:store.code,name:store.name},expires_in:28800},200,{'set-cookie':renewalCookie(device.id,match[2])});
+ return json({token,role:device.role,store:{id:store.store_id,code:store.code,name:store.name},expires_in:28800},200,{'set-cookie':renewalCookie(device.id,match.credential)});
 }
 if(path==='/api/device/logout'&&req.method==='POST'){
  const origin=req.headers.get('origin');
@@ -520,16 +521,14 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
  const b=await parse(req);
- if(!b||!/^[0-9]{6}$/.test(b.code||'')||!['pos','kitchen','scanner'].includes(b.role)||typeof b.label!=='string'||!b.label.trim()||b.label.length>100||typeof b.secondary_pin!=='string')return json({error:'Invalid approval'},400);
+ if(!b||!isPairingCode(b.code)||!['pos','kitchen','scanner'].includes(b.role)||typeof b.label!=='string'||!b.label.trim()||b.label.length>100||typeof b.secondary_pin!=='string')return json({error:'Invalid approval'},400);
  if(!env.DEVICE_APPROVAL_PIN||env.DEVICE_APPROVAL_PIN.length<8)return json({error:'Secondary approval password not configured'},503);
- const attemptScope='pair:'+b.code,nowMs=Date.now(),windowStart=new Date(nowMs-15*60*1000).toISOString();
+ const attemptScope='pair:'+b.code,nowMs=Date.now();
  const attempt=await env.DB.prepare('SELECT attempts,window_started_at,blocked_until FROM device_approval_attempts WHERE scope=?').bind(attemptScope).first();
  if(attempt?.blocked_until&&Date.parse(attempt.blocked_until)>nowMs)return json({error:'Too many attempts. Request a new pairing code later.'},429);
  if(await sha256Hex(b.secondary_pin)!==await sha256Hex(env.DEVICE_APPROVAL_PIN)){
-  const reset=!attempt||attempt.window_started_at<windowStart;
-  const attempts=reset?1:attempt.attempts+1;
-  const blocked=attempts>=5?new Date(nowMs+15*60*1000).toISOString():null;
-  await env.DB.prepare('INSERT INTO device_approval_attempts(scope,attempts,window_started_at,blocked_until) VALUES(?,?,?,?) ON CONFLICT(scope) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until').bind(attemptScope,attempts,reset?new Date(nowMs).toISOString():attempt.window_started_at,blocked).run();
+  const policy=approvalAttemptPolicy(attempt,nowMs);
+  await env.DB.prepare('INSERT INTO device_approval_attempts(scope,attempts,window_started_at,blocked_until) VALUES(?,?,?,?) ON CONFLICT(scope) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until').bind(attemptScope,policy.attempts,policy.windowStartedAt,policy.blockedUntil).run();
   return json({error:'Incorrect secondary password'},403);
  }
  const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(b.store_id).first();
