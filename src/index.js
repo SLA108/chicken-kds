@@ -602,7 +602,9 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   for(const i of items){if(!byOrder.has(i.order_id))byOrder.set(i.order_id,[]);byOrder.get(i.order_id).push({...i,modifiers:byItem.get(i.id)||[]});}
   for(const o of visible)o.items=byOrder.get(o.id)||[];
  }
- const summary=(await env.DB.prepare('SELECT o.store_id,o.status,COUNT(*) AS count FROM orders o '+clause+' GROUP BY o.store_id,o.status').bind(...args).all()).results;
+ const summaryWhere=period==='current'?"WHERE (o.created_at>=? AND o.created_at<? OR (o.created_at<? AND o.status IN ('new','cooking')))":"WHERE o.created_at>=? AND o.created_at<?";
+ const summaryArgs=period==='current'?[from,to,from]:[from,to];
+ const summary=(await env.DB.prepare('SELECT o.store_id,o.status,COUNT(*) AS count FROM orders o '+summaryWhere+' GROUP BY o.store_id,o.status').bind(...summaryArgs).all()).results;
  return json({orders:visible,summary,has_more,next_offset:has_more?offset+limit:null,limit,period});
 }
 // Reservations do not create orders or table occupancy.
