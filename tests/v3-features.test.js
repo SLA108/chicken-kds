@@ -54,3 +54,16 @@ test('release-table tip and table occupancy update share one transactional batch
  assert.match(app,/tip_request_key:releaseTipKey/);
  assert.doesNotMatch(app,/stage:'release',request_key:releaseTipKey/);
 });
+
+test('reservation reminders are rescheduled and not lost behind another dialog',()=>{
+ assert.match(app,/posReservationAlerts\.has\(r\.id\+'@'\+r\.starts_at\)/);
+ assert.match(app,/if\(showReservationAlert\(r\)\)posReservationAlerts\.add/);
+ assert.match(app,/document\.querySelector\('\[id\^="reservation-reminder-"\]'\)/);
+ assert.match(app,/function showReservationAlert\(r\)/);
+});
+test('database scripts use D1 migrations, not the legacy schema bootstrap',()=>{
+ const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+ assert.match(pkg.scripts['db:local'],/d1 migrations apply/);
+ assert.match(pkg.scripts['db:remote'],/d1 migrations apply/);
+ assert.doesNotMatch(pkg.scripts['db:remote'],/schema\.sql/);
+});
