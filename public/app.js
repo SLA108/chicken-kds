@@ -319,7 +319,33 @@ function showReleaseTable(id){
 function showCheckout(id){const o=activeTickets().find(x=>x.id===id);if(!o)return notify('Ticket already closed');checkoutId=id;document.querySelector('#foh-checkout-modal')?.remove();const modal=document.createElement('div');modal.id='foh-checkout-modal';modal.className='item-dialog-backdrop';modal.innerHTML='<section class="item-dialog foh-checkout" role="dialog" aria-modal="true"><div class="row"><h2>Checkout</h2><button class="alt" id="checkout-cancel">✕</button></div><p>'+(o.source==='dinein'?'Table '+esc(o.table_no):esc(sourceName[o.source]))+'</p><h1>'+money(ticketTotal(o))+'</h1><p class="muted">Confirm payment received. Table remains occupied until Release Table is clicked.</p><label>Payment method</label><select id="checkout-method"><option value="card">Card</option><option value="cash">Cash</option><option value="other">Other</option></select><button id="checkout-confirm">Confirm payment</button></section>';document.body.append(modal);document.querySelector('#checkout-cancel').onclick=()=>modal.remove();document.querySelector('#checkout-confirm').onclick=async()=>{const btn=document.querySelector('#checkout-confirm');btn.disabled=true;try{await api('/orders/'+id+'/checkout','POST',{method:document.querySelector('#checkout-method').value});modal.remove();notify('Payment recorded · Table not released');if(editingOrder===id){editingOrder='';configuredCart=[];fohTab='tickets'}await refresh()}catch(e){notify('Checkout failed: '+e.message);btn.disabled=false}}}
 
 function saveFields(){const a=document.querySelector('#note'),b=document.querySelector('#table');if(a)note=a.value;if(b)table=b.value;}
-async function submit(){if(busy)return;saveFields();const items=configuredCart.map(x=>({menu_id:x.menu_id,quantity:x.quantity,option_ids:x.option_ids,note:x.note}));if(!items.length)return;busy=true;try{if(editingOrder){await api('/orders/'+editingOrder+'/items','POST',{items});notify('Additional items sent')}else{await api('/orders','POST',{source:type,table_no:type==='dinein'?table:'',note,items,client_key:pendingKey});notify('Order sent to kitchen')}configuredCart=[];note='';editingOrder='';pendingKey=crypto.randomUUID();fohTab='tickets';await refresh()}catch(e){notify('Submission failed: '+e.message+'. Check open tickets before retrying.')}finally{busy=false}}
+async function submit(){
+ if(busy)return;
+ saveFields();
+ const items=configuredCart.map(x=>({menu_id:x.menu_id,quantity:x.quantity,option_ids:x.option_ids,note:x.note}));
+ if(!items.length)return;
+ const originalStore=currentDeviceStore?.id,epoch=storeEpoch,key=pendingKey,additional=!!editingOrder;
+ busy=true;
+ try{
+  if(additional){await api('/orders/'+editingOrder+'/items','POST',{items});notify('Additional items sent')}
+  else{await api('/orders','POST',{source:type,table_no:type==='dinein'?table:'',note,items,client_key:key});notify('Order sent to kitchen')}
+  if(epoch!==storeEpoch||originalStore!==currentDeviceStore?.id)return;
+  configuredCart=[];note='';editingOrder='';pendingKey=crypto.randomUUID();fohTab='tickets';await refresh();
+ }catch(e){
+  if(epoch!==storeEpoch||originalStore!==currentDeviceStore?.id)return;
+  if(!additional){
+   try{
+    const check=await api('/orders/by-client-key/'+encodeURIComponent(key));
+    if(epoch!==storeEpoch||originalStore!==currentDeviceStore?.id)return;
+    if(check.found){
+     notify('Order confirmed in this store · #'+check.order.id.slice(0,8));
+     configuredCart=[];note='';editingOrder='';pendingKey=crypto.randomUUID();fohTab='tickets';await refresh();return;
+    }
+    notify('Order not found. Draft preserved; retry uses the same order key.');
+   }catch(checkError){notify('Order status unknown. Draft preserved; check tickets before retrying.')}
+  }else notify('Additional items status unknown. Check the ticket before retrying.');
+ }finally{busy=false}
+}
 function ticket(o,controls=false){const age=Math.max(0,Math.floor((Date.now()-Date.parse(o.created_at))/60000));return `<article class="ticket ${o.status}"><div class="row"><h3>${esc(o.table_no||sourceName[o.source]||o.source)}</h3><span class="tag ${o.status}">${statusName[o.status]}</span></div><p class="muted small">#${esc(o.id.slice(0,8))} · ${new Date(o.created_at).toLocaleTimeString('pl-PL',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit'})} · ${age} min</p><hr>${o.items.map(i=>`<p class="items">${i.quantity} × ${esc(i.name)} ${(i.modifiers||[]).length?`<small> · ${esc(i.modifiers.map(m=>m.name).join(', '))}</small>`:''}${i.note?`<small>(${esc(i.note)})</small>`:''}</p>`).join('')} ${o.note?`<p class="warning">Note: ${esc(o.note)}</p>`:''}${controls&&o.status!=='done'&&o.status!=='cancelled'&&page==='admin'?`<button class="danger" data-status="${o.id}" data-next="cancelled">Admin cancel</button>`:''}</article>`;}
 function stats(){return `<div class="stats">${['new','cooking','done'].map(s=>`<div class="stat"><b>${orders.filter(o=>o.status===s).length}</b>${statusName[s]}</div>`).join('')}</div>`;}
 
