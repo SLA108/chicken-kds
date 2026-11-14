@@ -124,15 +124,15 @@ if(path==='/api/device/renew'&&req.method==='POST'){
  if(!device||!['pos','kitchen','scanner'].includes(device.role))return json({error:'Device revoked or invalid'},401,{'set-cookie':clearRenewalCookie});
  const stores=await listAllowedDeviceStores(env,device.id);
  if(!stores.length)return json({error:'No authorized active stores'},403);
- let selectedId=device.store_id;
+ let selectedId=device.store_id,explicitStore=false;
  if(req.headers.get('content-type')?.includes('application/json')){
   const body=await parse(req);
   if(body?.store_id!==undefined){
    if(typeof body.store_id!=='string')return json({error:'Invalid store selection'},400);
-   selectedId=body.store_id;
+   selectedId=body.store_id;explicitStore=true;
   }
  }
- const store=stores.find(s=>s.id===selectedId)||(!stores.some(s=>s.id===selectedId)&&selectedId===device.store_id?stores[0]:null);
+ const store=stores.find(s=>s.id===selectedId)||(!explicitStore?stores[0]:null);
  if(!store)return json({error:'Store not authorized'},403);
  const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:store.id,deviceId:device.id});
  return json({token,role:device.role,store,stores,expires_in:28800},200,{'set-cookie':renewalCookie(device.id,match.credential)});
