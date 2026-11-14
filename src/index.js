@@ -508,6 +508,36 @@ if(storeMenuItemMatch&&req.method==='PUT'){
  return json({ok:true});
 }
 // Cross-store paid sales report. TEST is excluded unless explicitly requested.
+// Read-only Warsaw-local daily overview. Payment totals are sourced from payments;
+ // unpaid is the outstanding balance on non-cancelled orders, never negative.
+if(path==='/api/admin/overview'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const midnightUtc=d=>{
+  const target=Date.parse(d+'T00:00:00Z');
+  const fmt=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  let t=target;
+  for(let i=0;i<3;i++){const p=Object.fromEntries(fmt.formatToParts(new Date(t)).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));t+=target-Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);}
+  return new Date(t).toISOString();
+ };
+ const next=new Date(day+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);
+ const from=midnightUtc(day),to=midnightUtc(next.toISOString().slice(0,10));
+ const stores=(await env.DB.prepare("SELECT id,code,name FROM stores WHERE code!='TEST' AND active=1 ORDER BY name").all()).results;
+ const rows=(await env.DB.prepare(`SELECT o.store_id,o.id,o.status,o.paid_at,
+ COALESCE((SELECT SUM(i.quantity*i.price_cents) FROM order_items i WHERE i.order_id=o.id),0) AS order_cents,
+ COALESCE((SELECT SUM(p.amount_cents) FROM payments p WHERE p.order_id=o.id AND p.store_id=o.store_id),0) AS paid_cents,
+ (SELECT COUNT(*) FROM order_items i WHERE i.order_id=o.id AND i.price_cents IS NULL) AS unpriced
+ FROM orders o JOIN stores s ON s.id=o.store_id
+ WHERE s.code!='TEST' AND s.active=1 AND o.created_at>=? AND o.created_at<? AND o.status!='cancelled'`).bind(from,to).all()).results;
+ const result=stores.map(store=>{
+  const subset=rows.filter(o=>o.store_id===store.id);
+  let paid=0,unpaid=0,unpriced=0;
+  for(const o of subset){const received=Math.max(0,Number(o.paid_cents)||0),total=Math.max(0,Number(o.order_cents)||0);paid+=received;unpaid+=Math.max(0,total-received);if(Number(o.unpriced))unpriced++;}
+  return {store_id:store.id,code:store.code,name:store.name,orders:subset.length,paid_cents:paid,unpaid_cents:unpaid,total_cents:paid+unpaid,unpriced_orders:unpriced};
+ });
+ const total=result.reduce((a,x)=>({orders:a.orders+x.orders,paid_cents:a.paid_cents+x.paid_cents,unpaid_cents:a.unpaid_cents+x.unpaid_cents,total_cents:a.total_cents+x.total_cents,unpriced_orders:a.unpriced_orders+x.unpriced_orders}),{orders:0,paid_cents:0,unpaid_cents:0,total_cents:0,unpriced_orders:0});
+ return json({date:day,timezone:'Europe/Warsaw',currency:'PLN',stores:result,total});
+}
 if(path==='/api/admin/store-sales'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const q=new URL(req.url).searchParams,from=q.get('from'),to=q.get('to'),includeTest=q.get('include_test')==='true';
