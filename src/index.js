@@ -331,6 +331,23 @@ if(sessionToken){
   if(session.role!=='kitchen')return json({error:'Forbidden'},403);
   return json((await env.DB.prepare('SELECT name,sort_order FROM menu_categories ORDER BY sort_order,name').all()).results);
  }
+
+ const scopedPosDetail=path.match(/^\/api\/store\/pos\/history\/([^/]+)$/);
+ if(scopedPosDetail&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const id=decodeURIComponent(scopedPosDetail[1]),storeId=session.storeId;
+  const order=await env.DB.prepare('SELECT id,source,table_no,status,note,created_at,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=? AND paid_at IS NOT NULL').bind(id,storeId).first();
+  if(!order)return json({error:'Paid order not found'},404);
+  const [itemsResult,paymentsResult,eventsResult,occupancy]=await Promise.all([
+   env.DB.prepare('SELECT i.id,i.name,i.quantity,i.note,i.price_cents,i.is_done,i.created_at FROM order_items i JOIN orders o ON o.id=i.order_id WHERE i.order_id=? AND o.store_id=? ORDER BY i.created_at,i.id').bind(id,storeId).all(),
+   env.DB.prepare('SELECT id,method,amount_cents,created_at FROM payments WHERE order_id=? AND store_id=? ORDER BY created_at').bind(id,storeId).all(),
+   env.DB.prepare('SELECT e.event,e.actor,e.detail,e.created_at FROM events e JOIN orders o ON o.id=e.order_id WHERE e.order_id=? AND o.store_id=? ORDER BY e.created_at').bind(id,storeId).all(),
+   env.DB.prepare('SELECT table_no FROM table_occupancy WHERE order_id=? AND store_id=?').bind(id,storeId).first()
+  ]);
+  const items=itemsResult.results,ids=items.map(i=>i.id);
+  const modifiers=ids.length?(await env.DB.prepare('SELECT m.order_item_id,m.name,m.price_cents FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id=? AND m.order_item_id IN ('+ids.map(()=>'?').join(',')+')').bind(storeId,id,...ids).all()).results:[];
+  return json({order:{...order,table_occupied:!!occupancy},items:items.map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)})),payments:paymentsResult.results,events:eventsResult.results});
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
