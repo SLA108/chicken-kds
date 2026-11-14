@@ -119,10 +119,20 @@ if(path==='/api/device/renew'&&req.method==='POST'){
  const digest=await sha256Hex(match.credential);
  const device=await env.DB.prepare('SELECT id,store_id,role FROM pos_devices WHERE id=? AND token_hash=? AND active=1').bind(match.deviceId,digest).first();
  if(!device||!['pos','kitchen','scanner'].includes(device.role))return json({error:'Device revoked or invalid'},401,{'set-cookie':clearRenewalCookie});
- const store=await activeDeviceStore(env,device.id,device.store_id);
- if(!store)return json({error:'Store unavailable'},403);
- const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:store.store_id,deviceId:device.id});
- return json({token,role:device.role,store:{id:store.store_id,code:store.code,name:store.name},expires_in:28800},200,{'set-cookie':renewalCookie(device.id,match.credential)});
+ const stores=await listAllowedDeviceStores(env,device.id);
+ if(!stores.length)return json({error:'No authorized active stores'},403);
+ let selectedId=device.store_id;
+ if(req.headers.get('content-type')?.includes('application/json')){
+  const body=await parse(req);
+  if(body?.store_id!==undefined){
+   if(typeof body.store_id!=='string')return json({error:'Invalid store selection'},400);
+   selectedId=body.store_id;
+  }
+ }
+ const store=stores.find(s=>s.id===selectedId)||(!stores.some(s=>s.id===selectedId)&&selectedId===device.store_id?stores[0]:null);
+ if(!store)return json({error:'Store not authorized'},403);
+ const token=await issueStoreSession(env.AUTH_SECRET,{role:device.role,storeId:store.id,deviceId:device.id});
+ return json({token,role:device.role,store,stores,expires_in:28800},200,{'set-cookie':renewalCookie(device.id,match.credential)});
 }
 if(path==='/api/device/logout'&&req.method==='POST'){
  const origin=req.headers.get('origin');
@@ -139,7 +149,7 @@ if(sessionToken){
  if(!device)return json({error:'Device revoked or store inactive'},403);
  const boundRole=await env.DB.prepare('SELECT role FROM pos_devices WHERE id=?').bind(session.deviceId).first();
  if(boundRole?.role!==session.role)return json({error:'Device role mismatch'},403);
- if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},expires_at:session.expiresAt,api_enabled:false});
+ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,api_enabled:false});
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
@@ -555,15 +565,19 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
   await env.DB.prepare('INSERT INTO device_approval_attempts(scope,attempts,window_started_at,blocked_until) VALUES(?,?,?,?) ON CONFLICT(scope) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until').bind(attemptScope,policy.attempts,policy.windowStartedAt,policy.blockedUntil).run();
   return json({error:'Incorrect secondary password'},403);
  }
- const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(b.store_id).first();
- if(!store)return json({error:'Active store not found'},404);
+ const requestedStores=Array.isArray(b.store_ids)?b.store_ids:[b.store_id];
+ if(!requestedStores.length||requestedStores.length>100||requestedStores.some(id=>typeof id!=='string')||new Set(requestedStores).size!==requestedStores.length)return json({error:'Select valid stores'},400);
+ const activeStores=(await env.DB.prepare('SELECT id FROM stores WHERE active=1').all()).results;
+ if(requestedStores.some(id=>!activeStores.some(s=>s.id===id)))return json({error:'Active store not found'},404);
+ const store={id:requestedStores[0]};
  const now=new Date().toISOString(),deviceId=uid();
  // Transactional, single-use claim: only one administrator can approve a code.
  const pairing=await env.DB.prepare("SELECT id FROM device_pair_requests WHERE code=? AND status='pending' AND expires_at>?").bind(b.code,now).first();
  if(!pairing)return json({error:'Code expired or already used'},409);
  const result=await env.DB.batch([
   env.DB.prepare("INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) SELECT ?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM device_pair_requests WHERE id=? AND status='pending' AND expires_at>?)").bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now,pairing.id,now),
-  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now)
+  env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now),
+  ...requestedStores.map(id=>env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,id,now))
  ]);
  if(!result[0].meta.changes||!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
  return json({ok:true,device_id:deviceId});
