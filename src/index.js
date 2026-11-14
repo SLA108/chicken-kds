@@ -187,7 +187,15 @@ if(sessionToken){
   if(!item)return json({error:'Item not found'},404);
   if(item.status==='cancelled'||item.kitchen_completed_at)return json({error:'Order is closed'},409);
   const now=new Date().toISOString();
-  const updated=await env.DB.prepare("UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END,picked_up_at=NULL WHERE id=? AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL) RETURNING is_done").bind(now,item.id,item.order_id,session.storeId).first();
+  let updated;
+  try{
+   updated=await env.DB.prepare("UPDATE order_items SET is_done=CASE WHEN is_done=1 THEN 0 ELSE 1 END,done_at=CASE WHEN is_done=1 THEN NULL ELSE ? END,picked_up_at=NULL WHERE id=? AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL) RETURNING is_done").bind(now,item.id,item.order_id,session.storeId).first();
+  }catch(e){
+   // Migration 0010 protects against kitchen completion between the read and write.
+   const current=await env.DB.prepare('SELECT status,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(item.order_id,session.storeId).first();
+   if(!current||current.status==='cancelled'||current.kitchen_completed_at)return json({error:'Order changed; refresh'},409);
+   throw e;
+  }
   if(!updated)return json({error:'Order changed; refresh'},409);
   const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) done FROM order_items WHERE order_id=?').bind(item.order_id).first();
   const nextStatus=summary.total===summary.done?'done':'new';
