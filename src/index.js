@@ -568,11 +568,11 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
 if(path==='/api/admin/reservations'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const q=new URL(req.url).searchParams,storeId=q.get('store_id')||'',from=q.get('from')||'',to=q.get('to')||'';
- if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to)))return json({error:'Invalid date'},400);
+ if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(from&&to&&from>to))return json({error:'Invalid date'},400);
  const conditions=[],args=[];
  if(storeId){conditions.push('r.store_id=?');args.push(storeId)}
  if(from){conditions.push('r.starts_at>=?');args.push(from+'T00:00:00')}
- if(to){conditions.push('r.starts_at<?');args.push(to+'T23:59:59.999')}
+ if(to){conditions.push('r.starts_at<?');args.push(to+'T23:59:59.999999')}
  const rows=(await env.DB.prepare('SELECT r.*,s.name AS store_name FROM reservations r JOIN stores s ON s.id=r.store_id '+(conditions.length?'WHERE '+conditions.join(' AND '):'')+' ORDER BY r.starts_at ASC LIMIT 500').bind(...args).all()).results;
  return json({reservations:rows});
 }
@@ -604,7 +604,7 @@ if(path==='/api/store/reservations'&&req.method==='GET'){
  if(session.role!=='pos')return json({error:'Forbidden'},403);
  const q=new URL(req.url).searchParams,from=q.get('from')||'',to=q.get('to')||'';
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)return json({error:'Invalid date range'},400);
- const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? AND status!='cancelled' ORDER BY starts_at ASC LIMIT 200").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999').all()).results;
+ const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? AND status!='cancelled' ORDER BY starts_at ASC LIMIT 200").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999999').all()).results;
  return json({reservations:rows});
 }
 const storeReservation=path.match(/^\/api\/store\/reservations\/([^/]+)\/(arrived|no-show)$/);
