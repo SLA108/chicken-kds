@@ -199,7 +199,7 @@ function queueSuperPosAlerts(incoming,initial){
  showSuperPosAlert();
 }
 let reconnectTimer=null,wsGeneration=0;
-function disconnect(){document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();storeEpoch++;kitchenRefreshSerial++;pickupInitialized=false;pickupItems=[];pickupSerial++;document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
+function disconnect(){storeEpoch++;kitchenRefreshSerial++;document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();pickupInitialized=false;pickupItems=[];pickupSerial++;document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
 function connect(){
  if(!token)return;
  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
