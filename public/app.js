@@ -80,7 +80,22 @@ function notify(msg){const el=document.createElement('div');el.className='notice
 function sound(){if(!beepEnabled||!audio)return;try{const t=audio.currentTime;const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.setValueAtTime(880,t);osc.frequency.setValueAtTime(660,t+.17);gain.gain.setValueAtTime(.15,t);gain.gain.exponentialRampToValueAtTime(.001,t+.4);osc.connect(gain).connect(audio.destination);osc.start(t);osc.stop(t+.4)}catch{}}
 let pickupItems=[],pickupInitialized=false,pickupSerial=0,pickupSoundReady=false,pickupBellAt=0;
 function pickupLabel(i){return i.source==='dinein'?'Table '+i.table_no:(sourceName[i.source]||i.source||'Takeaway')}
-async function enablePickupSound(){try{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();pickupSoundReady=audio.state==='running';const b=document.querySelector('#pickup-sound');if(b)b.textContent=pickupSoundReady?'🔊 Alerts enabled · Tap to test':'🔔 Enable pickup sound';if(pickupSoundReady)pickupChime()}catch(e){notify(e.message)}}
+function enablePickupSound(){
+ try{
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass)throw Error('Audio is not supported by this browser');
+  audio=audio||new AudioContextClass();
+  // Start sound synchronously inside the tap gesture (important for iOS Safari).
+  pickupSoundReady=true;
+  pickupChime();
+  const resumePromise=audio.resume();
+  const button=document.querySelector('#pickup-sound');
+  if(button)button.textContent='🔊 Alerts enabled · Tap to test';
+  Promise.resolve(resumePromise).then(()=>{
+   if(audio.state!=='running'){pickupSoundReady=false;notify('Sound is blocked. Check device volume and browser audio settings.')}
+  }).catch(e=>{pickupSoundReady=false;notify('Audio unavailable: '+e.message)});
+ }catch(e){pickupSoundReady=false;notify('Audio unavailable: '+e.message)}
+}
 function pickupChime(){
  if(!pickupSoundReady||!audio)return;
  try{const t=audio.currentTime;for(const [dt,hz] of [[0,1047],[.16,1319],[.32,1568]]){const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=hz;g.gain.setValueAtTime(.001,t+dt);g.gain.exponentialRampToValueAtTime(.12,t+dt+.025);g.gain.exponentialRampToValueAtTime(.001,t+dt+.15);o.connect(g);g.connect(audio.destination);o.start(t+dt);o.stop(t+dt+.16)}}catch(e){console.warn(e)}
