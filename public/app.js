@@ -334,11 +334,14 @@ function showNextReservationEvent(){
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)showNextReservationEvent()});
 function warsawDay(offset=0){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(Date.now()+offset*86400000));const v=k=>parts.find(p=>p.type===k).value;return v('year')+'-'+v('month')+'-'+v('day')}
+let reservationCatchUpPending=false;
 async function catchUpReservationEvents(){
+ if(reservationCatchUpPending)return;
  if(page!=='pos'||!currentDeviceStore?.id)return;
  const store=currentDeviceStore.id,epoch=storeEpoch,key='ck_reservation_cursor_'+store;
  let since=localStorage.getItem(key);
  if(!since){localStorage.setItem(key,new Date().toISOString());return;}
+ reservationCatchUpPending=true;const requestedAt=new Date().toISOString();
  try{
   const data=await api('/reservations?changed_since='+encodeURIComponent(since));
   if(epoch!==storeEpoch||store!==currentDeviceStore?.id)return;
@@ -347,9 +350,9 @@ async function catchUpReservationEvents(){
    if(r.status==='arrived'||r.status==='no_show')continue;
    queueReservationEvent({action:r.status==='cancelled'?'cancelled':r.created_at===r.updated_at?'created':'updated',reservation:r});
   }
-  if(changes.length<200)localStorage.setItem(key,new Date().toISOString());
+  if(changes.length<200)localStorage.setItem(key,requestedAt);
   else if(changes.length)localStorage.setItem(key,changes[changes.length-1].updated_at);
- }catch(e){console.warn('Reservation change sync unavailable',e)}
+ }catch(e){console.warn('Reservation change sync unavailable',e)}finally{reservationCatchUpPending=false}
 }
 async function loadPosReservations(){
  if(page!=='pos'||!currentDeviceStore?.id)return;
