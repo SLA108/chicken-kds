@@ -60,8 +60,8 @@ if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typ
 // Existing role PINs remain for legacy routes until the full cutover.
 // A per-device HttpOnly renewal cookie is set only after PIN + enrollment secret verification.
 // It is restricted to the renewal endpoint; JS cannot read the long-lived credential.
-const renewalCookie=(id,secret)=>'ck_device='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device/renew; Max-Age=31536000';
-const clearRenewalCookie='ck_device=; HttpOnly; Secure; SameSite=Strict; Path=/api/device/renew; Max-Age=0';
+const renewalCookie=(id,secret)=>'ck_device='+id+'.'+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=31536000';
+const clearRenewalCookie='ck_device=; HttpOnly; Secure; SameSite=Strict; Path=/api/device; Max-Age=0';
 // Device pairing: no user-visible credentials. Pending request is bound to a
 // browser-only HttpOnly secret, never to the six-digit display code alone.
 const pairCookie=(secret)=>'ck_pair='+secret+'; HttpOnly; Secure; SameSite=Strict; Path=/api/device/pair; Max-Age=600';
@@ -77,6 +77,7 @@ if(path==='/api/device/pair/start'&&req.method==='POST'){
  return json({code,expires_at:expiry.toISOString()},200,{'set-cookie':pairCookie(secret)});
 }
 if(path==='/api/device/pair/status'&&req.method==='GET'){
+ if(req.headers.get('sec-fetch-site')==='cross-site')return json({error:'Forbidden'},403);
  if(!/^[0-9a-f]{64}$/.test(pairSecret))return json({error:'Pairing not started'},401);
  const request=await env.DB.prepare("SELECT id,status,device_id,expires_at FROM device_pair_requests WHERE secret_hash=? ORDER BY created_at DESC LIMIT 1").bind(await sha256Hex(pairSecret)).first();
  if(!request||Date.parse(request.expires_at)<=Date.now())return json({status:'expired'},410,{'set-cookie':clearPairCookie});
