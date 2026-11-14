@@ -555,3 +555,38 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .super-reschedule-controls input{min-width:170px;max-width:100%}
 }
 @media(min-width:761px){.super-mobile-reservations{display:block}}
+
+/* Back Office mobile-first navigation and Super POS */
+.bo-mobile-header{display:none}
+@media(max-width:760px){
+ .bo-layout{display:block!important;min-width:0}
+ .bo-mobile-header{display:flex;position:sticky;top:0;z-index:55;align-items:center;gap:12px;padding:10px 12px;margin-bottom:12px;background:#fff;border-bottom:1px solid #dfe6f0;color:#1e293b}
+ .bo-mobile-header button{flex:0 0 auto;background:#e8eef8;color:#203047;font-weight:800}
+ .bo-sidebar{display:none!important;position:relative!important;top:auto!important;margin-bottom:12px}
+ .bo-mobile-open .bo-sidebar{display:block!important}
+ .bo-mobile-open .bo-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible!important}
+ .bo-mobile-open .bo-nav button{white-space:normal!important;width:100%!important}
+ .bo-content,.admin-workspace{min-width:0;width:100%;max-width:100%;box-sizing:border-box}
+ .admin-head{flex-wrap:wrap;gap:8px}
+ .admin-head h1{font-size:25px}
+ .super-mobile-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));position:sticky;top:54px;z-index:40}
+ .super-mobile-layout[data-super-active="order"] .super-mobile-order{display:block!important}
+ .super-mobile-layout[data-super-active="cart"] .super-mobile-cart{display:block!important}
+ .super-mobile-layout[data-super-active="reservations"] .super-mobile-order,.super-mobile-layout[data-super-active="reservations"] .super-mobile-cart{display:none!important}
+ .super-mobile-layout[data-super-active="order"] .super-mobile-cart{display:none!important}
+ .super-mobile-layout[data-super-active="cart"] .super-mobile-order{display:none!important}
+ .super-mobile-layout .super-mobile-order,.super-mobile-layout .super-mobile-cart{width:100%;min-width:0;max-width:none}
+ .super-mobile-layout .menu{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}
+ .super-mobile-layout .menu button{min-width:0;max-width:100%;padding:9px;overflow-wrap:anywhere}
+ .super-mobile-layout .menu button .dish-photo{width:100%;aspect-ratio:1.2;object-fit:cover}
+ .super-mobile-layout .chips{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:8px}
+ .super-mobile-layout .chips button{flex:0 0 auto;white-space:nowrap}
+ .super-mobile-reservations .reservation-table-wrap{overflow-x:visible}
+ .super-mobile-reservations .reservation-table,.super-mobile-reservations .reservation-table tbody{display:block;min-width:0}
+ .super-mobile-reservations .reservation-table thead{display:none}
+ .super-mobile-reservations .reservation-table tr{display:grid;gap:9px;padding:14px;margin-bottom:12px;border:1px solid #dbe4f0;border-radius:12px;background:#fff}
+ .super-mobile-reservations .reservation-table td{display:block;border:0;padding:2px 0;color:#1e293b}
+ .super-mobile-reservations .super-reschedule-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .super-mobile-reservations .super-reschedule-controls input{grid-column:1/-1;width:100%;max-width:none;box-sizing:border-box}
+}
+@media(min-width:761px){.bo-mobile-header{display:none}}
