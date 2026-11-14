@@ -463,3 +463,13 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 @media(max-width:520px){.super-pos-alert-card{padding:24px 18px}.super-pos-alert-card h2{font-size:24px}.super-pos-alert-actions{flex-direction:column}}
 
 .kds-order-note{margin:10px 0 0;padding:12px 14px;border-radius:9px;background:#fff7ed;color:#7c2d12;font-size:14px;font-weight:650;line-height:1.5;overflow-wrap:anywhere;border:1px solid #fdba74}
+
+/* V3.2 compact store identity for POS and Kitchen; keep unverified warnings prominent. */
+.v3-current-store:not(.v3-current-store-unverified){position:relative;top:auto;z-index:20;margin:10px 16px 12px;padding:11px 15px;min-height:62px;border:1px solid #334155;border-radius:13px;background:#1e293b;color:#f1f5f9;box-shadow:0 2px 10px #00000016}
+.v3-current-store:not(.v3-current-store-unverified)>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.v3-current-store:not(.v3-current-store-unverified) small{font-size:10px;line-height:1.1;letter-spacing:.12em;font-weight:700;color:#94a3b8}
+.v3-current-store:not(.v3-current-store-unverified) strong{font-size:clamp(17px,2vw,21px);font-weight:750;line-height:1.25;overflow-wrap:anywhere;color:#f8fafc}
+.v3-current-store:not(.v3-current-store-unverified) button{flex-shrink:0;border:1px solid #475569;background:#334155;color:#f8fafc;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:650;box-shadow:none}
+.v3-current-store:not(.v3-current-store-unverified) button:not(:disabled):active{transform:translateY(1px)}
+.v3-current-store:not(.v3-current-store-unverified) button:disabled{opacity:.45}
+@media(max-width:540px){.v3-current-store:not(.v3-current-store-unverified){margin:8px 10px 10px;padding:10px 12px;gap:8px;min-height:56px}.v3-current-store:not(.v3-current-store-unverified) strong{font-size:17px}.v3-current-store:not(.v3-current-store-unverified) button{padding:8px 10px;font-size:12px}}
