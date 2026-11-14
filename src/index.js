@@ -322,6 +322,15 @@ if(sessionToken){
   const orders=(await env.DB.prepare("SELECT o.id,o.source,o.table_no,o.paid_at,o.kitchen_completed_at,p.method,p.amount_cents"+joined+" ORDER BY o.paid_at DESC,o.id DESC LIMIT ? OFFSET ?").bind(...params,size,(page-1)*size).all()).results;
   return json({orders,total:Number(summary.total),page,size,summary:{total_cents:Number(summary.total_cents),cash_cents:Number(summary.cash_cents),card_cents:Number(summary.card_cents),other_cents:Number(summary.other_cents)},filters:{range,method,from,to}});
  }
+ if(path==='/api/store/menu/modifiers'&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const [groups,options,links]=await Promise.all([env.DB.prepare('SELECT id,name,min_select,max_select FROM modifier_groups WHERE active=1').all(),env.DB.prepare('SELECT id,group_id,name,price_cents FROM modifier_options WHERE active=1').all(),env.DB.prepare("SELECT l.menu_id,l.group_id FROM menu_modifier_groups l JOIN menu m ON m.id=l.menu_id LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0").bind(session.storeId).all()]);
+  return json({groups:groups.results,options:options.results,links:links.results});
+ }
+ if(path==='/api/store/kitchen/categories'&&req.method==='GET'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  return json((await env.DB.prepare('SELECT name,sort_order FROM menu_categories ORDER BY sort_order,name').all()).results);
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
