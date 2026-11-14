@@ -18,6 +18,16 @@ function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
 async function getOrders(env,limit=120){const orders=(await env.DB.prepare("SELECT * FROM orders WHERE status!='cancelled' AND (kitchen_completed_at IS NULL OR paid_at IS NULL OR id IN (SELECT order_id FROM table_occupancy)) ORDER BY created_at DESC LIMIT ?").bind(limit).all()).results;const ids=orders.map(o=>o.id);if(!ids.length)return [];const items=(await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(()=>'?').join(',')}) ORDER BY created_at ASC`).bind(...ids).all()).results;const itemIds=items.map(i=>i.id);const modifiers=itemIds.length?(await env.DB.prepare(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(...itemIds).all()).results:[];return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));}
 
+// Store-scoped read model. Store ID comes only from a verified signed session.
+async function getStoreOrders(env,storeId,limit=120){
+ const orders=(await env.DB.prepare("SELECT * FROM orders WHERE store_id=? AND status!='cancelled' AND (kitchen_completed_at IS NULL OR paid_at IS NULL OR EXISTS (SELECT 1 FROM table_occupancy t WHERE t.order_id=orders.id AND t.store_id=orders.store_id)) ORDER BY created_at DESC LIMIT ?").bind(storeId,limit).all()).results;
+ if(!orders.length)return [];
+ const ids=orders.map(o=>o.id),placeholders=ids.map(()=>'?').join(',');
+ const items=(await env.DB.prepare(`SELECT i.* FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id IN (${placeholders}) ORDER BY i.created_at ASC`).bind(storeId,...ids).all()).results;
+ const itemIds=items.map(i=>i.id);
+ const modifiers=itemIds.length?(await env.DB.prepare(`SELECT m.* FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(storeId,...itemIds).all()).results:[];
+ return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));
+}
 async function prepareOrderItems(env,items,orderId,now){
  const unique=[...new Set(items.map(x=>x.menu_id))];
  const rows=(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
@@ -67,6 +77,24 @@ if(sessionToken){
  const device=await activeDeviceStore(env,session.deviceId,session.storeId);
  if(!device)return json({error:'Device revoked or store inactive'},403);
  if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},expires_at:session.expiresAt,api_enabled:false});
+ if(path==='/api/store/orders'&&req.method==='GET'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const orders=await getStoreOrders(env,session.storeId);
+  if(session.role==='kitchen')return json(orders);
+  const ids=orders.map(o=>o.id);
+  const [occupancy,payments]=await Promise.all([
+   env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=?').bind(session.storeId).all(),
+   ids.length?env.DB.prepare(`SELECT p.order_id,p.method,p.amount_cents,p.created_at FROM payments p JOIN orders o ON o.id=p.order_id WHERE p.store_id=? AND o.store_id=? AND p.order_id IN (${ids.map(()=>'?').join(',')}) ORDER BY p.created_at DESC`).bind(session.storeId,session.storeId,...ids).all():Promise.resolve({results:[]})
+  ]);
+  const occupied=new Set(occupancy.results.map(x=>x.order_id));
+  return json(orders.map(o=>({...o,table_occupied:occupied.has(o.id),payment:payments.results.find(p=>p.order_id===o.id)||null})));
+ }
+ if(path==='/api/store/tables'&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const rows=(await env.DB.prepare("SELECT o.id,o.table_no,o.status,o.created_at FROM table_occupancy t JOIN orders o ON o.id=t.order_id AND o.store_id=t.store_id WHERE t.store_id=? AND o.source='dinein' AND o.status!='cancelled' ORDER BY o.created_at DESC").bind(session.storeId).all()).results;
+  return json(Array.from({length:20},(_,i)=>{const number=String(i+1).padStart(2,'0'),matches=rows.filter(o=>o.table_no===number);return {number,occupied:matches.length>0,order_id:matches[0]?.id||null,conflict:matches.length>1,status:matches[0]?.status||null};}));
+ }
+
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
