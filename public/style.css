@@ -448,3 +448,16 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 @media(max-width:650px){.bo-order-foot,.bo-order-item{flex-wrap:wrap}.bo-order-item>small{flex-basis:100%}}
 
 .bo-sales-table{overflow-x:auto;margin-top:12px}.bo-sales-table table{width:100%;border-collapse:collapse;min-width:550px}.bo-sales-table th,.bo-sales-table td{padding:12px;text-align:right;border-bottom:1px solid #e2e8f0;white-space:nowrap}.bo-sales-table th:first-child,.bo-sales-table td:first-child{text-align:left}.bo-sales-table th{font-size:12px;color:#64748b}
+
+/* Incoming Back Office order alert on the restaurant POS */
+.super-pos-alert-overlay{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}
+.super-pos-alert-card{width:min(100%,480px);max-height:90vh;overflow:auto;background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:32px;box-shadow:0 28px 90px rgba(15,23,42,.35);text-align:center;animation:super-pos-alert-in .2s ease-out}
+.super-pos-alert-icon{width:72px;height:72px;display:grid;place-items:center;margin:0 auto 15px;background:#eff6ff;border-radius:22px;font-size:36px}
+.super-pos-alert-kicker{color:#2563eb;font-size:12px;font-weight:800;letter-spacing:.12em}
+.super-pos-alert-card h2{font-size:28px;line-height:1.15;margin:12px 0;color:#0f172a}
+.super-pos-alert-subtitle{font-size:16px;color:#475569;margin:0 0 18px}
+.super-pos-alert-preview{text-align:left;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:22px;color:#334155}
+.super-pos-alert-preview>div{padding:6px 0}.super-pos-alert-preview small{color:#64748b}
+.super-pos-alert-actions{display:flex;gap:10px;justify-content:center}.super-pos-alert-actions button{flex:1;min-height:48px}
+@keyframes super-pos-alert-in{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:520px){.super-pos-alert-card{padding:24px 18px}.super-pos-alert-card h2{font-size:24px}.super-pos-alert-actions{flex-direction:column}}
