@@ -602,7 +602,7 @@ async function uploadAdminImage(file){
   const data=await r.json();if(!r.ok)throw Error(data.error||'Upload failed');return data.image_url;
  }finally{image.close();}
 }
-let v3Stores=[],v3SelectedStore='',v3StoreMenu=[],v3Devices=[],v3StoreError='',v3Loaded=false;
+let v3Stores=[],v3SelectedStore='',v3StoreMenu=[],v3Devices=[],v3StoreError='',v3Loaded=false,v3PairAllowedStores=null;
 async function loadV3Stores(){
  try{const [stores,devices]=await Promise.all([api('/admin/stores'),api('/admin/devices')]);v3Stores=stores.stores||[];v3Devices=devices.devices||[];v3StoreError='';v3Loaded=true;if(!v3Stores.some(x=>x.id===v3SelectedStore))v3SelectedStore=v3Stores[0]?.id||'';if(v3SelectedStore)await loadV3StoreMenu();}
  catch(e){v3StoreError=e.message;v3Loaded=true;}
@@ -630,7 +630,7 @@ function v3StorePanel(){
  '<details class="v3-menu-disclosure"><summary>Manage menu overrides <span>Expand to edit prices and availability</span></summary><div class="v3-menu-list">'+(menuRows||'<p class="v3-empty">No menu items for this restaurant.</p>')+'</div></details></section>'+
  '<section class="v3-management-section"><div class="v3-section-heading"><div><h3>Approve a device</h3><p>Use the six-digit pairing code shown on the restaurant tablet.</p></div></div>'+
  '<form id="v3-pair-approve" class="v3-management-form"><div class="v3-form-grid"><label>Pairing code<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="6-digit code"></label><label>Device name<input name="label" required maxlength="100" placeholder="e.g. Kitchen tablet 1"></label><label>Device role<select name="role"><option value="pos">POS</option><option value="kitchen">Kitchen</option></select></label></div>'+
- '<fieldset class="v3-store-grants"><legend>Allowed restaurants</legend>'+(activeStores.map(x=>'<label><input type="checkbox" name="store_ids" value="'+esc(x.id)+'" '+(x.id===v3SelectedStore?'checked':'')+'><span>'+esc(x.name)+'</span></label>').join('')||'<p class="v3-empty">Activate a restaurant to grant access.</p>')+'</fieldset>'+
+ '<fieldset class="v3-store-grants"><legend>Allowed restaurants</legend>'+(activeStores.map(x=>'<label><input type="checkbox" name="store_ids" value="'+esc(x.id)+'" '+((v3PairAllowedStores===null?x.id===v3SelectedStore:v3PairAllowedStores.has(String(x.id)))?'checked':'')+'><span>'+esc(x.name)+'</span></label>').join('')||'<p class="v3-empty">Activate a restaurant to grant access.</p>')+'</fieldset>'
  '<div class="v3-form-footer"><label>Secondary password<input name="secondary_pin" type="password" autocomplete="off" required></label><button type="submit">Approve device</button></div></form></section>'+
  '<section class="v3-management-section"><div class="v3-section-heading"><div><h3>Registered devices</h3><p>Manage existing devices and their restaurant access.</p></div><span class="v3-section-count">'+activeDevices.length+' active</span></div>'+
  '<div class="v3-device-list">'+(activeDevices.map(deviceRow).join('')||'<p class="v3-empty">No active devices.</p>')+'</div>'+
@@ -657,6 +657,7 @@ function admin(){
   if(!confirm((store.active?'Deactivate ':'Activate ')+store.name+'?'))return;
   try{await api('/admin/stores/'+encodeURIComponent(store.id)+'/config','PATCH',{active:!store.active});await loadV3Stores();admin();notify('Store status updated')}catch(err){notify(err.message)}
  };
+ document.querySelectorAll('#v3-pair-approve input[name="store_ids"]').forEach(box=>box.onchange=()=>{if(v3PairAllowedStores===null)v3PairAllowedStores=new Set(v3SelectedStore?[String(v3SelectedStore)]:[]);if(box.checked)v3PairAllowedStores.add(box.value);else v3PairAllowedStores.delete(box.value)});
  document.querySelector('#v3-pair-approve').onsubmit=async e=>{
   e.preventDefault();const f=e.currentTarget,btn=f.querySelector('button[type=submit]');btn.disabled=true;
   try{
@@ -665,7 +666,7 @@ function admin(){
    if(!store_ids.length)throw Error('Select at least one active store');
    const data=Object.fromEntries(formData);
    await api('/admin/device-pairings/approve','POST',{...data,store_ids});
-   f.reset();v3Devices=(await api('/admin/devices')).devices||[];
+   f.reset();v3PairAllowedStores=null;v3Devices=(await api('/admin/devices')).devices||[];
    notify('Device approved. Tablet will sign in automatically.');
   }catch(err){notify('Approval failed: '+err.message)}finally{btn.disabled=false}
  };
