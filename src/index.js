@@ -251,6 +251,24 @@ if(sessionToken){
   if(result.meta.changes)await broadcastStore(env,session.storeId,'pickup',{order_id:id,acknowledged:result.meta.changes});
   return json({ok:true,count:result.meta.changes||0});
  }
+
+ if(path==='/api/store/kitchen/history'&&req.method==='GET'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const u=new URL(req.url),range=u.searchParams.get('range')||'today',q=(u.searchParams.get('q')||'').trim().slice(0,80);
+  const page=Math.max(1,Math.min(10000,Number.parseInt(u.searchParams.get('page')||'1',10)||1)),size=15;
+  if(!['today','yesterday','all'].includes(range))return json({error:'Invalid range'},400);
+  const fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'});
+  const today=fmt.format(new Date()),day=new Date(today+'T12:00:00Z');
+  if(range==='yesterday')day.setUTCDate(day.getUTCDate()-1);
+  const target=range==='all'?null:day.toISOString().slice(0,10);
+  const where="o.store_id=? AND o.kitchen_completed_at IS NOT NULL AND o.status!='cancelled'"+(q?" AND (o.id LIKE ? OR o.table_no LIKE ?)":"");
+  const args=[session.storeId,...(q?['%'+q+'%','%'+q+'%']:[])],scanLimit=range==='all'?500:1500;
+  const rows=(await env.DB.prepare('SELECT o.id,o.source,o.table_no,o.created_at,o.kitchen_completed_at,o.paid_at FROM orders o WHERE '+where+' ORDER BY o.kitchen_completed_at DESC LIMIT ?').bind(...args,scanLimit).all()).results;
+  const filtered=target?rows.filter(o=>fmt.format(new Date(o.kitchen_completed_at))===target):rows;
+  const selected=filtered.slice((page-1)*size,page*size),ids=selected.map(o=>o.id);
+  const items=ids.length?(await env.DB.prepare('SELECT i.id,i.order_id,i.name,i.quantity,i.is_done FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY i.created_at').bind(session.storeId,...ids).all()).results:[];
+  return json({page,size,total:filtered.length,has_more:page*size<filtered.length,limited:rows.length===scanLimit,orders:selected.map(o=>({...o,items:items.filter(i=>i.order_id===o.id)}))});
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
