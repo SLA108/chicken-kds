@@ -225,7 +225,7 @@ if(sessionToken){
   return json({ok:true});
  }
 
- const orderLookup=path.match(/^\\/api\\/store\\/orders\\/by-client-key\\/([^/]+)$/);
+ const orderLookup=path.match(/^\/api\/store\/orders\/by-client-key\/([^/]+)$/);
  if(orderLookup&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const key=decodeURIComponent(orderLookup[1]);
