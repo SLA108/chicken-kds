@@ -40,7 +40,12 @@ async function renewDeviceSession(){
     location.reload();
     return false;
    }
-   if(currentDeviceStore&&!storeSelectionPending)localStorage.setItem(lastStoreKey,currentDeviceStore.id);
+   if(storeSelectionPending){
+    // Do not expose a default-store bearer token until the employee chooses.
+    token='';sessionStorage.removeItem('ck_token_'+page);
+    return true;
+   }
+   if(currentDeviceStore)localStorage.setItem(lastStoreKey,currentDeviceStore.id);
    token=result.token;sessionStorage.setItem('ck_token_'+page,token);
    return true;
   }catch{return false;}
@@ -720,8 +725,8 @@ function chooseInitialStore(){
  return true;
 }
 async function start(){if(chooseInitialStore())return;try{await refresh(true);connect()}catch(e){notify(e.message)}}
-(async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(token)start();else login()})();
-setInterval(async()=>{if(deviceMode())await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
+(async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(storeSelectionPending)chooseInitialStore();else if(token)start();else login()})();
+setInterval(async()=>{if(deviceMode()&&!storeSelectionPending)await renewDeviceSession()},15*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
 let kitchenSyncBusy=false;
 setInterval(async()=>{if(!token||page!=='kitchen'||document.hidden||kitchenSyncBusy)return;kitchenSyncBusy=true;try{await refresh()}finally{kitchenSyncBusy=false}},5000);
