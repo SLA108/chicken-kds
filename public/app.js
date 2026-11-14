@@ -103,7 +103,7 @@ async function beginPairing(){
   try{
    const response=await fetch('/api/device/pair/status',{credentials:'same-origin'});
    if(response.status===410){clearInterval(pairPoll);box.textContent='Pairing expired. Click Pair this device to try again.';return;}
-   if(!response.ok)return;
+   if(!response.ok){if(response.status===409||response.status===403){clearInterval(pairPoll);box.textContent='Pairing unavailable. Please request a new code.';}return;}
    const data=await response.json();if(data.status!=='approved')return;
    clearInterval(pairPoll);
    if(data.role!==page){box.textContent='Approved for '+data.role+'. Open the corresponding role page.';return;}
@@ -591,7 +591,7 @@ function admin(){
 }
 function scanner(){shell(`<div class="panel"><h2>Delivery Scanner (coming soon)</h2><p>Future support for delivery-platform order scanning.</p><div class="warning"><strong>Not available: </strong>Scanning and AI recognition are not enabled in this version.</div><p class="muted">Enter delivery orders manually in the POS for now.</p><a href="/pos">Go to POS</a></div>`);}
 async function start(){try{await refresh(true);connect()}catch(e){notify(e.message)}}
-(async()=>{if(!token)await renewDeviceSession();if(token)start();else login()})();
+(async()=>{if(['pos','kitchen'].includes(page))await renewDeviceSession();if(token)start();else login()})();
 setInterval(async()=>{if(deviceMode())await renewDeviceSession()},60*60*1000);setInterval(()=>{if(token&&connected&&ws?.readyState===1)ws.send('ping')},25000);// Kitchen must never depend solely on WebSocket delivery.
 // Poll every 5s as a fallback; WebSocket still refreshes immediately.
 let kitchenSyncBusy=false;
