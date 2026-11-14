@@ -564,6 +564,57 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
  const summary=(await env.DB.prepare('SELECT o.status,COUNT(*) AS count FROM orders o '+clause+' GROUP BY o.status').bind(...args).all()).results;
  return json({orders:visible,summary,has_more,next_offset:has_more?offset+limit:null,limit,period});
 }
+// Reservations do not create orders or table occupancy.
+if(path==='/api/admin/reservations'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const q=new URL(req.url).searchParams,storeId=q.get('store_id')||'',from=q.get('from')||'',to=q.get('to')||'';
+ if((from&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(from))||(to&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(to)))return json({error:'Invalid date'},400);
+ const conditions=[],args=[];
+ if(storeId){conditions.push('r.store_id=?');args.push(storeId)}
+ if(from){conditions.push('r.starts_at>=?');args.push(from+'T00:00:00')}
+ if(to){conditions.push('r.starts_at<?');args.push(to+'T23:59:59.999')}
+ const rows=(await env.DB.prepare('SELECT r.*,s.name AS store_name FROM reservations r JOIN stores s ON s.id=r.store_id '+(conditions.length?'WHERE '+conditions.join(' AND '):'')+' ORDER BY r.starts_at ASC LIMIT 500').bind(...args).all()).results;
+ return json({reservations:rows});
+}
+if(path==='/api/admin/reservations'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req);
+ if(!b||typeof b.store_id!=='string'||typeof b.starts_at!=='string'||!/^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d$/.test(b.starts_at)||!Number.isInteger(b.party_size)||b.party_size<1||b.party_size>50)return json({error:'Invalid reservation'},400);
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(b.store_id).first();
+ if(!store)return json({error:'Restaurant unavailable'},404);
+ const now=new Date().toISOString(),id=uid();
+ await env.DB.prepare('INSERT INTO reservations(id,store_id,starts_at,party_size,guest_name,phone,note,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,b.store_id,b.starts_at,b.party_size,String(b.guest_name||'').slice(0,120),String(b.phone||'').slice(0,80),String(b.note||'').slice(0,500),'booked',now,now).run();
+ await broadcastStore(env,b.store_id,'reservations',{id});
+ return json({ok:true,id},201);
+}
+const reservationMatch=path.match(/^\\/api\\/admin\\/reservations\\/([^/]+)$/);
+if(reservationMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),id=reservationMatch[1];
+ const existing=await env.DB.prepare('SELECT * FROM reservations WHERE id=?').bind(id).first();
+ if(!existing)return json({error:'Reservation not found'},404);
+ const storeId=b?.store_id??existing.store_id,startsAt=b?.starts_at??existing.starts_at,party=b?.party_size??existing.party_size,status=b?.status??existing.status;
+ if(typeof storeId!=='string'||typeof startsAt!=='string'||!/^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d$/.test(startsAt)||!Number.isInteger(party)||party<1||party>50||!['booked','arrived','cancelled','no_show'].includes(status))return json({error:'Invalid reservation'},400);
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first();if(!store)return json({error:'Restaurant unavailable'},404);
+ await env.DB.prepare('UPDATE reservations SET store_id=?,starts_at=?,party_size=?,guest_name=?,phone=?,note=?,status=?,updated_at=? WHERE id=?').bind(storeId,startsAt,party,String(b.guest_name??existing.guest_name).slice(0,120),String(b.phone??existing.phone).slice(0,80),String(b.note??existing.note).slice(0,500),status,new Date().toISOString(),id).run();
+ await broadcastStore(env,existing.store_id,'reservations',{id});if(storeId!==existing.store_id)await broadcastStore(env,storeId,'reservations',{id});
+ return json({ok:true,id});
+}
+if(path==='/api/store/reservations'&&req.method==='GET'){
+ if(session.role!=='pos')return json({error:'Forbidden'},403);
+ const q=new URL(req.url).searchParams,from=q.get('from')||'',to=q.get('to')||'';
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(from)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(to)||from>to)return json({error:'Invalid date range'},400);
+ const rows=(await env.DB.prepare("SELECT id,starts_at,party_size,guest_name,phone,note,status FROM reservations WHERE store_id=? AND starts_at>=? AND starts_at<? AND status!='cancelled' ORDER BY starts_at ASC LIMIT 200").bind(session.storeId,from+'T00:00:00',to+'T23:59:59.999').all()).results;
+ return json({reservations:rows});
+}
+const storeReservation=path.match(/^\\/api\\/store\\/reservations\\/([^/]+)\\/arrived$/);
+if(storeReservation&&req.method==='POST'){
+ if(session.role!=='pos')return json({error:'Forbidden'},403);
+ const result=await env.DB.prepare("UPDATE reservations SET status='arrived',updated_at=? WHERE id=? AND store_id=? AND status='booked'").bind(new Date().toISOString(),storeReservation[1],session.storeId).run();
+ if(!result.meta.changes)return json({error:'Reservation not found or already handled'},409);
+ await broadcastStore(env,session.storeId,'reservations',{id:storeReservation[1]});
+ return json({ok:true});
+}
 if(path==='/api/admin/stores'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  try{
