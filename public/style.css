@@ -293,3 +293,27 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .pickup-mini-card button{flex:0 0 38px;width:38px;min-height:38px;border-radius:9px;background:#167c58;font-weight:800}
 .pickup-order-card>.pickup-all{display:block;width:100%;margin-top:10px;min-height:43px;background:#17875d;color:white;font-weight:750;border-radius:10px}
 .pickup-order-card button:disabled{opacity:.6;cursor:wait}
+
+
+/* V3 store management — restrained back-office layout, scoped to the Stores tab. */
+.admin-workspace:has(#v3-store-select){--v3-line:#e7eaf0;--v3-muted:#667085;max-width:100%;overflow:hidden}
+.admin-workspace:has(#v3-store-select)>h2{font-size:1.45rem;letter-spacing:-.035em;margin:0 0 8px}
+.admin-workspace:has(#v3-store-select)>p.muted{max-width:760px;font-size:.87rem;line-height:1.55;margin:0 0 22px;color:var(--v3-muted)}
+.admin-workspace:has(#v3-store-select)>#v3-load-stores{display:inline-flex;align-items:center;justify-content:center;margin:0 12px 18px 0;padding:10px 15px;min-height:42px;border:1px solid var(--v3-line);border-radius:10px;font-weight:650}
+.admin-workspace:has(#v3-store-select)>label:has(#v3-store-select){display:inline-flex;vertical-align:top;align-items:flex-start;flex-direction:column;gap:7px;width:min(100%,350px);font-size:.8rem;font-weight:700;color:#475467;margin-bottom:18px}
+.admin-workspace #v3-store-select{display:block;width:100%;max-width:100%;min-width:0;min-height:42px;padding:9px 34px 9px 12px;border:1px solid #d0d5dd;border-radius:10px;background:#fff;color:#1d2939;font-size:.9rem}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list{border:1px solid var(--v3-line);border-radius:14px;overflow:hidden;margin:0 0 20px;background:#fff}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish{display:grid;grid-template-columns:minmax(220px,1fr) minmax(145px,185px) minmax(125px,145px) 75px 75px;gap:14px;align-items:center;margin:0;padding:16px 18px;border:0;border-bottom:1px solid var(--v3-line);border-radius:0;background:#fff;box-shadow:none;min-width:0}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish:last-child{border-bottom:0}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish:hover{background:#fafbfc}
+.admin-workspace:has(#v3-store-select) .admin-dish-info{min-width:0}
+.admin-workspace:has(#v3-store-select) .admin-dish-info strong{display:block;font-size:.91rem;line-height:1.4;overflow-wrap:anywhere;color:#182230}
+.admin-workspace:has(#v3-store-select) .admin-dish-info small{display:block;margin-top:5px;color:var(--v3-muted);font-size:.77rem;line-height:1.45}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:.76rem;font-weight:650;color:#667085;margin:0}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish input[type=number],.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish select{width:100%;min-width:0;min-height:40px;border:1px solid #d0d5dd;border-radius:9px;padding:8px 10px;background:#fff;color:#1d2939;font-size:.86rem}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish input[type=checkbox]{width:18px;height:18px;margin:5px 0 0;accent-color:#c76c42}
+.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>button{min-height:40px;border-radius:9px;padding:8px 12px;font-size:.82rem;font-weight:700}
+.admin-workspace:has(#v3-store-select)>h3{margin:28px 0 14px;font-size:1.1rem}
+.admin-workspace:has(#v3-store-select)>#v3-device-form{margin:0 0 16px}
+@media(max-width:1050px){.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish{grid-template-columns:minmax(0,1fr) minmax(130px,180px) minmax(110px,140px);gap:12px}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>label:has([data-v3-sold]){grid-column:2}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>button{grid-column:3}}
+@media(max-width:680px){.admin-workspace:has(#v3-store-select)>#v3-load-stores{width:100%;margin:0 0 12px}.admin-workspace:has(#v3-store-select)>label:has(#v3-store-select){display:flex;width:100%}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:15px;gap:13px}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>.admin-dish-info{grid-column:1/-1}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>label:has([data-v3-sold]){grid-column:1}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish>button{grid-column:2;align-self:end}.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish input[type=number],.admin-workspace:has(#v3-store-select)>.admin-dish-list>.admin-dish select{font-size:16px}}
