@@ -1013,3 +1013,9 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .bo-workload-mobile-label span:not(:first-child){text-align:right}
 .bo-workload-tooltip{display:none!important}
 @media(max-width:700px){.bo-workload-mobile-grid{grid-template-columns:minmax(0,1fr) 45px 45px 45px;gap:4px}.bo-workload-mobile-detail:not([hidden]){font-size:11px}}
+
+/* iOS Safari: let the plot scroll horizontally without hijacking swipe gestures. */
+@media(max-width:700px){
+ .bo-workload-plot{display:block;width:100%;max-width:100%;overflow-x:scroll!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+ .bo-workload-plot>svg{display:block!important;width:870px!important;min-width:870px!important;max-width:none!important;height:252px!important;aspect-ratio:auto!important;flex:none;touch-action:pan-x pan-y!important}
+}
