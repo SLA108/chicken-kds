@@ -666,3 +666,36 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-mobile-tips-top>strong{justify-self:end;text-align:right;font-variant-numeric:tabular-nums}
  .bo-mobile-order-count strong{font-variant-numeric:tabular-nums;text-align:right}
 }
+
+/* Cohesive mobile Back Office across management tabs */
+@media(max-width:760px){
+ .bo-content>.admin-workspace:not(:has(.bo-mobile-summary)){padding:14px!important;background:#fff;border:1px solid #e3e9f1;border-radius:16px;box-sizing:border-box}
+ .bo-content>.admin-workspace .admin-section-head,.bo-content .v3-management-head{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;gap:9px!important;text-align:left!important}
+ .bo-content>.admin-workspace .admin-section-head>div,.bo-content .v3-management-head>div{min-width:0;flex:1}
+ .bo-content>.admin-workspace .admin-section-head h2,.bo-content .v3-management-head h2{font-size:clamp(17px,4.5vw,21px)!important;line-height:1.2;margin:0!important;text-align:left!important}
+ .bo-content>.admin-workspace .admin-section-head button,.bo-content .v3-management-head button{flex:0 0 auto!important;margin:0!important;min-height:36px;padding:8px 10px!important;font-size:12px!important;white-space:nowrap}
+ .bo-content>.admin-workspace .admin-section-head p,.bo-content .v3-management-head p{font-size:11px;line-height:1.35;margin:4px 0 0}
+ .bo-content .toolbar{max-width:100%;flex-wrap:wrap;gap:9px}
+ .bo-content .toolbar label{min-width:0;flex:1 1 135px;max-width:100%;font-size:12px}
+ .bo-content .toolbar label select,.bo-content .toolbar label input{display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+ .bo-content .panel,.bo-content .v3-management-section{min-width:0;max-width:100%;box-sizing:border-box;border-radius:14px}
+ .bo-content .menu-form-grid{display:grid;grid-template-columns:1fr!important;gap:11px}
+ .bo-content .menu-form-grid label{min-width:0}
+ .bo-content .menu-form-grid input,.bo-content .menu-form-grid select,.bo-content .menu-form-grid textarea{max-width:100%;width:100%;box-sizing:border-box}
+ .bo-content .bo-sales-table{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px}
+ .bo-content .bo-sales-table table{width:max-content;min-width:100%}
+ .bo-content .bo-sales-table th,.bo-content .bo-sales-table td{white-space:nowrap;padding:11px 10px}
+ .bo-content .bo-sales-table td:last-child{white-space:normal}
+ .bo-content .bo-sales-table button{min-height:34px;margin:2px}
+ .bo-content .v3-management-head{margin-bottom:14px}
+ .bo-content .v3-management-head .v3-eyebrow{display:none}
+ .bo-content .v3-store-tiles{display:grid;grid-template-columns:1fr!important;gap:10px}
+ .bo-content .v3-device-actions{display:flex;flex-wrap:wrap;gap:8px}
+ .bo-content .v3-management-section{padding:13px!important}
+ .bo-content .v3-section-heading{display:flex;justify-content:space-between;align-items:center;gap:8px}
+ .bo-content .v3-section-heading h3{font-size:16px}
+ .bo-content .category-card{display:flex;flex-wrap:wrap;gap:10px;padding:12px}
+ .bo-content .category-card .toolbar{width:100%}
+ .bo-content .admin-filter{display:flex;flex-wrap:wrap;gap:8px}
+ .bo-content .admin-filter>*{min-width:0;max-width:100%}
+}
