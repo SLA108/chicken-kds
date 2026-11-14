@@ -169,6 +169,30 @@ if(sessionToken){
   return json({items:rows});
  }
 
+ const scopedTips=path.match(/^\/api\/store\/orders\/([^/]+)\/tips$/);
+ if(scopedTips&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const rows=(await env.DB.prepare('SELECT id,amount_cents,method,stage,created_at FROM order_tips WHERE order_id=? AND store_id=? ORDER BY created_at').bind(scopedTips[1],session.storeId).all()).results;
+  return json({tips:rows,total_cents:rows.reduce((n,t)=>n+t.amount_cents,0)});
+ }
+ if(scopedTips&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const b=await parse(req),amount=b?.amount_cents;
+  if(!Number.isSafeInteger(amount)||amount<=0||amount>10000000||!['cash','card'].includes(b?.method)||!['checkout','release'].includes(b?.stage)||typeof b?.request_key!=='string'||b.request_key.length<16||b.request_key.length>128)return json({error:'Invalid tip'},400);
+  const id=scopedTips[1],storeId=session.storeId;
+  const order=await env.DB.prepare('SELECT id,paid_at,source FROM orders WHERE id=? AND store_id=? AND status!=\'cancelled\'').bind(id,storeId).first();
+  if(!order||!order.paid_at)return json({error:'Order must be paid before recording tips'},409);
+  if(b.stage==='release'){
+   const occupancy=await env.DB.prepare('SELECT order_id FROM table_occupancy WHERE order_id=? AND store_id=?').bind(id,storeId).first();
+   if(!occupancy||order.source!=='dinein')return json({error:'Table already released'},409);
+  }
+  const existing=await env.DB.prepare('SELECT id,order_id,store_id FROM order_tips WHERE request_key=?').bind(b.request_key).first();
+  if(existing)return existing.order_id===id&&existing.store_id===storeId?json({ok:true,duplicate:true}):json({error:'Tip request key reused'},409);
+  const now=new Date().toISOString();
+  try{await env.DB.prepare('INSERT INTO order_tips(id,order_id,store_id,amount_cents,method,stage,created_at,actor,request_key) VALUES(?,?,?,?,?,?,?,?,?)').bind(uid(),id,storeId,amount,b.method,b.stage,now,session.role,b.request_key).run();}
+  catch(e){return json({error:'Tip save failed: '+e.message},409)}
+  return json({ok:true,amount_cents:amount});
+ }
  const scopedCheckout=path.match(/^\/api\/store\/orders\/([^/]+)\/checkout$/);
  if(scopedCheckout&&req.method==='POST'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
