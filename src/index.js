@@ -786,7 +786,7 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
  const b=await parse(req);
- if(!b||!isPairingCode(b.code)||!['pos','kitchen','scanner'].includes(b.role)||typeof b.label!=='string'||!b.label.trim()||b.label.length>100||typeof b.secondary_pin!=='string')return json({error:'Invalid approval'},400);
+ if(!b||!isPairingCode(b.code)||(b.role!==undefined&&!['pos','kitchen','scanner'].includes(b.role))||typeof b.label!=='string'||!b.label.trim()||b.label.length>100||typeof b.secondary_pin!=='string')return json({error:'Invalid approval'},400);
  if(!env.DEVICE_APPROVAL_PIN||env.DEVICE_APPROVAL_PIN.length<8)return json({error:'Secondary approval password not configured'},503);
  const attemptScope='pair:'+b.code,nowMs=Date.now();
  const attempt=await env.DB.prepare('SELECT attempts,window_started_at,blocked_until FROM device_approval_attempts WHERE scope=?').bind(attemptScope).first();
@@ -806,7 +806,7 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  const pairing=await env.DB.prepare("SELECT id FROM device_pair_requests WHERE code=? AND status='pending' AND expires_at>?").bind(b.code,now).first();
  if(!pairing)return json({error:'Code expired or already used'},409);
  const result=await env.DB.batch([
-  env.DB.prepare("INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) SELECT ?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM device_pair_requests WHERE id=? AND status='pending' AND expires_at>?)").bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role,now,pairing.id,now),
+  env.DB.prepare("INSERT INTO pos_devices(id,store_id,label,token_hash,role,active,created_at) SELECT ?,?,?,?,?,1,? WHERE EXISTS(SELECT 1 FROM device_pair_requests WHERE id=? AND status='pending' AND expires_at>?)").bind(deviceId,store.id,b.label.trim(),'pending:'+deviceId,b.role==='scanner'?'scanner':'pos',now,pairing.id,now),
   env.DB.prepare("UPDATE device_pair_requests SET status='approved',device_id=? WHERE id=? AND status='pending' AND expires_at>?").bind(deviceId,pairing.id,now),
   ...requestedStores.map(id=>env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,id,now))
  ]);
