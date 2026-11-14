@@ -191,7 +191,9 @@ if(sessionToken){
   if(!updated)return json({error:'Order changed; refresh'},409);
   const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) done FROM order_items WHERE order_id=?').bind(item.order_id).first();
   const nextStatus=summary.total===summary.done?'done':'new';
-  await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status!='cancelled'").bind(nextStatus,now,item.order_id,session.storeId).run();
+  // A concurrent kitchen completion must not be undone by a stale item-status refresh.
+  const statusUpdate=await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL").bind(nextStatus,now,item.order_id,session.storeId).run();
+  if(statusUpdate.meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await event(env,item.order_id,updated.is_done?'item_done':'item_undone',session.role,{item_id:item.id,store_id:session.storeId});
   await broadcastStore(env,session.storeId,'orders',{id:item.order_id,item_id:item.id});
   await broadcastStore(env,session.storeId,'pickup',{item_id:item.id,ready:!!updated.is_done});
