@@ -740,7 +740,8 @@ if(path==='/api/admin/overview'&&req.method==='GET'){
   return {...paymentSplit(store.id),store_id:store.id,code:store.code,name:store.name,orders:subset.length,paid_cents:paid,unpaid_cents:unpaid,total_cents:paid+unpaid,unpriced_orders:unpriced,cash_tips_cents,card_tips_cents,tip_cents:cash_tips_cents+card_tips_cents,discount_cents};
  });
  const total=result.reduce((a,x)=>({orders:a.orders+x.orders,cash_cents:a.cash_cents+x.cash_cents,card_cents:a.card_cents+x.card_cents,others_cents:a.others_cents+x.others_cents,paid_cents:a.paid_cents+x.paid_cents,unpaid_cents:a.unpaid_cents+x.unpaid_cents,total_cents:a.total_cents+x.total_cents,unpriced_orders:a.unpriced_orders+x.unpriced_orders,cash_tips_cents:a.cash_tips_cents+x.cash_tips_cents,card_tips_cents:a.card_tips_cents+x.card_tips_cents,tip_cents:a.tip_cents+x.tip_cents,discount_cents:a.discount_cents+x.discount_cents}),{orders:0,cash_cents:0,card_cents:0,others_cents:0,paid_cents:0,unpaid_cents:0,total_cents:0,unpriced_orders:0,cash_tips_cents:0,card_tips_cents:0,tip_cents:0,discount_cents:0});
- const workloadRows=(await env.DB.prepare("SELECT o.store_id,o.created_at,o.kitchen_completed_at,COALESCE(SUM(i.quantity),0) AS dishes FROM orders o JOIN stores s ON s.id=o.store_id LEFT JOIN order_items i ON i.order_id=o.id WHERE s.code!='TEST' AND s.active=1 AND o.created_at>=? AND o.created_at<? AND o.status!='cancelled' GROUP BY o.id").bind(from,to).all()).results;
+ const workloadStores=(await env.DB.prepare("SELECT id AS store_id,code,name FROM stores WHERE active=1 ORDER BY name").all()).results;
+ const workloadRows=(await env.DB.prepare("SELECT o.store_id,o.created_at,o.kitchen_completed_at,COALESCE(SUM(i.quantity),0) AS dishes FROM orders o JOIN stores s ON s.id=o.store_id LEFT JOIN order_items i ON i.order_id=o.id WHERE s.active=1 AND o.created_at>=? AND o.created_at<? AND o.status!='cancelled' GROUP BY o.id").bind(from,to).all()).results;
  const slotFormat=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  const workloadSlots=new Map();
  for(const o of workloadRows){
@@ -755,7 +756,7 @@ if(path==='/api/admin/overview'&&req.method==='GET'){
   workloadSlots.set(key,slot);
  }
  const workload=[...workloadSlots.values()].sort((a,b)=>a.slot-b.slot||a.store_id.localeCompare(b.store_id));
- return json({date:day,timezone:'Europe/Warsaw',currency:'PLN',stores:result,total,workload});
+ return json({date:day,timezone:'Europe/Warsaw',currency:'PLN',stores:result,total,workload,workload_stores:workloadStores});
 }
 if(path==='/api/admin/store-sales'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
