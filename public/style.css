@@ -461,3 +461,5 @@ body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6
 .super-pos-alert-actions{display:flex;gap:10px;justify-content:center}.super-pos-alert-actions button{flex:1;min-height:48px}
 @keyframes super-pos-alert-in{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:520px){.super-pos-alert-card{padding:24px 18px}.super-pos-alert-card h2{font-size:24px}.super-pos-alert-actions{flex-direction:column}}
+
+.kds-order-note{margin:10px 0 0;padding:12px 14px;border-radius:9px;background:#fff7ed;color:#7c2d12;font-size:14px;font-weight:650;line-height:1.5;overflow-wrap:anywhere;border:1px solid #fdba74}
