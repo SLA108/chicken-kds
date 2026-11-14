@@ -11,7 +11,7 @@ test('first-use store choice cannot poll or expose an arbitrary default store',(
 test('store switching verifies active server grant before changing local store preference',()=>{
  const banner=app.slice(app.indexOf('function storeBanner(){'),app.indexOf('function render(){'));
  assert.match(banner,/fetch\('\/api\/device\/renew'/);
- assert.match(banner,/JSON\.stringify\(\{store_id:selected\}\)/);
+ assert.match(banner,/JSON\.stringify\(\{role:page,store_id:selected\}\)/);
  assert.match(banner,/if\(!response\.ok\)throw Error/);
  assert.match(banner,/if\(result\.store\?\.id!==selected\|\|result\.role!==page\)/);
  assert.ok(banner.indexOf("if(!response.ok)")<banner.indexOf("localStorage.setItem(lastStoreKey,selected)"));
