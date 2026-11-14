@@ -269,6 +269,26 @@ if(sessionToken){
   const items=ids.length?(await env.DB.prepare('SELECT i.id,i.order_id,i.name,i.quantity,i.is_done FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY i.created_at').bind(session.storeId,...ids).all()).results:[];
   return json({page,size,total:filtered.length,has_more:page*size<filtered.length,limited:rows.length===scanLimit,orders:selected.map(o=>({...o,items:items.filter(i=>i.order_id===o.id)}))});
  }
+
+ const scopedKitchenFinish=path.match(/^\/api\/store\/kitchen\/orders\/([^/]+)\/(complete|reopen)$/);
+ if(scopedKitchenFinish&&req.method==='POST'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const id=scopedKitchenFinish[1],action=scopedKitchenFinish[2],storeId=session.storeId;
+  const order=await env.DB.prepare('SELECT status,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
+  if(!order)return json({error:'Order not found'},404);
+  if(order.status==='cancelled')return json({error:'Cancelled order'},409);
+  if(action==='complete'&&order.kitchen_completed_at)return json({ok:true,already_completed:true});
+  if(action==='reopen'&&!order.kitchen_completed_at)return json({ok:true,already_open:true});
+  const now=new Date().toISOString();
+  const result=await env.DB.prepare(action==='complete'
+   ?"UPDATE orders SET kitchen_completed_at=?,status='done',updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NULL AND status!='cancelled'"
+   :"UPDATE orders SET kitchen_completed_at=NULL,status='new',updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'"
+  ).bind(...(action==='complete'?[now,now,id,storeId]:[now,id,storeId])).run();
+  if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  await event(env,id,action==='complete'?'kitchen_completed':'kitchen_reopened',session.role,{store_id:storeId});
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true});
+ }
  // Fail closed: do not grant access to unscoped legacy APIs.
  return json({error:'Store-scoped API rollout not enabled',code:'STORE_API_NOT_READY'},503);
 }
