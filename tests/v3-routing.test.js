@@ -26,3 +26,14 @@ test('store-specific paid order detail scopes all lookups',()=>{
  assert.ok(api.includes('AND store_id=? AND paid_at IS NOT NULL'));
  assert.ok(api.includes('WHERE order_id=? AND store_id=?'));
 });
+
+test('order-item preparation uses effective store price without duplicate column names',()=>{
+ const start=api.indexOf('async function prepareOrderItems(');
+ const end=api.indexOf('export default',start);
+ const section=api.slice(start,end);
+ assert.ok(start>=0);
+ assert.ok(section.includes('COALESCE(o.price_cents,m.price_cents) AS price_cents'));
+ assert.ok(section.includes('m.id,m.name,m.category,m.vat_rate,COALESCE'));
+ assert.ok(!section.includes('SELECT m.*,COALESCE(o.price_cents,m.price_cents) AS price_cents'));
+ assert.ok(section.includes('m.price_cents+extra'));
+});
