@@ -32,7 +32,7 @@ async function getStoreOrders(env,storeId,limit=120){
 async function prepareOrderItems(env,items,orderId,now,storeId=null){
  const unique=[...new Set(items.map(x=>x.menu_id))];
  const rows=storeId
-  ?(await env.DB.prepare('SELECT m.*,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
+  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE m.active=1 AND COALESCE(o.active,1)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
   :(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
  const lookup=new Map(rows.map(x=>[x.id,x]));
  if(unique.some(id=>!lookup.has(id))||items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))throw Error('Invalid items');
