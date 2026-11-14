@@ -203,6 +203,9 @@ function storeBanner(){
   overlay.querySelector('#v3-store-switch-form').onsubmit=e=>{
    e.preventDefault();const selected=new FormData(e.currentTarget).get('store_id');
    if(!deviceStores.some(x=>x.id===selected))return;
+   if(selected===currentDeviceStore?.id){overlay.remove();return}
+   if(busy){notify('Wait for the current order submission to finish.');return}
+   if(page==='pos'&&configuredCart.length&&!confirm('Switching stores will discard the unsent order draft. Continue?'))return;
    // Reload closes the old WebSocket, clears all in-memory order/menu state,
    // and obtains a fresh server-authorized session for the selected store.
    sessionStorage.removeItem('ck_token_'+page);
