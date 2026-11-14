@@ -471,7 +471,7 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  try{
   const rows=(await env.DB.prepare("SELECT s.id,s.code,s.name,s.active,COUNT(o.id) AS order_count FROM stores s LEFT JOIN orders o ON o.store_id=s.id GROUP BY s.id,s.code,s.name,s.active ORDER BY CASE WHEN s.code='TEST' THEN 0 ELSE 1 END,s.name").all()).results;
-  return json({stores:rows,multistore_enabled:false});
+  return json({stores:rows,multistore_enabled:true});
  }catch(e){
   console.error('store inventory unavailable',e);
   return json({error:'Multi-store schema not installed',code:'MULTISTORE_SCHEMA_MISSING'},503);
@@ -481,7 +481,6 @@ if(path==='/api/admin/stores'&&req.method==='GET'){
 const storeConfigMatch=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/config$/);
 if(storeConfigMatch&&req.method==='PATCH'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- if(env.ENABLE_V3_STORE_ADMIN!=='true')return json({error:'Store configuration is disabled until V3 staging verification'},503);
  const id=storeConfigMatch[1],b=await parse(req);
  if(!b||typeof b.active!=='boolean')return json({error:'Expected active boolean'},400);
  const store=await env.DB.prepare('SELECT id,code,active FROM stores WHERE id=?').bind(id).first();
@@ -501,7 +500,6 @@ if(storeMenuMatch&&req.method==='GET'){
 const storeMenuItemMatch=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/menu\/([^/]+)$/);
 if(storeMenuItemMatch&&req.method==='PUT'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- if(env.ENABLE_V3_STORE_ADMIN!=='true')return json({error:'Store menu editing is disabled until V3 staging verification'},503);
  const storeId=storeMenuItemMatch[1],menuId=decodeURIComponent(storeMenuItemMatch[2]),b=await parse(req);
  if(!b||!Number.isInteger(b.price_cents)&&b.price_cents!==null||b.price_cents!==null&&(b.price_cents<0||b.price_cents>10000000)||![null,true,false].includes(b.active)||typeof b.sold_out!=='boolean')return json({error:'Invalid menu override'},400);
  const [store,item]=await Promise.all([env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first(),env.DB.prepare('SELECT id FROM menu WHERE id=?').bind(menuId).first()]);
