@@ -505,19 +505,19 @@ function bindShiftTipInput(input,onChange){
  input.type='text';input.inputMode='numeric';input.autocomplete='off';input.setAttribute('aria-label','Tip amount in PLN');
  input.addEventListener('keydown',e=>{
   if(e.ctrlKey||e.metaKey||e.altKey||e.key==='Tab'||e.key==='Escape')return;
-  if(/^\\d$/.test(e.key)){e.preventDefault();cents=Math.min(10000000,cents*10+Number(e.key));render();}
+  if(/^\d$/.test(e.key)){e.preventDefault();cents=Math.min(10000000,cents*10+Number(e.key));render();}
   else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();cents=e.key==='Delete'?0:Math.floor(cents/10);render();}
   else if(['ArrowLeft','ArrowRight','Home','End','Enter'].includes(e.key))return;
   else e.preventDefault();
  });
  input.addEventListener('beforeinput',e=>{
-  if(e.inputType==='insertText'&&/^\\d+$/.test(e.data||'')){e.preventDefault();for(const d of e.data)cents=Math.min(10000000,cents*10+Number(d));render();}
+  if(e.inputType==='insertText'&&/^\d+$/.test(e.data||'')){e.preventDefault();for(const d of e.data)cents=Math.min(10000000,cents*10+Number(d));render();}
   else if(e.inputType==='deleteContentBackward'){e.preventDefault();cents=Math.floor(cents/10);render();}
   else if(e.inputType==='deleteContentForward'){e.preventDefault();cents=0;render();}
  });
  input.addEventListener('input',()=>{
   // Fallback for mobile keyboards that do not dispatch cancellable beforeinput.
-  const raw=input.value.replace(/\\D/g,'');cents=Math.min(10000000,Number(raw)||0);render();
+  const raw=input.value.replace(/\D/g,'');cents=Math.min(10000000,Number(raw)||0);render();
  });
  input.addEventListener('focus',()=>{input.setSelectionRange(input.value.length,input.value.length);});
  render();
