@@ -9,7 +9,7 @@ test('admin orders endpoint requires admin and supports scoped filters',()=>{
  assert.match(worker,/o\.store_id=\?/);
  assert.match(worker,/o\.status=\?/);
  assert.match(worker,/ORDER BY o\.created_at DESC,o\.id DESC LIMIT \? OFFSET \?/);
- assert.match(worker,/limit=20/);
+ assert.match(worker,/\[50,100\]\.includes/);
  assert.match(worker,/period==='current'/);
 });
 test('Back Office Orders has restaurant, status, pagination and refresh',()=>{
