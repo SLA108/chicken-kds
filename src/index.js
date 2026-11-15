@@ -171,7 +171,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
-  if(session.role==='kitchen'){const kitchenIds=(await env.DB.prepare('SELECT i.id FROM order_items i JOIN menu m ON m.id=i.menu_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.send_to_kitchen=1 AND o.status!=\'cancelled\'').bind(session.storeId).all()).results;const visible=new Set(kitchenIds.map(x=>x.id));return json(orders.map(o=>({...o,items:o.items.filter(i=>visible.has(i.id))})).filter(o=>o.items.length));}
+  if(session.role==='kitchen'){const visibleOrderIds=orders.map(o=>o.id);if(!visibleOrderIds.length)return json([]);const kitchenIds=(await env.DB.prepare('SELECT i.id FROM order_items i JOIN menu m ON m.id=i.menu_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.send_to_kitchen=1 AND i.order_id IN ('+visibleOrderIds.map(()=>'?').join(',')+')').bind(session.storeId,...visibleOrderIds).all()).results;const visible=new Set(kitchenIds.map(x=>x.id));return json(orders.map(o=>({...o,items:o.items.filter(i=>visible.has(i.id))})).filter(o=>o.items.length));}
   const ids=orders.map(o=>o.id);
   const [occupancy,payments]=await Promise.all([
    env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=?').bind(session.storeId).all(),
