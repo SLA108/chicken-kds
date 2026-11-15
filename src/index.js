@@ -228,6 +228,8 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const b=await parse(req);
   if(!['cash','card','other'].includes(b?.method))return json({error:'Invalid payment method'},400);
+  const serviceRating=b?.service_rating;
+  if(!Number.isInteger(serviceRating)||serviceRating<1||serviceRating>5)return json({error:'Service self-assessment required (1–5)'},400);
   const tipAmount=b?.tip_amount_cents??0;
   if(!Number.isSafeInteger(tipAmount)||tipAmount<0||tipAmount>10000000||(tipAmount>0&&!['cash','card'].includes(b?.tip_method)))return json({error:'Invalid tip'},400);
   const id=scopedCheckout[1],storeId=session.storeId;
@@ -245,6 +247,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
    env.DB.prepare("INSERT INTO payments(id,order_id,method,amount_cents,created_at,store_id) SELECT ?,?,?,?,?,? WHERE changes()=1 AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND paid_at=?)").bind(paymentId,id,b.method,total,now,storeId,id,storeId,now),
    env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'paid',?,?,? WHERE EXISTS(SELECT 1 FROM payments WHERE id=? AND store_id=?)").bind(uid(),id,session.role,JSON.stringify({method:b.method,amount_cents:total,store_id:storeId}),now,paymentId,storeId)
   ];
+  statements.push(env.DB.prepare('INSERT INTO order_service_ratings(order_id,store_id,rating,rated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM payments WHERE id=? AND store_id=?)').bind(id,storeId,serviceRating,now,paymentId,storeId));
   if(tipAmount>0)statements.push(env.DB.prepare('INSERT INTO order_tips(id,order_id,store_id,amount_cents,method,stage,created_at,actor,request_key) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM payments WHERE id=? AND store_id=?)').bind(uid(),id,storeId,tipAmount,b.tip_method,'checkout',now,session.role,'checkout:'+paymentId,paymentId,storeId));
   const result=await env.DB.batch(statements);
   if(result[0].meta.changes!==1)return json({error:'Ticket already closed; refresh'},409);
