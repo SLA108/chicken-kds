@@ -1019,3 +1019,8 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-workload-plot{display:block;width:100%;max-width:100%;overflow-x:scroll!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
  .bo-workload-plot>svg{display:block!important;width:870px!important;min-width:870px!important;max-width:none!important;height:252px!important;aspect-ratio:auto!important;flex:none;touch-action:pan-x pan-y!important}
 }
+
+/* Back Office order details: prevent long dish names from collapsing to single letters. */
+.bo-monitor-details .bo-order-item{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;align-items:start;padding:10px 0;overflow-wrap:normal}
+.bo-monitor-details .bo-order-item-name{min-width:0;max-width:100%;white-space:normal;overflow-wrap:break-word;word-break:normal;font-weight:650;line-height:1.45}
+.bo-monitor-details .bo-order-item>small{display:block;min-width:0;max-width:100%;flex-basis:auto;white-space:normal;overflow-wrap:break-word;line-height:1.4}
