@@ -408,7 +408,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const now=new Date().toISOString();
   let statements;
   try{statements=await prepareOrderItems(env,b.items,id,now,storeId);}catch(e){return json({error:e.message},400);}
-  statements.push(env.DB.prepare("UPDATE orders SET status=CASE WHEN EXISTS(SELECT 1 FROM order_items i JOIN menu m ON m.id=i.menu_id WHERE i.order_id=? AND i.created_at=? AND m.send_to_kitchen=1) THEN 'new' ELSE status END,updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(now,id,storeId));
+  statements.push(env.DB.prepare("UPDATE orders SET status=CASE WHEN EXISTS(SELECT 1 FROM order_items i JOIN menu m ON m.id=i.menu_id WHERE i.order_id=? AND i.created_at=? AND m.send_to_kitchen=1) THEN 'new' ELSE status END,updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(id,now,now,id,storeId));
   statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'items_added',session.role,JSON.stringify({count:b.items.length,store_id:storeId}),now));
   let result;
   try{result=await env.DB.batch(statements);}
