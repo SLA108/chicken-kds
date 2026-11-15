@@ -36,9 +36,9 @@ test('order-item preparation uses effective store price without duplicate column
  const section=api.slice(start,end);
  assert.ok(start>=0);
  assert.ok(section.includes('COALESCE(o.price_cents,m.price_cents) AS price_cents'));
- assert.ok(section.includes('m.id,m.name,m.category,m.vat_rate,COALESCE'));
+ assert.ok(section.includes('m.id,m.name,m.category,m.vat_rate,m.open_price,m.send_to_kitchen,COALESCE'));
  assert.ok(!section.includes('SELECT m.*,COALESCE(o.price_cents,m.price_cents) AS price_cents'));
- assert.ok(section.includes('m.price_cents+extra'));
+ assert.ok(section.includes('const originalPrice=basePrice+extra'));
 });
 
 test('add-items checkout race returns recoverable conflict',()=>{
