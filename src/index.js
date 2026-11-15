@@ -155,7 +155,11 @@ if(sessionToken){
  const permission=await env.DB.prepare('SELECT enabled FROM device_attendance_qr_access WHERE device_id=?').bind(session.deviceId).first();
  if(permission?.enabled!==1)return json({error:'This device is not authorized to display attendance QR'},403);
  const now=Date.now(),first=qrSlot(now);
- const tokens=await Promise.all(Array.from({length:5},async(_,i)=>({slot:first+i,token:await attendanceQrToken(env.ATTENDANCE_QR_SECRET,session.storeId,first+i)})));
+ const qrModule=await import('qrcode'),QRCode=qrModule.default||qrModule;
+ const tokens=await Promise.all(Array.from({length:5},async(_,i)=>{
+  const slot=first+i,token=await attendanceQrToken(env.ATTENDANCE_QR_SECRET,session.storeId,slot);
+  return {slot,svg:await QRCode.toString(token,{type:'svg',margin:2,width:280,errorCorrectionLevel:'M'})};
+ }));
  return json({store_id:session.storeId,server_time:now,period_ms:QR_PERIOD_MS,expires_at:(first+4)*QR_PERIOD_MS,tokens});
 }
 if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,api_enabled:false});
