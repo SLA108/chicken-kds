@@ -36,7 +36,7 @@ async function getStoreOrders(env,storeId,limit=120){
 async function prepareOrderItems(env,items,orderId,now,storeId=null){
  const unique=[...new Set(items.map(x=>x.menu_id))];
  const rows=storeId
-  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
+  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,m.open_price,m.send_to_kitchen,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
   :(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
  const lookup=new Map(rows.map(x=>[x.id,x]));
  if(unique.some(id=>!lookup.has(id))||items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))throw Error('Invalid items');
@@ -53,8 +53,13 @@ async function prepareOrderItems(env,items,orderId,now,storeId=null){
   const discount=item.discount_percent??0;
   if(![0,20,50].includes(discount))throw Error('Invalid discount');
   const m=lookup.get(item.menu_id),itemId=uid(),extra=selected.reduce((v,id)=>v+opts.get(id).price_cents,0);
-  const originalPrice=m.price_cents+extra;
-  const discountAmount=Math.round(m.price_cents*discount/100);
+  if(m.open_price===1){
+   if(!Number.isSafeInteger(item.price_cents)||item.price_cents<0||item.price_cents>10000000)throw Error('Invalid custom amount');
+   if(selected.length||discount!==0)throw Error('Open-price items cannot use modifiers or discounts');
+  }else if(item.price_cents!==undefined)throw Error('Custom amount is only allowed for open-price items');
+  const basePrice=m.open_price===1?item.price_cents:m.price_cents;
+  const originalPrice=basePrice+extra;
+  const discountAmount=Math.round(basePrice*discount/100);
   const finalPrice=originalPrice-discountAmount;
   statements.push(env.DB.prepare('INSERT INTO order_items(id,order_id,menu_id,name,quantity,note,created_at,price_cents,vat_rate,original_price_cents,discount_percent,discount_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(itemId,orderId,m.id,m.name,item.quantity,String(item.note||'').slice(0,300),now,finalPrice,m.vat_rate??8,originalPrice,discount,discountAmount));
   for(const optionId of selected){const o=opts.get(optionId);statements.push(env.DB.prepare('INSERT INTO order_item_modifiers(id,order_item_id,option_id,name,price_cents) VALUES(?,?,?,?,?)').bind(uid(),itemId,o.id,o.name,o.price_cents));}
@@ -188,7 +193,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  }
  if(path==='/api/store/menu'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
-  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
+  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,m.open_price,m.send_to_kitchen,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
   return json(rows);
  }
  if(path==='/api/store/pickups'&&req.method==='GET'){
