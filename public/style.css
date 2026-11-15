@@ -1019,3 +1019,15 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
  .bo-workload-plot{display:block;width:100%;max-width:100%;overflow-x:scroll!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
  .bo-workload-plot>svg{display:block!important;width:870px!important;min-width:870px!important;max-width:none!important;height:252px!important;aspect-ratio:auto!important;flex:none;touch-action:pan-x pan-y!important}
 }
+
+/* Back Office order cards: keep long menu names and timestamps readable on narrow screens. */
+.bo-monitor-card,.bo-monitor-card *{min-width:0;box-sizing:border-box}
+.bo-monitor-details .bo-order-items{display:grid;grid-template-columns:minmax(0,1fr);width:100%}
+.bo-monitor-details .bo-order-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;width:100%;align-items:start}
+.bo-monitor-details .bo-order-item>span{min-width:0;overflow-wrap:break-word;word-break:normal;white-space:normal}
+.bo-monitor-details .bo-order-item>small:last-child{grid-column:1/-1}
+.bo-monitor-timing{grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr))}
+.bo-monitor-timing strong{overflow-wrap:normal;word-break:normal;white-space:normal}
+.bo-service-rating{padding:9px 0;font-size:13px}.bo-service-rating strong{font-size:18px}
+.sq-orders{display:grid;gap:7px;max-height:480px;overflow:auto}.sq-order{display:grid;grid-template-columns:65px minmax(100px,1fr) auto;gap:8px;align-items:center;padding:9px;border:1px solid #e5e7eb;border-radius:9px;font-size:12px}.sq-order code{grid-column:1/-1;overflow-wrap:anywhere;color:#64748b}
+@media(max-width:650px){.bo-monitor-details .bo-order-item{grid-template-columns:minmax(0,1fr)}.bo-monitor-details .bo-order-item>small:last-child{grid-column:auto}.sq-order{grid-template-columns:55px minmax(0,1fr)}.sq-order>span:nth-child(3){grid-column:2}}
