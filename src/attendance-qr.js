@@ -4,14 +4,14 @@ export const qrSlot = (utcMillis) => Math.floor(utcMillis / QR_PERIOD_MS);
 const encoder = new TextEncoder();
 const hex = bytes => [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
 export async function attendanceQrToken(secret, storeId, slot) {
-  if (!secret || !/^[0-9a-f-]{36}$/i.test(storeId) || !Number.isSafeInteger(slot) || slot < 0) throw Error('Invalid attendance QR input');
+  if (!secret || !/^[a-zA-Z0-9_-]{1,64}$/.test(storeId) || !Number.isSafeInteger(slot) || slot < 0) throw Error('Invalid attendance QR input');
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
-  const payload = `ck-attendance:v1:${storeId.toLowerCase()}:${slot}`;
+  const payload = `ck-attendance:v1:${storeId}:${slot}`;
   const signature = hex(await crypto.subtle.sign('HMAC', key, encoder.encode(payload)));
-  return `cka1.${storeId.toLowerCase()}.${slot}.${signature}`;
+  return `cka1.${storeId}.${slot}.${signature}`;
 }
 export async function verifyAttendanceQr(secret, token, utcMillis = Date.now()) {
-  const match = /^cka1\.([0-9a-f-]{36})\.([0-9]+)\.([0-9a-f]{64})$/.exec(token || '');
+  const match = /^cka1\.([a-zA-Z0-9_-]{1,64})\.([0-9]+)\.([0-9a-f]{64})$/.exec(token || '');
   if (!match) return null;
   const slot = Number(match[2]);
   // Strict 15-second window; do not accept previous/future slots.
