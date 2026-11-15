@@ -22,3 +22,8 @@ test('non-kitchen items are omitted from kitchen and remain in order records',()
  assert.match(api,/UPDATE orders SET kitchen_completed_at=\?,status='done'/);
  assert.match(api,/SELECT i\.\* FROM order_items i JOIN orders o/);
 });
+
+test('adding non-kitchen items does not reset kitchen status',()=>{
+ assert.match(api,/UPDATE orders SET status=CASE WHEN EXISTS\(SELECT 1 FROM order_items i JOIN menu m ON m\.id=i\.menu_id WHERE i\.order_id=\? AND i\.created_at=\? AND m\.send_to_kitchen=1\) THEN 'new' ELSE status END/);
+ assert.match(api,/\.bind\(id,now,now,id,storeId\)/);
+});
