@@ -582,6 +582,18 @@ if(path==='/api/admin/super-pos/orders'&&req.method==='POST'){
  await broadcastStore(env,storeId,'orders',{id});
  return json({id},201);
 }
+if(path==='/api/admin/service-quality'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const q=url.searchParams,storeId=q.get('store_id')||'',from=q.get('from')||'',to=q.get('to')||'';
+ if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(from&&to&&from>to))return json({error:'Invalid date range'},400);
+ const where=[],args=[];
+ if(storeId){where.push('r.store_id=?');args.push(storeId)}
+ if(from){where.push('substr(r.rated_at,1,10)>=?');args.push(from)}
+ if(to){where.push('substr(r.rated_at,1,10)<=?');args.push(to)}
+ const clause=where.length?'WHERE '+where.join(' AND '):'';
+ const rows=(await env.DB.prepare('SELECT r.store_id,s.name AS store_name,r.rating,substr(r.rated_at,1,10) AS day,COUNT(*) AS count FROM order_service_ratings r JOIN stores s ON s.id=r.store_id '+clause+' GROUP BY r.store_id,s.name,r.rating,substr(r.rated_at,1,10) ORDER BY day DESC,store_name,r.rating').bind(...args).all()).results;
+ return json({rows});
+}
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'',period=params.get('period')||'current';
