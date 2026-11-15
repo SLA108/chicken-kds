@@ -298,11 +298,18 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(b.source==='dinein'){
    if(!/^(0[1-9]|1[0-9]|20)$/.test(String(b.table_no||'')))return json({error:'Choose a table from 01 to 20'},400);
    const occupied=await env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=? AND table_no=?').bind(storeId,b.table_no).first();
-   if(occupied)return json({error:'Table occupied'},409);
+   if(occupied){
+    if(typeof b.followup_paid_order_id!=='string'||b.followup_paid_order_id!==occupied.order_id)return json({error:'Table occupied'},409);
+    const previous=await env.DB.prepare("SELECT id FROM orders WHERE id=? AND store_id=? AND source='dinein' AND table_no=? AND paid_at IS NOT NULL AND status!='cancelled'").bind(occupied.order_id,storeId,b.table_no).first();
+    if(!previous)return json({error:'Table is not eligible for additional orders'},409);
+   }else if(b.followup_paid_order_id)return json({error:'Table state changed; refresh'},409);
   }
   const id=uid(),now=new Date().toISOString();
   const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key,store_id) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,b.source,String(b.table_no||'').slice(0,30),'new',String(b.note||'').slice(0,500),now,now,session.role,b.client_key,storeId)];
-  if(b.source==='dinein')statements.push(env.DB.prepare('INSERT INTO table_occupancy(store_id,table_no,order_id,created_at) VALUES(?,?,?,?)').bind(storeId,b.table_no,id,now));
+  if(b.source==='dinein'){
+   if(b.followup_paid_order_id)statements.push(env.DB.prepare("UPDATE table_occupancy SET order_id=?,created_at=? WHERE store_id=? AND table_no=? AND order_id=? AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND paid_at IS NOT NULL)").bind(id,now,storeId,b.table_no,b.followup_paid_order_id,b.followup_paid_order_id,storeId));
+   else statements.push(env.DB.prepare('INSERT INTO table_occupancy(store_id,table_no,order_id,created_at) VALUES(?,?,?,?)').bind(storeId,b.table_no,id,now));
+  }
   try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId));}catch(e){return json({error:e.message},400);}
   statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',session.role,JSON.stringify({store_id:storeId}),now));
   statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created',JSON.stringify({store_id:storeId}),now));
