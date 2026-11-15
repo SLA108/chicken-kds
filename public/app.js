@@ -30,7 +30,7 @@ async function renewDeviceSession(){
    const result=await r.json();
    if(result.role!==page)return false;
    const oldStoreId=currentDeviceStore?.id;
-   deviceStores=result.stores||[];currentDeviceStore=result.store||null;
+   deviceStores=result.stores||[];currentDeviceStore=result.store||null;window.__attendanceStoreId=currentDeviceStore?.id||'';
    storeSelectionPending=!localStorage.getItem(lastStoreKey)&&deviceStores.length>1;
    if(oldStoreId&&currentDeviceStore?.id!==oldStoreId){
     // Never silently enter another restaurant when the old grant is revoked.
