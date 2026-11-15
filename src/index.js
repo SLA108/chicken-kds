@@ -162,7 +162,7 @@ if(sessionToken){
  }));
  return json({store_id:session.storeId,server_time:now,period_ms:QR_PERIOD_MS,expires_at:(first+4)*QR_PERIOD_MS,tokens});
 }
-if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,api_enabled:false});
+if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,attendance_qr_enabled:(await env.DB.prepare('SELECT enabled FROM device_attendance_qr_access WHERE device_id=?').bind(session.deviceId).first())?.enabled===1,api_enabled:false});
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
