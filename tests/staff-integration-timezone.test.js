@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const source=readFileSync(new URL('../src/index.js',import.meta.url),'utf8');
-test('Staff integrations use Warsaw calendar-day boundaries',()=>{
- assert.match(source,/const warsawMidnightUTC=date=>/);
+test('Staff integrations use Warsaw 03:00 business-day boundaries',()=>{
+ assert.match(source,/const warsawBusinessStartUTC=date=>/);
  assert.match(source,/timeZone:'Europe\/Warsaw'/);
- assert.match(source,/args.push\(warsawMidnightUTC\(from\)\)/);
- assert.match(source,/warsawMidnightUTC\(nextDay\(to\)\)/);
+ assert.match(source,/Date.parse\\(date\\+'T03:00:00Z'\\)/);
+ assert.match(source,/args.push\(warsawBusinessStartUTC\(from\)\)/);
+ assert.match(source,/warsawBusinessStartUTC\(nextDay\(to\)\)/);
  assert.match(source,/timezone:'Europe\/Warsaw'/);
 });
 test('Staff integration remains read-only and token-protected',()=>{
