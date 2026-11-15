@@ -325,7 +325,8 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
    else statements.push(env.DB.prepare('INSERT INTO table_occupancy(store_id,table_no,order_id,created_at) VALUES(?,?,?,?)').bind(storeId,b.table_no,id,now));
   }
   try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId));}catch(e){return json({error:e.message},400);}
-  statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',session.role,JSON.stringify({store_id:storeId}),now));
+  statements.push(env.DB.prepare("UPDATE orders SET kitchen_completed_at=?,status='done' WHERE id=? AND store_id=? AND NOT EXISTS (SELECT 1 FROM order_items i JOIN menu m ON m.id=i.menu_id WHERE i.order_id=? AND m.send_to_kitchen=1)").bind(now,id,storeId,id));
+   statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',session.role,JSON.stringify({store_id:storeId}),now));
   statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created',JSON.stringify({store_id:storeId}),now));
   try{await env.DB.batch(statements);}catch(e){
    const duplicate=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
@@ -464,7 +465,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const now=new Date().toISOString();
   const result=await env.DB.prepare(action==='complete'
    ?"UPDATE orders SET kitchen_completed_at=?,status='done',updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NULL AND status!='cancelled'"
-   :"UPDATE orders SET kitchen_completed_at=NULL,status=CASE WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id=orders.id AND is_done=0) THEN 'new' ELSE 'done' END,updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'"
+   :"UPDATE orders SET kitchen_completed_at=NULL,status=CASE WHEN EXISTS(SELECT 1 FROM order_items i JOIN menu m ON m.id=i.menu_id WHERE i.order_id=orders.id AND m.send_to_kitchen=1 AND i.is_done=0) THEN 'new' ELSE 'done' END,updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'"
   ).bind(...(action==='complete'?[now,now,id,storeId]:[now,id,storeId])).run();
   if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await event(env,id,action==='complete'?'kitchen_completed':'kitchen_reopened',session.role,{store_id:storeId});
