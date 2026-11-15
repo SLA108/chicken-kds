@@ -592,7 +592,8 @@ if(path==='/api/admin/service-quality'&&req.method==='GET'){
  if(to){where.push('substr(r.rated_at,1,10)<=?');args.push(to)}
  const clause=where.length?'WHERE '+where.join(' AND '):'';
  const rows=(await env.DB.prepare('SELECT r.store_id,s.name AS store_name,r.rating,substr(r.rated_at,1,10) AS day,COUNT(*) AS count FROM order_service_ratings r JOIN stores s ON s.id=r.store_id '+clause+' GROUP BY r.store_id,s.name,r.rating,substr(r.rated_at,1,10) ORDER BY day DESC,store_name,r.rating').bind(...args).all()).results;
- return json({rows});
+ const orders=(await env.DB.prepare('SELECT r.order_id,r.store_id,s.name AS store_name,r.rating,r.rated_at,o.table_no,o.source FROM order_service_ratings r JOIN stores s ON s.id=r.store_id JOIN orders o ON o.id=r.order_id '+clause+' ORDER BY r.rated_at DESC LIMIT 500').bind(...args).all()).results;
+ return json({rows,orders});
 }
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
@@ -630,6 +631,8 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   const byOrder=new Map(),byItem=new Map();
   for(const m of modifiers){if(!byItem.has(m.order_item_id))byItem.set(m.order_item_id,[]);byItem.get(m.order_item_id).push(m);}
   for(const i of items){if(!byOrder.has(i.order_id))byOrder.set(i.order_id,[]);byOrder.get(i.order_id).push({...i,modifiers:byItem.get(i.id)||[]});}
+  const ratings=(await env.DB.prepare('SELECT order_id,rating FROM order_service_ratings WHERE order_id IN ('+marks+')').bind(...ids).all()).results;
+  const ratingByOrder=new Map(ratings.map(r=>[r.order_id,r.rating]));
   const payments=(await env.DB.prepare('SELECT order_id,COALESCE(SUM(amount_cents),0) AS paid_cents FROM payments WHERE order_id IN ('+marks+') GROUP BY order_id').bind(...ids).all()).results;
   const paymentByOrder=new Map(payments.map(p=>[p.order_id,Number(p.paid_cents)||0]));
   const tipRows=(await env.DB.prepare('SELECT order_id,method,COALESCE(SUM(amount_cents),0) AS amount_cents FROM order_tips WHERE order_id IN ('+marks+') GROUP BY order_id,method').bind(...ids).all()).results;
@@ -641,6 +644,7 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   }
   for(const o of visible){
    o.items=byOrder.get(o.id)||[];
+   o.service_rating=ratingByOrder.get(o.id)||null;
    o.total_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.price_cents)||0),0);
    o.discount_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.discount_cents)||0),0);
    o.original_total_cents=o.total_cents+o.discount_cents;
