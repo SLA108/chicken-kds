@@ -1218,7 +1218,7 @@ function chooseInitialStore(){
   if(!deviceStores.some(x=>x.id===selected))return;
   const button=app.querySelector('#v3-first-store-form button[type="submit"]');button.disabled=true;
   try{
-   const response=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({store_id:selected})});
+   const response=await fetch('/api/device/renew',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({role:page,store_id:selected})});
    if(!response.ok)throw Error('Store access expired. Ask Back Office to check this device.');
    const result=await response.json();
    if(result.store?.id!==selected||result.role!==page)throw Error('Store authorization could not be verified.');
