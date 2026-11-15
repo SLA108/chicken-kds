@@ -76,7 +76,7 @@ if(path.startsWith('/api/integrations/')){
   const storeId=url.searchParams.get('store_id');
   if(storeId&&(!/^[a-zA-Z0-9_-]{1,64}$/.test(storeId)))return json({error:'Invalid store_id'},400);
   const from=url.searchParams.get('from'),to=url.searchParams.get('to');
-  const validDate=x=>!x||(/^\\d{4}-\\d{2}-\\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:00:00Z')));
+  const validDate=x=>!x||(/^\d{4}-\d{2}-\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:00:00Z')));
   if(!validDate(from)||!validDate(to)||from&&to&&from>to)return json({error:'Invalid date range'},400);
   const filters=[],params=[];
   if(storeId){filters.push('s.id=?');params.push(storeId);}
@@ -94,7 +94,7 @@ if(path.startsWith('/api/integrations/')){
   if(path==='/api/integrations/tips'){
    const limit=Math.min(Math.max(Number(url.searchParams.get('limit'))||100,1),200);
    const cursor=url.searchParams.get('cursor')||'';
-   if(cursor&&(!/^\\d{4}-\\d{2}-\\d{2}T[0-9:.Z+-]{8,30}\\|[a-zA-Z0-9_-]{1,100}$/.test(cursor)))return json({error:'Invalid cursor'},400);
+   if(cursor&&(!/^\d{4}-\d{2}-\d{2}T[0-9:.Z+-]{8,30}\|[a-zA-Z0-9_-]{1,100}$/.test(cursor)))return json({error:'Invalid cursor'},400);
    const where=[],args=[];if(storeId){where.push('t.store_id=?');args.push(storeId);}if(from){where.push('t.created_at>=?');args.push(from+'T00:00:00');}if(to){const next=new Date(to+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);where.push('t.created_at<?');args.push(next.toISOString().slice(0,10)+'T00:00:00');}
    if(cursor){const [timestamp,id]=cursor.split('|');where.push('(t.created_at>? OR (t.created_at=? AND t.id>?))');args.push(timestamp,timestamp,id);}
    const sql='SELECT t.id,t.order_id,t.store_id,t.amount_cents,t.method,t.stage,t.created_at FROM order_tips t WHERE '+(where.length?where.join(' AND '):'1=1')+' ORDER BY t.created_at ASC,t.id ASC LIMIT ?';
