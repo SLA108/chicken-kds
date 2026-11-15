@@ -254,11 +254,19 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   await broadcastStore(env,storeId,'orders',{id});
   return json({ok:true,amount_cents:total,tip_amount_cents:tipAmount});
  }
+ const scopedServiceRating=path.match(/^\/api\/store\/orders\/([^/]+)\/service-rating$/);
+ if(scopedServiceRating&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const row=await env.DB.prepare('SELECT rating FROM order_service_ratings WHERE order_id=? AND store_id=?').bind(scopedServiceRating[1],session.storeId).first();
+  return json({rating:row?.rating||null});
+ }
  const scopedRelease=path.match(/^\/api\/store\/orders\/([^/]+)\/release-table$/);
  if(scopedRelease&&req.method==='POST'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const body=await parse(req),tipAmount=body?.tip_amount_cents??0;
   if(!Number.isSafeInteger(tipAmount)||tipAmount<0||tipAmount>10000000||(tipAmount>0&&!['cash','card'].includes(body?.tip_method)))return json({error:'Invalid tip'},400);
+  const serviceRating=body?.service_rating;
+  if(serviceRating!==undefined&&(!Number.isInteger(serviceRating)||serviceRating<1||serviceRating>5))return json({error:'Invalid service rating'},400);
   const id=scopedRelease[1],storeId=session.storeId;
   const order=await env.DB.prepare("SELECT id,table_no,paid_at FROM orders WHERE id=? AND store_id=? AND source='dinein'").bind(id,storeId).first();
   if(!order)return json({error:'Dine-in order not found'},404);
@@ -266,6 +274,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const now=new Date().toISOString(),statements=[
    env.DB.prepare('DELETE FROM table_occupancy WHERE order_id=? AND store_id=?').bind(id,storeId)
   ];
+  if(order.paid_at&&serviceRating!==undefined)statements.push(env.DB.prepare('INSERT INTO order_service_ratings(order_id,store_id,rating,rated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM table_occupancy WHERE order_id=? AND store_id=?) ON CONFLICT(order_id) DO UPDATE SET rating=excluded.rating,rated_at=excluded.rated_at').bind(id,storeId,serviceRating,now,id,storeId));
   if(tipAmount>0){
    const requestKey=body?.tip_request_key;
    if(typeof requestKey!=='string'||requestKey.length<16||requestKey.length>128)return json({error:'Invalid tip request key'},400);
