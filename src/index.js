@@ -171,7 +171,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
-  if(session.role==='kitchen')return json(orders);
+  if(session.role==='kitchen'){const kitchenIds=(await env.DB.prepare('SELECT i.id FROM order_items i JOIN menu m ON m.id=i.menu_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.send_to_kitchen=1 AND o.status!=\'cancelled\'').bind(session.storeId).all()).results;const visible=new Set(kitchenIds.map(x=>x.id));return json(orders.map(o=>({...o,items:o.items.filter(i=>visible.has(i.id))})).filter(o=>o.items.length));}
   const ids=orders.map(o=>o.id);
   const [occupancy,payments]=await Promise.all([
    env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=?').bind(session.storeId).all(),
@@ -198,7 +198,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  }
  if(path==='/api/store/pickups'&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
-  const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").bind(session.storeId).all()).results;
+  const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN menu m ON m.id=oi.menu_id WHERE o.store_id=? AND m.send_to_kitchen=1 AND oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").bind(session.storeId).all()).results;
   return json({items:rows});
  }
 
@@ -340,7 +340,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  const scopedItemDone=path.match(/^\/api\/store\/order-items\/([^/]+)\/done$/);
  if(scopedItemDone&&req.method==='PATCH'){
   if(session.role!=='kitchen')return json({error:'Forbidden'},403);
-  const item=await env.DB.prepare("SELECT i.id,i.order_id,o.status,o.kitchen_completed_at FROM order_items i JOIN orders o ON o.id=i.order_id WHERE i.id=? AND o.store_id=?").bind(scopedItemDone[1],session.storeId).first();
+  const item=await env.DB.prepare("SELECT i.id,i.order_id,o.status,o.kitchen_completed_at FROM order_items i JOIN orders o ON o.id=i.order_id JOIN menu m ON m.id=i.menu_id WHERE i.id=? AND o.store_id=? AND m.send_to_kitchen=1").bind(scopedItemDone[1],session.storeId).first();
   if(!item)return json({error:'Item not found'},404);
   if(item.status==='cancelled'||item.kitchen_completed_at)return json({error:'Order is closed'},409);
   const now=new Date().toISOString();
@@ -1099,15 +1099,15 @@ if(menuMatch&&req.method==='DELETE'){
 if(menuMatch&&req.method==='PATCH'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const b=await parse(req);
- if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!b.category.trim()||!Number.isInteger(b.price_cents)||b.price_cents<0||b.price_cents>10000000||![0,5,8,23].includes(b.vat_rate)||![0,1,false,true].includes(b.active)||!Number.isInteger(b.sort_order)||Math.abs(b.sort_order)>100000)return json({error:'Invalid menu item'},400);
+ if(!b||![0,1].includes(Number(b.open_price??0))||![0,1].includes(Number(b.send_to_kitchen??1))||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!b.category.trim()||!Number.isInteger(b.price_cents)||b.price_cents<0||b.price_cents>10000000||![0,5,8,23].includes(b.vat_rate)||![0,1,false,true].includes(b.active)||!Number.isInteger(b.sort_order)||Math.abs(b.sort_order)>100000)return json({error:'Invalid menu item'},400);
  const image=String(b.image_url||'');
  if(image.length>1000||image&&!(/^\/images\/[0-9a-f-]{36}\.(webp|png|jpg)$/.test(image)||/^https:\/\//i.test(image)))return json({error:'Invalid image URL'},400);
- const result=await env.DB.prepare('UPDATE menu SET name=?,category=?,price_cents=?,vat_rate=?,image_url=?,sort_order=?,active=? WHERE id=?').bind(b.name.trim().slice(0,100),b.category.trim().slice(0,50),b.price_cents,b.vat_rate,image,b.sort_order,Number(b.active),menuMatch[1]).run();
+ const result=await env.DB.prepare('UPDATE menu SET name=?,category=?,price_cents=?,vat_rate=?,image_url=?,sort_order=?,active=?,open_price=?,send_to_kitchen=? WHERE id=?').bind(b.name.trim().slice(0,100),b.category.trim().slice(0,50),b.price_cents,b.vat_rate,image,b.sort_order,Number(b.active),Number(b.open_price??0),Number(b.send_to_kitchen??1),menuMatch[1]).run();
  if(!result.meta.changes)return json({error:'Menu item not found'},404);
  await broadcast(env,'menu',{});return json({ok:true});
 }
 if(path==='/api/menu'&&req.method==='GET')return json((await env.DB.prepare('SELECT * FROM menu WHERE active=1 ORDER BY sort_order,category,name').all()).results);
-if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate) VALUES(?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8).run();await broadcast(env,'menu',{});return json({id},201);}
+if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0||b.price_cents>10000000||![0,1].includes(Number(b.open_price??0))||![0,1].includes(Number(b.send_to_kitchen??1)))return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate,open_price,send_to_kitchen) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8,Number(b.open_price??0),Number(b.send_to_kitchen??1)).run();await broadcast(env,'menu',{});return json({id},201);}
 if(path==='/api/health'&&req.method==='GET')return json({ok:true,time:new Date().toISOString()});
 
 return json({error:'Not found'},404);
