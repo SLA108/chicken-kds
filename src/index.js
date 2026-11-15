@@ -63,6 +63,48 @@ async function prepareOrderItems(env,items,orderId,now,storeId=null){
 export default {async fetch(req,env){const url=new URL(req.url);const path=url.pathname;if(path.startsWith('/images/')){if(req.method!=='GET')return new Response('Method not allowed',{status:405});const key=path.slice('/images/'.length);if(!/^[0-9a-f-]{36}\.(webp|png|jpg)$/.test(key))return new Response('Not found',{status:404});if(!env.MENU_IMAGES)return new Response('Image storage unavailable',{status:503});const object=await env.MENU_IMAGES.get(key);if(!object)return new Response('Not found',{status:404});return new Response(object.body,{headers:{'content-type':object.httpMetadata?.contentType||'image/webp','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'}});}
 if(!path.startsWith('/api/')&&path!=='/ws'){let assetPath=path;if(['/pos','/kitchen','/admin','/scanner','/'].includes(path))assetPath='/';return env.ASSETS.fetch(new Request(new URL(assetPath,url),req));}
 if(!env.AUTH_SECRET||!env.ADMIN_PIN)return json({error:'Server secrets not configured'},503);
+// Dedicated read-only Staff integration. No POS role token or employee PIN is accepted.
+if(path.startsWith('/api/integrations/')){
+ if(req.method!=='GET')return json({error:'Read-only endpoint'},405,{Allow:'GET'});
+ const expected=env.STAFF_INTEGRATION_TOKEN;
+ const supplied=(req.headers.get('authorization')||'').replace(/^Bearer /,'');
+ if(!expected||expected.length<32)return json({error:'Integration not configured'},503);
+ const a=encoder.encode(expected),b=encoder.encode(supplied);
+ let mismatch=a.length^b.length;for(let i=0;i<a.length;i++)mismatch|=a[i]^(b[i]||0);
+ if(mismatch)return json({error:'Unauthorized'},401);
+ try{
+  const storeId=url.searchParams.get('store_id');
+  if(storeId&&(!/^[a-zA-Z0-9_-]{1,64}$/.test(storeId)))return json({error:'Invalid store_id'},400);
+  const from=url.searchParams.get('from'),to=url.searchParams.get('to');
+  const validDate=x=>!x||(/^\\d{4}-\\d{2}-\\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:00:00Z')));
+  if(!validDate(from)||!validDate(to)||from&&to&&from>to)return json({error:'Invalid date range'},400);
+  const filters=[],params=[];
+  if(storeId){filters.push('s.id=?');params.push(storeId);}
+  if(path==='/api/integrations/stores'){
+   const rows=(await env.DB.prepare('SELECT s.id,s.code,s.name,s.active FROM stores s WHERE '+(filters.length?filters.join(' AND '):'1=1')+' ORDER BY s.name').bind(...params).all()).results;
+   return json({restaurants:rows});
+  }
+  if(path==='/api/integrations/revenue'){
+   const conditions=['o.store_id=s.id','o.paid_at IS NOT NULL','o.status!=\'cancelled\''];
+   const args=[];if(from){conditions.push('o.paid_at>=?');args.push(from+'T00:00:00');}if(to){conditions.push('o.paid_at<?');const next=new Date(to+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);args.push(next.toISOString().slice(0,10)+'T00:00:00');}
+   const sql='SELECT s.id AS store_id,s.code,s.name,COUNT(DISTINCT o.id) AS paid_orders,COALESCE(SUM(p.amount_cents),0) AS revenue_cents FROM stores s LEFT JOIN orders o ON '+conditions.join(' AND ')+' LEFT JOIN payments p ON p.order_id=o.id AND p.store_id=s.id WHERE '+(filters.length?filters.join(' AND '):'1=1')+' GROUP BY s.id,s.code,s.name ORDER BY s.name';
+   const rows=(await env.DB.prepare(sql).bind(...args,...params).all()).results;
+   return json({stores:rows,from:from||null,to:to||null,timezone:'UTC',currency:'PLN',amount_unit:'grosz'});
+  }
+  if(path==='/api/integrations/tips'){
+   const limit=Math.min(Math.max(Number(url.searchParams.get('limit'))||100,1),200);
+   const cursor=url.searchParams.get('cursor')||'';
+   if(cursor&&(!/^\\d{4}-\\d{2}-\\d{2}T[0-9:.Z+-]{8,30}\\|[a-zA-Z0-9_-]{1,100}$/.test(cursor)))return json({error:'Invalid cursor'},400);
+   const where=[],args=[];if(storeId){where.push('t.store_id=?');args.push(storeId);}if(from){where.push('t.created_at>=?');args.push(from+'T00:00:00');}if(to){const next=new Date(to+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);where.push('t.created_at<?');args.push(next.toISOString().slice(0,10)+'T00:00:00');}
+   if(cursor){const [timestamp,id]=cursor.split('|');where.push('(t.created_at>? OR (t.created_at=? AND t.id>?))');args.push(timestamp,timestamp,id);}
+   const sql='SELECT t.id,t.order_id,t.store_id,t.amount_cents,t.method,t.stage,t.created_at FROM order_tips t WHERE '+(where.length?where.join(' AND '):'1=1')+' ORDER BY t.created_at ASC,t.id ASC LIMIT ?';
+   const rows=(await env.DB.prepare(sql).bind(...args,limit+1).all()).results;
+   const hasMore=rows.length>limit,tips=rows.slice(0,limit),last=tips[tips.length-1];
+   return json({tips,next_cursor:hasMore&&last?last.created_at+'|'+last.id:null,currency:'PLN',amount_unit:'grosz',timezone:'UTC'});
+  }
+  return json({error:'Not found'},404);
+ }catch(e){console.error('Staff integration query failed',e);return json({error:'Integration query failed'},500);}
+}
 if(path==='/api/login'&&req.method==='POST'){const b=await parse(req);if(!b||typeof b.pin!=='string'||b.role!=='admin')return json({error:'Invalid login'},400);const expected=env[b.role.toUpperCase()+'_PIN'];if(b.pin!==expected)return json({error:'Incorrect PIN'},401);return json({token:await tokenFor(expected,env.AUTH_SECRET),role:b.role});}
 // Pairing approval issues an HttpOnly device cookie used for scoped session renewal.
 // Independent, HttpOnly role credentials prevent POS/Kitchen overwriting each other.
