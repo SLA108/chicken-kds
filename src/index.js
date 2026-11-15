@@ -355,7 +355,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
    throw e;
   }
   if(!updated)return json({error:'Order changed; refresh'},409);
-  const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) done FROM order_items WHERE order_id=?').bind(item.order_id).first();
+  const summary=await env.DB.prepare('SELECT COUNT(*) total,SUM(CASE WHEN i.is_done=1 THEN 1 ELSE 0 END) done FROM order_items i JOIN menu m ON m.id=i.menu_id WHERE i.order_id=? AND m.send_to_kitchen=1').bind(item.order_id).first();
   const nextStatus=summary.total===summary.done?'done':'new';
   // A concurrent kitchen completion must not be undone by a stale item-status refresh.
   const statusUpdate=await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL").bind(nextStatus,now,item.order_id,session.storeId).run();
@@ -430,7 +430,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const order=await env.DB.prepare('SELECT status FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
   if(!order)return json({error:'Order not found'},404);
   if(order.status==='cancelled')return json({error:'Order cancelled'},409);
-  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled')").bind(now,id,id,session.storeId).run();
+  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND menu_id IN (SELECT id FROM menu WHERE send_to_kitchen=1) AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled')").bind(now,id,id,session.storeId).run();
   if(result.meta.changes)await broadcastStore(env,session.storeId,'pickup',{order_id:id,acknowledged:result.meta.changes});
   return json({ok:true,count:result.meta.changes||0});
  }
@@ -444,12 +444,12 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const today=fmt.format(new Date()),day=new Date(today+'T12:00:00Z');
   if(range==='yesterday')day.setUTCDate(day.getUTCDate()-1);
   const target=range==='all'?null:day.toISOString().slice(0,10);
-  const where="o.store_id=? AND o.kitchen_completed_at IS NOT NULL AND o.status!='cancelled'"+(q?" AND (o.id LIKE ? OR o.table_no LIKE ?)":"");
+  const where="o.store_id=? AND o.kitchen_completed_at IS NOT NULL AND o.status!='cancelled' AND EXISTS(SELECT 1 FROM order_items i JOIN menu m ON m.id=i.menu_id WHERE i.order_id=o.id AND m.send_to_kitchen=1)"+(q?" AND (o.id LIKE ? OR o.table_no LIKE ?)":"");
   const args=[session.storeId,...(q?['%'+q+'%','%'+q+'%']:[])],scanLimit=range==='all'?500:1500;
   const rows=(await env.DB.prepare('SELECT o.id,o.source,o.table_no,o.created_at,o.kitchen_completed_at,o.paid_at FROM orders o WHERE '+where+' ORDER BY o.kitchen_completed_at DESC LIMIT ?').bind(...args,scanLimit).all()).results;
   const filtered=target?rows.filter(o=>fmt.format(new Date(o.kitchen_completed_at))===target):rows;
   const selected=filtered.slice((page-1)*size,page*size),ids=selected.map(o=>o.id);
-  const items=ids.length?(await env.DB.prepare('SELECT i.id,i.order_id,i.name,i.quantity,i.is_done FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY i.created_at').bind(session.storeId,...ids).all()).results:[];
+  const items=ids.length?(await env.DB.prepare('SELECT i.id,i.order_id,i.name,i.quantity,i.is_done FROM order_items i JOIN orders o ON o.id=i.order_id JOIN menu m ON m.id=i.menu_id WHERE m.send_to_kitchen=1 AND o.store_id=? AND i.order_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY i.created_at').bind(session.storeId,...ids).all()).results:[];
   return json({page,size,total:filtered.length,has_more:page*size<filtered.length,limited:rows.length===scanLimit,orders:selected.map(o=>({...o,items:items.filter(i=>i.order_id===o.id)}))});
  }
 
