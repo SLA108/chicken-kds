@@ -48,7 +48,7 @@ async function prepareOrderItems(env,items,orderId,now,storeId=null){
   const selected=item.option_ids??[];
   if(!Array.isArray(selected)||selected.length>30||new Set(selected).size!==selected.length||selected.some(id=>typeof id!=='string'))throw Error('Invalid modifier options');
   const groups=links.filter(g=>g.menu_id===item.menu_id);
-  for(const g of groups){const count=selected.filter(id=>opts.get(id)?.group_id===g.group_id).length;if(count<g.min_select||count>g.max_select)throw Error('Invalid selections for '+g.name);}
+  if(!lookup.get(item.menu_id)?.open_price)for(const g of groups){const count=selected.filter(id=>opts.get(id)?.group_id===g.group_id).length;if(count<g.min_select||count>g.max_select)throw Error('Invalid selections for '+g.name);}
   if(selected.some(id=>!opts.has(id)||!groups.some(g=>g.group_id===opts.get(id).group_id)))throw Error('Option not assigned to this dish');
   const discount=item.discount_percent??0;
   if(![0,20,50].includes(discount))throw Error('Invalid discount');
