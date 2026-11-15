@@ -458,13 +458,16 @@ function showReleaseTable(id){
   '<div><span>Order total</span><strong>'+money(ticketTotal(o))+'</strong></div>'+
   '<div><span>Kitchen status</span><strong>'+(ready?'READY':(o.items||[]).some(i=>i.is_done)?'COOKING':'NOT READY')+'</strong></div></div>'+
   (!paid?'<div class="foh-release-warning">⚠ This order has not been paid. Releasing the table does not collect payment or close the order.</div>':'')+
+  '<div class="release-rating"><strong>Final Staff Self-Assessment</strong><p>Review your rating before releasing this table.</p><div class="release-rating-options">'+[[1,'😡','Very Poor'],[2,'☹️','Poor'],[3,'😉','Average'],[4,'😄','Good'],[5,'🥰','Excellent']].map(([v,emoji,label])=>'<button type="button" data-release-rating="'+v+'" aria-pressed="'+(v===3)+'" title="'+label+'">'+emoji+'<small>'+label+'</small></button>').join('')+'</div></div>'+
   '<div class="foh-release-tip"><label>Add tip (PLN)<input id="release-tip" type="text" inputmode="numeric" value="0.00"></label><label>Tip payment method<select id="release-tip-method"><option value="cash">Cash</option><option value="card">Card</option></select></label><p id="release-existing-tips" class="muted">Loading recorded tips…</p></div>'+'<p class="foh-release-note">The table will become available. The order and payment history will be preserved.</p>'+
   '<p class="foh-release-error" id="foh-release-error" role="alert" hidden></p>'+
   '<div class="foh-release-actions"><button type="button" class="foh-release-cancel" id="foh-release-cancel">Cancel</button><button type="button" class="foh-release-confirm" id="foh-release-confirm">✓ Release Table</button></div>'+
   '</section>';
  document.body.appendChild(modal);
  api('/orders/'+id+'/tips').then(data=>{const el=modal.querySelector('#release-existing-tips');if(el)el.textContent='Tips already recorded: '+money(data.total_cents||0)}).catch(()=>{const el=modal.querySelector('#release-existing-tips');if(el)el.textContent='Existing tips unavailable';});
+ let releaseRating=3;const ratingButtons=modal.querySelectorAll('[data-release-rating]');ratingButtons.forEach(b=>b.onclick=()=>{releaseRating=Number(b.dataset.releaseRating);ratingButtons.forEach(x=>x.setAttribute('aria-pressed',String(Number(x.dataset.releaseRating)===releaseRating)));});
  const releaseTipKey=crypto.randomUUID();
+ if(paid)api('/orders/'+id+'/service-rating').then(data=>{if(!modal.isConnected)return;releaseRating=Number(data.rating)||3;ratingButtons.forEach(x=>x.setAttribute('aria-pressed',String(Number(x.dataset.releaseRating)===releaseRating)));}).catch(()=>{});
   const getReleaseTipCents=bindShiftTipInput(modal.querySelector('#release-tip'));
  const cancel=modal.querySelector('#foh-release-cancel'),confirmButton=modal.querySelector('#foh-release-confirm'),error=modal.querySelector('#foh-release-error');
  const close=()=>{modal.remove();document.removeEventListener('keydown',onKey)};
@@ -478,7 +481,7 @@ function showReleaseTable(id){
   try{
    const releaseStore=currentDeviceStore?.id,releaseEpoch=storeEpoch;
    const tipCents=getReleaseTipCents();if(!Number.isInteger(tipCents)||tipCents<0||tipCents>10000000)throw Error('Enter a valid tip amount');if(tipCents>0&&!paid)throw Error('Checkout the order before adding a tip');
-   await api('/orders/'+id+'/release-table','POST',{tip_amount_cents:tipCents,tip_method:modal.querySelector('#release-tip-method').value,tip_request_key:releaseTipKey});
+   await api('/orders/'+id+'/release-table','POST',{tip_amount_cents:tipCents,tip_method:modal.querySelector('#release-tip-method').value,tip_request_key:releaseTipKey,service_rating:paid?releaseRating:undefined});
    close();
    // Server has confirmed the release. Update the visible POS state immediately,
    // without blocking on the next full menu/orders/tables network refresh.
@@ -823,8 +826,8 @@ function adminOrderCard(o){
  const table=o.source!=='dinein'?'N/A':Number(o.table_occupied)?'Occupied':'Released';
  const source=o.source==='dinein'?'Table '+(o.table_no||'—'):(sourceName[o.source]||o.source||'Order');
  return '<article class="bo-order-card bo-monitor-card"><div class="bo-order-head"><div class="bo-monitor-identity"><strong>'+esc(o.store_name||o.store_code||'Restaurant')+'</strong><small>'+esc(source)+' · #'+esc(String(o.id||'').slice(0,8))+'</small></div><b>'+money(Number(o.total_cents||0))+'</b></div>'+
+ (o.service_rating?'<div class="bo-service-rating bo-service-rating-top"><span>Staff Self-Assessment</span><strong>'+serviceEmoji[Number(o.service_rating)]+' '+Number(o.service_rating)+'/5</strong></div>':'')+
  '<div class="bo-monitor-financial"><div><small>Original</small><strong>'+money(o.original_total_cents||0)+'</strong></div><div><small>Discount</small><strong class="bo-monitor-discount">−'+money(o.discount_cents||0)+'</strong></div><div><small>Final total</small><strong>'+money(o.total_cents||0)+'</strong></div></div><div class="bo-monitor-payment"><span>Paid <b>'+money(o.paid_cents||0)+'</b></span><span>Outstanding <b>'+money(o.unpaid_cents||0)+'</b></span></div>'+(o.has_unpriced_items?'<p class="bo-monitor-note">Some items have no recorded price.</p>':'')+'<div class="bo-monitor-status"><span class="bo-flag bo-'+kitchenColor+'">Kitchen: '+kitchen+'</span><span class="bo-flag '+(Number(o.unpaid_cents)===0&&Number(o.paid_cents)>0?'bo-green':'bo-yellow')+'">'+payment+'</span><span class="bo-flag">Pickup: '+pickup+'</span></div>'+
- (o.service_rating?'<div class="bo-service-rating">Staff service rating: <strong>'+serviceEmoji[Number(o.service_rating)]+' '+Number(o.service_rating)+'/5</strong></div>':'')+
  '<div class="bo-monitor-tips"><div class="bo-monitor-tips-title"><span>Tips <small>(excluded from sales)</small></span><strong>'+money(o.tips_total_cents||0)+'</strong></div><div class="bo-monitor-tips-methods"><span>Cash <b>'+money(o.cash_tips_cents||0)+'</b></span><span>Card <b>'+money(o.card_tips_cents||0)+'</b></span></div></div>'+
  '<div class="bo-monitor-timing"><div><small>Ordered</small><strong>'+boStamp(o.created_at)+'</strong></div><div><small>Kitchen completed</small><strong>'+boStamp(o.kitchen_completed_at)+'</strong></div><div><small>Order → Kitchen</small><strong>'+boDuration(o.created_at,o.kitchen_completed_at)+'</strong></div><div><small>Checkout</small><strong>'+boStamp(o.paid_at)+'</strong></div><div><small>Order → Checkout</small><strong>'+boDuration(o.created_at,o.paid_at)+'</strong></div></div>'+
  '<div class="bo-monitor-meta"><span>Table: <strong>'+table+'</strong></span><span>Items ready: <strong>'+done.length+'/'+items.length+'</strong></span><span>Collected: <strong>'+picked.length+'/'+items.length+'</strong></span></div>'+
