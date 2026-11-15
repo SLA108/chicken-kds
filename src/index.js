@@ -1,3 +1,4 @@
+import {attendanceQrToken,qrSlot,QR_PERIOD_MS} from './attendance-qr.js';
 import {isPairingCode,isDeviceRole,pairingExpired,approvalAttemptPolicy,parseDeviceCookie} from './device-pairing.js';
 import {issueStoreSession,verifyStoreSession,sha256Hex,activeDeviceStore,allowedDeviceStore,listAllowedDeviceStores} from './store-auth.js';
 const json=(x,status=200,extra={})=>new Response(JSON.stringify(x),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',...extra}});
@@ -147,7 +148,17 @@ if(sessionToken){
  if(!device)return json({error:'Device revoked or store inactive'},403);
  const boundRole=await env.DB.prepare('SELECT role FROM pos_devices WHERE id=?').bind(session.deviceId).first();
  if(!boundRole||session.role==='scanner'&&boundRole.role!=='scanner'||session.role!=='scanner'&&boundRole.role==='scanner')return json({error:'Device role mismatch'},403);
- if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,api_enabled:false});
+ if(path==='/api/device/attendance-qr'&&req.method==='POST'){
+ if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+ if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
+ if(!env.ATTENDANCE_QR_SECRET)return json({error:'Attendance QR is not configured'},503);
+ const permission=await env.DB.prepare('SELECT enabled FROM device_attendance_qr_access WHERE device_id=?').bind(session.deviceId).first();
+ if(permission?.enabled!==1)return json({error:'This device is not authorized to display attendance QR'},403);
+ const now=Date.now(),first=qrSlot(now);
+ const tokens=await Promise.all(Array.from({length:5},async(_,i)=>({slot:first+i,token:await attendanceQrToken(env.ATTENDANCE_QR_SECRET,session.storeId,first+i)})));
+ return json({store_id:session.storeId,server_time:now,period_ms:QR_PERIOD_MS,expires_at:(first+4)*QR_PERIOD_MS,tokens});
+}
+if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,api_enabled:false});
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
@@ -859,9 +870,19 @@ if(path==='/api/admin/device-pairings/approve'&&req.method==='POST'){
  if(!result[0].meta.changes||!result[1].meta.changes)return json({error:'Pairing already claimed'},409);
  return json({ok:true,device_id:deviceId});
 }
+const attendancePermissionMatch=path.match(/^\/api\/admin\/devices\/([0-9a-f-]{36})\/attendance-qr$/);
+if(attendancePermissionMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ if(req.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);
+ const b=await parse(req);if(typeof b?.enabled!=='boolean')return json({error:'enabled must be boolean'},400);
+ const device=await env.DB.prepare('SELECT id FROM pos_devices WHERE id=?').bind(attendancePermissionMatch[1]).first();
+ if(!device)return json({error:'Device not found'},404);
+ await env.DB.prepare('INSERT INTO device_attendance_qr_access(device_id,enabled,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(device_id) DO UPDATE SET enabled=excluded.enabled,updated_at=CURRENT_TIMESTAMP').bind(device.id,b.enabled?1:0).run();
+ return json({ok:true,device_id:device.id,enabled:b.enabled});
+}
 if(path==='/api/admin/devices'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- const devices=(await env.DB.prepare("SELECT d.id,d.store_id,s.code AS store_code,s.name AS store_name,d.label,d.active,d.created_at,d.revoked_at FROM pos_devices d JOIN stores s ON s.id=d.store_id ORDER BY d.created_at DESC LIMIT 200").all()).results;
+ const devices=(await env.DB.prepare("SELECT d.id,d.store_id,s.code AS store_code,s.name AS store_name,d.label,d.active,d.created_at,d.revoked_at,COALESCE(q.enabled,0) AS attendance_qr_enabled FROM pos_devices d LEFT JOIN device_attendance_qr_access q ON q.device_id=d.id JOIN stores s ON s.id=d.store_id ORDER BY d.created_at DESC LIMIT 200").all()).results;
  return json({devices});
 }
 const revokeDeviceMatch=path.match(/^\/api\/admin\/devices\/([0-9a-f-]{36})\/revoke$/);
