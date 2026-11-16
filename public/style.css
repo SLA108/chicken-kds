@@ -1037,3 +1037,18 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 /* Production requirement chips: readable in both kitchen dark theme and other views. */
 .kds-dag-view .kds-production-chip{display:inline-flex;align-items:center;max-width:100%;padding:7px 12px;border-radius:9px;background:#e8f0ff;border:1px solid #b8cbed;color:#19365d;font-size:13px;font-weight:650;line-height:1.35;white-space:normal;overflow-wrap:anywhere}
 .kitchen .kds-dag-view .kds-production-chip,body.kitchen .kds-dag-view .kds-production-chip{background:#334155;border-color:#52647b;color:#f1f5f9}
+
+/* Kitchen DAG V3: interactive clustered deadline timeline. */
+.kds-dag-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:12px 0;color:#cbd5e1;font-size:13px}
+.kds-dag-controls button{background:#334155;color:#e2e8f0;border:1px solid #52647b;padding:7px 12px;border-radius:9px;font-size:13px}
+.kds-dag-controls button.selected{background:#2563eb;color:white;border-color:#93c5fd}
+.kds-dag-track{position:relative}
+.kds-dag-deadline-marker{position:absolute;top:50%;transform:translate(-50%,-50%);min-width:34px;height:34px;padding:0 7px;border:2px solid transparent;border-radius:18px;display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:750;z-index:2;white-space:nowrap;box-shadow:0 2px 8px #0006;cursor:pointer;touch-action:manipulation}
+.kds-dag-deadline-marker.is-selected{border-color:white;outline:2px solid #93c5fd;outline-offset:2px;z-index:4}
+.kds-dag-deadline-marker:focus-visible{outline:3px solid #bfdbfe;outline-offset:3px}
+.kds-dag-node-detail{margin:4px 0 12px;padding:12px 15px;background:#304157;color:#f1f5f9;border:1px solid #53667e;border-radius:12px;font-size:13px}
+.kds-dag-node-detail>strong{display:block;margin-bottom:8px}
+.kds-dag-node-slot{padding:7px 0;border-top:1px solid #526176}
+.kds-dag-node-slot>div{padding:3px 0;color:#d6e2ef}
+.kds-dag-outside{font-size:12px;color:#e9b86d;padding:4px 10px}
+@media(max-width:650px){.kds-dag-controls button{min-height:38px}.kds-dag-deadline-marker{min-width:38px;height:38px}}
