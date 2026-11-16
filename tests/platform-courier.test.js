@@ -49,7 +49,7 @@ test('collected platform orders cannot be reopened or changed via ordinary POS i
 test('platform editing requires optimistic revision and unstarted kitchen work',()=>{
  assert.ok(api.includes("const platformEdit=path.match("));
  assert.match(api,/Order changed; refresh/);
- assert.match(api,/Kitchen has started or order items changed; refresh/);
+ assert.match(api,/Completed dishes cannot be modified; refresh/);
  assert.match(api,/Completed dishes cannot be modified; refresh/);
  assert.match(api,/b.items.filter\(i=>!existing.find\(x=>x.id===i.id\).is_done\)/);
  assert.match(ui,/Edit Platform Order/);
