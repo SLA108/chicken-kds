@@ -1037,7 +1037,7 @@ async function loadKitchenProduction(){
  if(kitchenProductionLoading)return;
  kitchenProductionLoading=true;
  try{
-  const result=await api('/store/kitchen/dag');
+  const result=await api('/kitchen/dag');
   if(page!=='kitchen'||kitchenView!=='dag'||epoch!==storeEpoch||store!==(currentDeviceStore?.id||''))return;
   kitchenProduction=result;kitchenProductionStore=store;
   kitchen();
