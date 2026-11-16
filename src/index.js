@@ -1236,7 +1236,7 @@ if(path==='/api/production-components'&&req.method==='POST'){
 const pcMatch=path.match(/^\/api\/production-components\/([^/]+)$/);
 if(pcMatch&&req.method==='PATCH'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0);
+ const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0),emoji=String(b?.emoji||'').trim();
  if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440||[...emoji].length>12||![0,1].includes(Number(b?.active)))return json({error:'Invalid component'},400);
  let result;
  if(storeId==='global')result=await env.DB.prepare('UPDATE production_global_components SET name=?,unit=?,prep_minutes=?,active=?,emoji=? WHERE id=?').bind(name,unit,minutes,Number(b.active),emoji,pcMatch[1]).run();
