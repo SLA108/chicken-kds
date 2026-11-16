@@ -4,6 +4,7 @@ function scopedApiPath(path){
  if(!deviceMode())return path;
  if(!['pos','kitchen'].includes(page))return path;
  if(path==='/pos/pickups'||path.startsWith('/pos/pickups/'))return '/store'+path.slice('/pos'.length);
+ if(path==='/quick-orders'||path==='/kitchen/dag'||path==='/quick-order/menu')return '/store'+path;
  if(path==='/menu'||path==='/orders'||path==='/tables'||path==='/menu/modifiers'||path==='/kitchen/categories'||path==='/reservations'||path.startsWith('/reservations?'))return '/store'+path;
  if(/^\/(?:orders|order-items|reservations|pos\/pickups|kitchen\/orders)\//.test(path))return '/store'+path;
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
