@@ -198,6 +198,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
    throw e;
   }
   await broadcastStore(env,storeId,'orders',{id});
+  if(session.role==='kitchen')await broadcastStore(env,storeId,'platform_order_kitchen_created',{id,platform:b.platform,external_order_id:b.external_order_id,dishes:b.items.reduce((n,item)=>n+item.quantity,0)});
   return json({id,store_id:storeId,platform:b.platform,external_order_id:b.external_order_id,ready_by:b.ready_by},201);
  }
 
