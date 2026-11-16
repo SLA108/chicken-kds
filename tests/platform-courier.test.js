@@ -232,3 +232,12 @@ test('platform workspace clearly identifies selected filter and structures order
  assert.match(ui,/platform-workspace-actions/);
  assert.match(ui,/platform-workspace-stats button\.selected/);
 });
+
+test('Kitchen Refresh only refreshes kitchen orders and never renders Back Office overview',()=>{
+ const start=ui.indexOf('function kitchen(){');
+ const end=ui.indexOf('function ',start+10);
+ const kitchen=ui.slice(start,end>start?end:undefined);
+ assert.match(kitchen,/document\.querySelector\('#sync'\)\.onclick=\(\)=>refresh\(\)/);
+ assert.doesNotMatch(kitchen,/loadOverview\(\)/);
+ assert.doesNotMatch(kitchen,/admin\(\)/);
+});
