@@ -338,7 +338,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  }
  if(path==='/api/store/menu'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
-  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
+  const rows=(await env.DB.prepare("SELECT m.id,m.name,m.category,COALESCE(o.price_cents,m.price_cents) AS price_cents,m.vat_rate,m.image_url,m.sort_order,m.dag_group FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 ORDER BY m.sort_order,m.name").bind(session.storeId).all()).results;
   return json(rows);
  }
  if(path==='/api/store/pickups'&&req.method==='GET'){
@@ -1336,14 +1336,16 @@ if(menuMatch&&req.method==='PATCH'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const b=await parse(req);
  if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!b.category.trim()||!Number.isInteger(b.price_cents)||b.price_cents<0||b.price_cents>10000000||![0,5,8,23].includes(b.vat_rate)||![0,1,false,true].includes(b.active)||!Number.isInteger(b.sort_order)||Math.abs(b.sort_order)>100000)return json({error:'Invalid menu item'},400);
+ const dagGroup=String(b.dag_group||'').trim();
+ if(dagGroup.length>100)return json({error:'DAG group must be 100 characters or fewer'},400);
  const image=String(b.image_url||'');
  if(image.length>1000||image&&!(/^\/images\/[0-9a-f-]{36}\.(webp|png|jpg)$/.test(image)||/^https:\/\//i.test(image)))return json({error:'Invalid image URL'},400);
- const result=await env.DB.prepare('UPDATE menu SET name=?,category=?,price_cents=?,vat_rate=?,image_url=?,sort_order=?,active=? WHERE id=?').bind(b.name.trim().slice(0,100),b.category.trim().slice(0,50),b.price_cents,b.vat_rate,image,b.sort_order,Number(b.active),menuMatch[1]).run();
+ const result=await env.DB.prepare('UPDATE menu SET name=?,category=?,price_cents=?,vat_rate=?,image_url=?,sort_order=?,active=?,dag_group=? WHERE id=?').bind(b.name.trim().slice(0,100),b.category.trim().slice(0,50),b.price_cents,b.vat_rate,image,b.sort_order,Number(b.active),dagGroup,menuMatch[1]).run();
  if(!result.meta.changes)return json({error:'Menu item not found'},404);
  await broadcast(env,'menu',{});return json({ok:true});
 }
 if(path==='/api/menu'&&req.method==='GET')return json((await env.DB.prepare('SELECT * FROM menu WHERE active=1 ORDER BY sort_order,category,name').all()).results);
-if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate) VALUES(?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8).run();await broadcast(env,'menu',{});return json({id},201);}
+if(path==='/api/menu'&&req.method==='POST'){if(!allowed(role,'admin'))return json({error:'Forbidden'},403);const b=await parse(req);if(!b||typeof b.name!=='string'||!b.name.trim()||typeof b.category!=='string'||!Number.isInteger(b.price_cents)||b.price_cents<0)return json({error:'Invalid menu item'},400);const id=uid();await env.DB.prepare('INSERT INTO menu(id,name,category,price_cents,sort_order,image_url,vat_rate,dag_group) VALUES(?,?,?,?,?,?,?,?)').bind(id,b.name.trim().slice(0,100),b.category.slice(0,50),b.price_cents,Number(b.sort_order)||0,String(b.image_url||'').slice(0,1000),[0,5,8,23].includes(Number(b.vat_rate))?Number(b.vat_rate):8,String(b.dag_group||'').trim().slice(0,100)).run();await broadcast(env,'menu',{});return json({id},201);}
 if(path==='/api/health'&&req.method==='GET')return json({ok:true,time:new Date().toISOString()});
 
 return json({error:'Not found'},404);
