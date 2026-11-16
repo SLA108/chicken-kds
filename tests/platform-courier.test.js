@@ -73,3 +73,11 @@ test('POS provides platform order entry and editing UI alongside courier handoff
  assert.match(ui,/id="pos-courier-queue"/);
  assert.match(ui,/openPosPlatformOrders/);
 });
+
+test('platform edit preserves completed quantities and ISO order timestamps',()=>{
+ assert.match(ui,/quantity:i\.is_done\?Number\(i\.quantity\):Number/);
+ assert.match(api,/const now=new Date\(\)\.toISOString\(\),revision=now/);
+});
+test('reopening collected platform order is prevented in SQL update',()=>{
+ assert.match(api,/AND NOT EXISTS\(SELECT 1 FROM order_platform_metadata pm WHERE pm\.order_id=orders\.id AND pm\.collected_at IS NOT NULL\)/);
+});
