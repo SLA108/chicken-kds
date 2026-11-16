@@ -1031,10 +1031,22 @@ function updateKitchenClock(){
 const kitchenViewKey='ck_kitchen_view_v1';
 let kitchenView=(()=>{try{return localStorage.getItem(kitchenViewKey)==='dag'?'dag':'tickets'}catch{return 'tickets'}})();
 let kitchenDagMode='dishes',kitchenProduction=null,kitchenProductionStore='',kitchenProductionLoading=false;
-let kitchenProductionSnapshot=null,kitchenProductionFlash=new Map(),kitchenProductionFlashTimer=null;
+let kitchenProductionSnapshot=null,kitchenProductionFlash=new Map();
 function resetKitchenProductionChanges(){
- kitchenProductionSnapshot=null;kitchenProductionFlash.clear();
- if(kitchenProductionFlashTimer){clearTimeout(kitchenProductionFlashTimer);kitchenProductionFlashTimer=null}
+ kitchenProductionSnapshot=null;
+ kitchenProductionFlash.clear();
+}
+function acknowledgeKitchenProductionComponent(componentId){
+ kitchenProductionFlash.delete(String(componentId));
+}
+function acknowledgeKitchenProductionItem(itemId){
+ const id=String(itemId);
+ for(const [componentId,entry] of kitchenProductionFlash){
+  if(entry.items.has(id)){
+   entry.items.delete(id);
+   if(!entry.items.size)kitchenProductionFlash.delete(componentId);
+  }
+ }
 }
 function captureKitchenProductionChanges(result,store){
  const next=new Map();
@@ -1045,28 +1057,19 @@ function captureKitchenProductionChanges(result,store){
   next.set(id,sources);
  }
  const prior=kitchenProductionSnapshot;
+ if(prior&&prior.store!==store)resetKitchenProductionChanges();
  if(prior?.store===store){
-  const now=Date.now();
   for(const [id,sources] of next){
    const before=prior.components.get(id)||new Map();
-   let added=0;
-   for(const [itemId,qty] of sources)if(!before.has(itemId))added+=qty;
-   if(added>0){
-    const existing=kitchenProductionFlash.get(id);
-    kitchenProductionFlash.set(id,{added:added+(existing?.expires>now?existing.added:0),expires:now+5000});
-   }
+   const added=kitchenProductionFlash.get(id)?.items||new Map();
+   for(const [itemId,qty] of sources)if(!before.has(itemId)&&qty>0)added.set(itemId,qty);
+   for(const itemId of added.keys())if(!sources.has(itemId))added.delete(itemId);
+   if(added.size)kitchenProductionFlash.set(id,{items:added});
+   else kitchenProductionFlash.delete(id);
   }
+  for(const id of kitchenProductionFlash.keys())if(!next.has(id))kitchenProductionFlash.delete(id);
  }
  kitchenProductionSnapshot={store,components:next};
- if(kitchenProductionFlash.size){
-  if(kitchenProductionFlashTimer)clearTimeout(kitchenProductionFlashTimer);
-  kitchenProductionFlashTimer=setTimeout(()=>{
-   kitchenProductionFlashTimer=null;
-   const now=Date.now();
-   for(const [id,v] of kitchenProductionFlash)if(v.expires<=now)kitchenProductionFlash.delete(id);
-   if(page==='kitchen'&&kitchenView==='dag')kitchen();
-  },5100);
- }
 }
 
 async function loadKitchenProduction(){
@@ -1153,8 +1156,8 @@ function kitchenDagView(active){
   return '🍽️';
  };
  const summary=visible.map(r=>{
-  const flash=kitchenProductionFlash.get(String(r.component.component_id));
-  const fresh=flash&&flash.expires>Date.now()?flash:null;
+  const fresh=kitchenProductionFlash.get(String(r.component.component_id));
+  const added=fresh?[...fresh.items.values()].reduce((n,v)=>n+v,0):0;
   const id=encodeURIComponent(String(r.component.component_id)),open=dagSelectedNode===id;
   const breakdown=[...r.byDish.values()].sort((a,b)=>b.quantity-a.quantity);
   const sorted=r.selected.filter(x=>x.deadline!==null).sort((a,b)=>a.deadline-b.deadline);
@@ -1165,7 +1168,7 @@ function kitchenDagView(active){
    '<strong>Ready by</strong>'+
    ([...buckets].map(([time,b])=>'<div class="kds-prod-deadline"><strong>'+clock(time)+(time<now?' · Overdue':'')+' · ×'+fmt(b.quantity)+'</strong>'+b.items.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>').join('')||'<p class="muted small">No timed deadlines</p>')+
    (dagRangeMinutes===0&&r.unscheduled.length?'<div class="kds-prod-deadline"><strong>Deadline not set · ×'+fmt(r.unscheduled.reduce((n,x)=>n+x.quantity,0))+'</strong>'+r.unscheduled.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>':'')+'</div>';
-  return '<div class="kds-prod-card'+(open?' is-expanded':'')+'"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span class="kds-prod-main"><span class="kds-prod-name"><span class="kds-prod-emoji" aria-hidden="true">'+esc(String(r.component.emoji||'').trim()||componentEmoji(r.component.name))+'</span><strong>'+esc(r.component.name)+'</strong></span><span class="kds-prod-quantity"><span class="kds-prod-number">'+fmt(fresh?Math.max(0,r.qty-fresh.added):r.qty)+'</span>'+(fresh?'<span class="kds-prod-new-delta">+'+fmt(fresh.added)+' = '+fmt(r.qty)+'</span>':'')+'<small>'+esc(r.component.unit||'unit')+'</small></span><span class="kds-prod-meta">All orders: '+fmt(r.total)+(r.late?' · '+fmt(r.late)+' overdue':'')+'</span></span><span class="kds-prod-chevron" aria-hidden="true">'+(open?'⌃':'⌄')+'</span></button>'+
+  return '<div class="kds-prod-card'+(open?' is-expanded':'')+'"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span class="kds-prod-main"><span class="kds-prod-name"><span class="kds-prod-emoji" aria-hidden="true">'+esc(String(r.component.emoji||'').trim()||componentEmoji(r.component.name))+'</span><strong>'+esc(r.component.name)+'</strong></span><span class="kds-prod-quantity"><span class="kds-prod-number">'+fmt(added?Math.max(0,r.qty-added):r.qty)+'</span>'+(added?'<span class="kds-prod-new-delta">+'+fmt(added)+' = '+fmt(r.qty)+'</span>':'')+'<small>'+esc(r.component.unit||'unit')+'</small></span><span class="kds-prod-meta">All orders: '+fmt(r.total)+(r.late?' · '+fmt(r.late)+' overdue':'')+'</span></span><span class="kds-prod-chevron" aria-hidden="true">'+(open?'⌃':'⌄')+'</span></button>'+
   (open?detail:'')+'</div>';
  }).join('');
  const schedule=rows.flatMap(r=>r.sources.filter(x=>x.deadline!==null&&(dagRangeMinutes===0||x.deadline<=cutoff)).map(x=>({name:r.component.name,unit:r.component.unit,quantity:x.quantity,deadline:x.deadline,item:x.item,order:x.order})));
@@ -1234,7 +1237,7 @@ function kitchen(){
  bindKitchenViewTabs();
  document.querySelectorAll('[data-dag-category]').forEach(btn=>btn.onclick=()=>{const category=decodeURIComponent(btn.dataset.dagCategory);if(dagCollapsedCategories.has(category))dagCollapsedCategories.delete(category);else dagCollapsedCategories.add(category);kitchen()});
  document.querySelectorAll('[data-dag-range]').forEach(btn=>btn.onclick=()=>{dagRangeMinutes=Number(btn.dataset.dagRange);dagSelectedNode='';kitchen()});
- document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
+ document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{acknowledgeKitchenProductionComponent(decodeURIComponent(btn.dataset.dagNode));dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
  const retry=document.querySelector('#dag-production-retry');if(retry)retry.onclick=()=>loadKitchenProduction();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
@@ -1264,6 +1267,7 @@ function kitchen(){
    const confirmed=await api('/orders');
    const saved=confirmed.flatMap(o=>o.items||[]).find(i=>i.id===id);
    if(saved&&!!saved.is_done===next){
+    if(next)acknowledgeKitchenProductionItem(id);
     kitchenPending.delete(id);
     // A later refresh uses the server value, never an older in-flight response.
     await refresh();
