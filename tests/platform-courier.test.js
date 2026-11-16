@@ -46,10 +46,9 @@ test('collected platform orders cannot be reopened or changed via ordinary POS i
  assert.match(api,/Use Platform Orders to manage platform items/);
 });
 
-test('platform editing requires optimistic revision and unstarted kitchen work',()=>{
+test('platform editing uses optimistic revision and locks completed dishes',()=>{
  assert.ok(api.includes("const platformEdit=path.match("));
  assert.match(api,/Order changed; refresh/);
- assert.match(api,/Completed dishes cannot be modified; refresh/);
  assert.match(api,/Completed dishes cannot be modified; refresh/);
  assert.match(api,/b.items.filter\(i=>!existing.find\(x=>x.id===i.id\).is_done\)/);
  assert.match(ui,/Edit Platform Order/);
@@ -60,4 +59,10 @@ test('completed platform dishes are locked while unfinished dishes remain editab
  assert.match(ui,/Done \(locked\)/);
  assert.match(ui,/i.is_done\?'disabled':''/);
  assert.match(api,/existing.some\(i=>i.is_done&&b.items.find/);
+});
+
+test('kitchen owns platform entry and edits; POS handles courier handoff',()=>{
+ assert.match(api,/if\(path==='\/api\/store\/quick-orders'&&req\.method==='POST'\)\{\s*if\(session\.role!=='kitchen'\)/);
+ assert.match(api,/if\(platformEdit&&req\.method==='POST'\)\{\s*if\(session\.role!=='kitchen'\)/);
+ assert.match(api,/if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)return json\(\{error:'Forbidden'\},403\);\s*const id=courierCollect/);
 });
