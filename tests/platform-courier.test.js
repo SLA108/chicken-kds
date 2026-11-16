@@ -27,3 +27,16 @@ test('platform UI is distinct from kitchen and POS pickup',()=>{
  assert.match(ui,/Collected by Courier/);
  assert.match(ui,/path==='\/platform-orders\/collection'/);
 });
+
+test('platform collection history is store-scoped and read-only',()=>{
+ assert.match(api,/path==='\/api\/store\/platform-orders\/history'/);
+ assert.match(api,/pm\.collected_at IS NOT NULL ORDER BY pm\.collected_at DESC/);
+ assert.match(ui,/historyMode\?'\/platform-orders\/history':'\/platform-orders\/collection'/);
+ assert.match(ui,/historyMode\?'':'<button type="button" data-courier-collect/);
+});
+test('platform order modifiers are available to kitchen and validated before submit',()=>{
+ assert.match(api,/if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)return json\(\{error:'Forbidden'\},403\);\s*const \[groups,options,links\]/);
+ assert.match(ui,/const groupsFor=id=>platformModifiers\.groups\.filter/);
+ assert.match(ui,/selected<g\.min_select\|\|selected>g\.max_select/);
+ assert.match(ui,/quantity:Number\(row\.querySelector\('input\[aria-label="Quantity"\]'\)\.value\),option_ids/);
+});
