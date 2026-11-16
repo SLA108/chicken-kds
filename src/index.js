@@ -1,3 +1,4 @@
+import {warsawDayBounds} from './platform-history-time.js';
 import { validateQuickOrder, QUICK_ORDER_PLATFORMS } from './quick-order.js';
 import { buildKitchenDag } from './kitchen-dag.js';
 import {attendanceQrToken,qrSlot,QR_PERIOD_MS} from './attendance-qr.js';
@@ -257,20 +258,9 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const from=p.get('from')||'',to=p.get('to')||'',platform=p.get('platform')||'',q=(p.get('q')||'').trim().slice(0,80);
   if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(from&&to&&from>to))return json({error:'Invalid date range'},400);
   const where=["pm.store_id=?","o.store_id=?","pm.collected_at IS NOT NULL"],args=[session.storeId,session.storeId];
-  // Convert the selected Polish calendar dates to UTC boundaries, including DST transitions.
-  const warsawMidnightUtc=date=>{
-   const target=Date.parse(date+'T00:00:00Z');
-   const fmt=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
-   let guess=target;
-   for(let i=0;i<3;i++){
-    const parts=fmt.formatToParts(new Date(guess)),value=type=>Number(parts.find(p=>p.type===type).value);
-    const localAsUtc=Date.UTC(value('year'),value('month')-1,value('day'),value('hour'),value('minute'));
-    guess+=target-localAsUtc;
-   }
-   return new Date(guess).toISOString();
-  };
-  if(from){where.push("pm.collected_at>=?");args.push(warsawMidnightUtc(from))}
-  if(to){const next=new Date(Date.parse(to+'T00:00:00Z')+86400000).toISOString().slice(0,10);where.push("pm.collected_at<?");args.push(warsawMidnightUtc(next))}
+  const {start:collectedFrom,end:collectedUntil}=warsawDayBounds(from,to);
+  if(collectedFrom){where.push("pm.collected_at>=?");args.push(collectedFrom)}
+  if(collectedUntil){where.push("pm.collected_at<?");args.push(collectedUntil)}
   if(platform){where.push("pm.platform=?");args.push(platform)}
   if(q){where.push("(pm.external_order_id LIKE ? OR pm.order_id LIKE ?)");args.push('%'+q+'%','%'+q+'%')}
   const clause=where.join(' AND ');
