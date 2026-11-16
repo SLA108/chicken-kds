@@ -3,6 +3,7 @@ const deviceMode=()=>token.startsWith('cks1.');
 function scopedApiPath(path){
  if(!deviceMode())return path;
  if(!['pos','kitchen'].includes(page))return path;
+ if(path==='/kitchen/assembly-checks'||path.startsWith('/kitchen/assembly-checks/'))return '/store'+path;
  if(path==='/pos/pickups'||path.startsWith('/pos/pickups/'))return '/store'+path.slice('/pos'.length);
  if(/^\/platform-orders\/[^/]+\/edit$/.test(path)||path==='/platform-orders/history'||path==='/platform-orders/collection'||/^\/platform-orders\/[^/]+\/collect$/.test(path)||path==='/quick-orders'||path==='/kitchen/dag'||path==='/quick-order/menu'||path.startsWith('/quick-order/menu?'))return '/store'+path;
  if(path.startsWith('/platform-orders/history/')||path==='/menu'||path==='/orders'||path==='/tables'||path==='/menu/modifiers'||path==='/kitchen/categories'||path==='/reservations'||path.startsWith('/reservations?'))return '/store'+path;
