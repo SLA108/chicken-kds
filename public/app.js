@@ -1028,6 +1028,34 @@ function updateKitchenClock(){
   el.closest('.kds-order')?.setAttribute('data-deadline-urgency',remaining<=0?'overdue':remaining<=10?'urgent':'normal');
  });
 }
+const kitchenViewKey='ck_kitchen_view_v1';
+let kitchenView=(()=>{try{return localStorage.getItem(kitchenViewKey)==='dag'?'dag':'tickets'}catch{return 'tickets'}})();
+function kitchenViewTabs(){
+ return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
+}
+function kitchenDagView(active){
+ const groups=new Map();
+ for(const order of active)for(const item of order.items||[]){
+  if(item.is_done)continue;
+  const key=item.menu_id||item.name;
+  if(!groups.has(key))groups.set(key,{name:item.name,quantity:0,items:[],first:order.created_at});
+  const g=groups.get(key);g.quantity+=Number(item.quantity)||1;g.items.push({order,item});if(order.created_at<g.first)g.first=order.created_at;
+ }
+ const list=[...groups.values()].sort((a,b)=>a.first.localeCompare(b.first));
+ const now=Date.now(),windowStart=now-15*60000,windowEnd=now+30*60000;
+ const axis=Array.from({length:10},(_,i)=>{const t=new Date(windowStart+i*5*60000);return '<span>'+warsawClock(t.toISOString()).slice(0,5)+'</span>'}).join('');
+ return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">Live aggregation of unfinished dishes across active tickets</p></div><strong>'+list.reduce((n,g)=>n+g.quantity,0)+' portions</strong></div>'+
+ '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Dish</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
+ list.map(g=>{const earliest=Math.min(...g.items.map(({order})=>Date.parse(order.created_at)||now));const start=Math.max(0,Math.min(100,(earliest-windowStart)/(windowEnd-windowStart)*100));const end=Math.max(start+2,Math.min(100,(now-windowStart)/(windowEnd-windowStart)*100));return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+'</span></div><div class="kds-dag-track"><div class="kds-dag-bar" style="left:'+start+'%;width:'+Math.min(100-start,end-start)+'%"></div><div class="kds-dag-now"></div></div></div><details class="kds-dag-detail"><summary>View '+g.items.length+' ticket items</summary>'+g.items.map(({order,item})=>'<div><strong>#'+esc(order.id.slice(0,8))+'</strong> · '+Number(item.quantity||1)+' × '+esc(item.name)+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</details>'}).join('')+
+ (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Bars show elapsed time since ticket creation, not predicted cooking durations. Scheduling estimates will be added separately.</p></section>';
+}
+function bindKitchenViewTabs(){
+ document.querySelectorAll('[data-kds-view]').forEach(button=>button.onclick=()=>{
+  const next=button.dataset.kdsView;if(next===kitchenView)return;
+  kitchenView=next;try{localStorage.setItem(kitchenViewKey,next)}catch{}
+  kitchen();
+ });
+}
 function kitchen(){
  const active=orders.filter(o=>o.status!=='cancelled'&&!o.kitchen_completed_at&&!kitchenCompleting.has(o.id)&&o.items.length).sort((a,b)=>a.created_at.localeCompare(b.created_at));
  const card=o=>{
@@ -1056,8 +1084,8 @@ function kitchen(){
    }).join('')+
    (o.note?'<p class="kds-order-note">Note: '+esc(o.note)+'</p>':'')+'</article>';
  };
- shell('<div class="panel toolbar"><button type="button" id="kds-quick-order">+ Platform Order</button><button type="button" id="kds-courier-queue" class="alt">Courier Collection</button><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
- '<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')+
+ shell(kitchenViewTabs()+'<div class="panel toolbar"><button type="button" id="kds-quick-order">+ Platform Order</button><button type="button" id="kds-courier-queue" class="alt">Courier Collection</button><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
+ (kitchenView==='dag'?kitchenDagView(active):'<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')) +
  '<section class="panel completed-section kds-history"><div class="row"><h3>Completed Orders</h3><button class="alt" id="kds-history-toggle">'+(historyOpen?'Hide history':'View history')+'</button></div>'+
  (historyOpen?'<div class="toolbar"><select id="kds-history-range"><option value="today" '+(historyRange==='today'?'selected':'')+'>Today</option><option value="yesterday" '+(historyRange==='yesterday'?'selected':'')+'>Yesterday</option><option value="all" '+(historyRange==='all'?'selected':'')+'>All</option></select><input id="kds-history-search" placeholder="Table / order ID" value="'+esc(historyQuery)+'"><button class="alt" id="kds-history-search-button">Search</button></div>'+
  '<p class="muted small">'+historyResult.total+' completed'+(historyResult.limited?' (recent history limit)':'')+'</p>'+
@@ -1065,6 +1093,7 @@ function kitchen(){
  (historyResult.orders.length?'':'<p class="muted">No completed orders found</p>')+'</div>'+
  '<div class="toolbar"><button class="alt" id="kds-history-prev" '+(historyPage<=1?'disabled':'')+'>Previous</button><span>Page '+historyPage+'</span><button class="alt" id="kds-history-next" '+(!historyResult.has_more?'disabled':'')+'>Next</button></div>':'<p class="muted small">Completed orders are archived here. Open only when needed.</p>')+'</section>');
  if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);updateKitchenClock();
+ bindKitchenViewTabs();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
  document.querySelector('#sync').onclick=()=>refresh();
@@ -1669,3 +1698,6 @@ setInterval(async()=>{if(page!=='admin'||!token||adminTab!=='orders'||document.h
 
 // Lightweight overview refresh only while the dashboard is visible.
 setInterval(async()=>{if(page!=='admin'||!token||adminTab!=='overview'||document.hidden||overviewBusy)return;await loadOverview();if(adminTab==='overview')admin();},60000);
+
+// Kitchen view selector styling (shared by Tickets and DAG Timeline).
+const kitchenViewStyle=document.createElement('style');kitchenViewStyle.textContent=`.kds-view-tabs{display:flex;gap:8px;margin:0 0 14px;padding:6px;background:#1d2638;border:1px solid #39465e;border-radius:14px;width:max-content;max-width:100%}.kds-view-tabs button{border:0;border-radius:10px;padding:12px 24px;background:transparent;color:#cbd5e1;font-weight:800;cursor:pointer}.kds-view-tabs button.selected{background:#397de3;color:white}.kds-dag-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.kds-dag-scroll{overflow-x:auto}.kds-dag-axis,.kds-dag-row{display:grid;grid-template-columns:minmax(160px,25%) minmax(450px,1fr);align-items:center}.kds-dag-axis{margin:20px 0 10px;color:#aebcd3}.kds-dag-ticks{display:flex;justify-content:space-between;font-size:12px}.kds-dag-row{min-height:70px;border-top:1px solid #39465e}.kds-dag-label{display:flex;justify-content:space-between;padding-right:18px;gap:8px}.kds-dag-track{height:36px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(11.111% - 1px),#475569 calc(11.111% - 1px),#475569 11.111%);position:relative}.kds-dag-bar{position:absolute;top:7px;height:22px;background:linear-gradient(90deg,#3285e6,#4fc6bb);border-radius:12px;min-width:5px}.kds-dag-now{position:absolute;left:33.333%;top:-9px;bottom:-9px;border-left:2px solid #fb7185}.kds-dag-detail{padding:5px 12px 14px;border-bottom:1px solid #39465e}.kds-dag-detail summary{cursor:pointer;color:#9bc5ff}.kds-dag-detail div{padding:6px 0}.kds-dag-heading h2{margin-bottom:4px}@media(max-width:600px){.kds-view-tabs{width:100%}.kds-view-tabs button{flex:1;padding:12px 8px}.kds-dag-axis,.kds-dag-row{grid-template-columns:145px minmax(420px,1fr)}}`;document.head.appendChild(kitchenViewStyle);
