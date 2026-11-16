@@ -1079,3 +1079,20 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-production-board .kds-prod-schedule-row strong{text-align:right}
 .kds-production-board .kds-prod-time{color:#e4b86c;font-variant-numeric:tabular-nums}
 @media(max-width:650px){.kds-production-board .kds-prod-grid{grid-template-columns:1fr}.kds-production-board .kds-prod-schedule-row{grid-template-columns:92px minmax(0,1fr) 45px;gap:6px;padding:10px 8px}}
+
+/* Production board: reference layout, emoji labels and clear quantity hierarchy */
+.kds-production-board .kds-prod-grid{gap:12px;align-items:start}
+.kds-production-board .kds-prod-card{border-radius:13px;background:#29374b}
+.kds-production-board .kds-prod-card.is-expanded{background:#334155;border-color:#73829a}
+.kds-production-board .kds-prod-card-head{min-height:120px;align-items:stretch;padding:15px 17px}
+.kds-production-board .kds-prod-main{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-width:0;flex:1}
+.kds-production-board .kds-prod-name{display:flex;align-items:center;gap:7px;line-height:1.3;font-size:15px}
+.kds-production-board .kds-prod-name strong{overflow-wrap:anywhere}
+.kds-production-board .kds-prod-emoji{font-size:19px;line-height:1.2;flex-shrink:0}
+.kds-production-board .kds-prod-quantity{display:flex;align-items:baseline;gap:7px}
+.kds-production-board .kds-prod-quantity>strong{font-size:30px;line-height:1;font-weight:750;color:#f8fafc;font-variant-numeric:tabular-nums}
+.kds-production-board .kds-prod-quantity>small{font-size:12px;color:#cbd5e1}
+.kds-production-board .kds-prod-meta{margin-top:auto;font-size:12px;color:#b7c6d8;line-height:1.3}
+.kds-production-board .kds-prod-chevron{align-self:flex-end;font-size:22px;color:#cbd5e1;line-height:1}
+.kds-production-board .kds-prod-card-head:focus-visible{outline:2px solid #93c5fd;outline-offset:-3px}
+@media(max-width:650px){.kds-production-board .kds-prod-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.kds-production-board .kds-prod-card-head{min-height:122px;padding:11px;gap:4px}.kds-production-board .kds-prod-name{font-size:12px;gap:4px}.kds-production-board .kds-prod-emoji{font-size:16px}.kds-production-board .kds-prod-quantity>strong{font-size:25px}.kds-production-board .kds-prod-meta{font-size:10px}.kds-production-board .kds-prod-chevron{font-size:17px}}
