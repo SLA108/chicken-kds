@@ -50,7 +50,7 @@ test('platform editing uses optimistic revision and locks completed dishes',()=>
  assert.ok(api.includes("const platformEdit=path.match("));
  assert.match(api,/Order changed; refresh/);
  assert.match(api,/Completed dishes cannot be modified; refresh/);
- assert.match(api,/const changed=b.items.filter/);
+ assert.match(api,/const changed=retained.filter/);
  assert.match(ui,/Edit Platform Order/);
  assert.match(ui,/expected_updated_at:order\.updated_at/);
 });
