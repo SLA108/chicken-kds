@@ -470,6 +470,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const order=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
   if(!order)return json({error:'Order not found'},404);
   if(order.status==='cancelled'||order.paid_at||order.kitchen_completed_at)return json({error:'Order closed'},409);
+  if(await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE order_id=? AND store_id=?').bind(id,storeId).first())return json({error:'Use Platform Orders to manage platform items'},409);
   const now=new Date().toISOString();
   let statements;
   try{statements=await prepareOrderItems(env,b.items,id,now,storeId);}catch(e){return json({error:e.message},400);}
@@ -525,6 +526,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const order=await env.DB.prepare('SELECT status,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
   if(!order)return json({error:'Order not found'},404);
   if(order.status==='cancelled')return json({error:'Cancelled order'},409);
+  if(await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE order_id=? AND store_id=? AND collected_at IS NOT NULL').bind(id,storeId).first())return json({error:'Courier has already collected this platform order'},409);
   if(action==='complete'&&order.kitchen_completed_at)return json({ok:true,already_completed:true});
   if(action==='reopen'&&!order.kitchen_completed_at)return json({ok:true,already_open:true});
   const now=new Date().toISOString();
