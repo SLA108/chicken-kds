@@ -1110,6 +1110,7 @@ function kitchenDagCluster(slots,windowStart,windowEnd){
  }
  return clusters;
 }
+const dagAssemblyExpanded=new Set();
 function kitchenDagView(active){
  const now=Date.now(),data=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
  const components=data?.production_components||[],dineInMinutes=Number(data?.dine_in_minutes)||20;
@@ -1206,6 +1207,33 @@ function kitchenDagView(active){
   group.quantity+=entry.quantity;
  }
  const scheduleRows=[...scheduleGroups.values()].sort((a,b)=>a.time-b.time);
+ const dishBuckets=new Map();
+ for(const order of active)for(const item of order.items||[]){
+  if(item.is_done)continue;
+  const explicit=order.platform_deadline_at?Date.parse(order.platform_deadline_at):NaN;
+  const received=Date.parse(order.created_at);
+  const deadline=Number.isFinite(explicit)?explicit:order.platform?null:Number.isFinite(received)?received+dineInMinutes*60000:null;
+  if(deadline===null&&dagRangeMinutes!==0)continue;
+  if(deadline!==null&&deadline>cutoff)continue;
+  const time=deadline===null?null:Math.floor(deadline/(5*60000))*5*60000;
+  const bucketKey=time===null?'unscheduled':String(time);
+  if(!dishBuckets.has(bucketKey))dishBuckets.set(bucketKey,{time,dishes:new Map()});
+  const bucket=dishBuckets.get(bucketKey);
+  const dishKey=String(item.menu_id||item.name);
+  if(!bucket.dishes.has(dishKey))bucket.dishes.set(dishKey,{name:item.name,quantity:0,items:[]});
+  const dish=bucket.dishes.get(dishKey);
+  dish.quantity+=Number(item.quantity)||1;
+  dish.items.push({item,order});
+ }
+ const dishGroups=[...dishBuckets.values()].sort((a,b)=>a.time===null?1:b.time===null?-1:a.time-b.time);
+ const dishHtml=dishGroups.map(g=>'<section class="kds-prod-schedule-group kds-dish-assembly-group"><div class="kds-prod-schedule-header"><strong>'+(g.time===null?'No deadline':clock(g.time)+(g.time<now?' · Overdue':''))+'</strong><span>'+g.dishes.size+' dishes</span></div>'+
+ [...g.dishes.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(d=>{
+  const single=d.items.length===1;
+  const expanded=dagAssemblyExpanded.has(String(g.time)+'|'+d.name);
+  const key=encodeURIComponent(String(g.time)+'|'+d.name);
+  return '<div class="kds-dish-assembly-entry"><button type="button" class="kds-dish-assembly-row" '+(single?'data-assembly-done="'+esc(d.items[0].item.id)+'"':'data-assembly-expand="'+esc(key)+'"')+'><span>'+esc(d.name)+'</span><span class="kds-dish-assembly-count">×'+fmt(d.quantity)+'</span><span class="kds-dish-assembly-action">'+(single?'✓':'⌄')+'</span></button>'+
+  (!single&&expanded?'<div class="kds-dish-assembly-items">'+d.items.map(x=>'<button type="button" class="kds-dish-assembly-item" data-assembly-done="'+esc(x.item.id)+'"><span>#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.order.table_no||x.order.platform||x.order.source||'Order')+'</span><strong>×'+fmt(Number(x.item.quantity)||1)+' ✓</strong></button>').join('')+'</div>':'')+'</div>';
+ }).join('')+'</section>').join('');
  const unscheduledTotal=rows.reduce((n,r)=>n+r.unscheduled.reduce((n,x)=>n+x.quantity,0),0);
  return '<section class="panel kds-dag-view kds-production-board"><div class="kds-dag-heading"><div><h2>Kitchen Production Board</h2><p class="muted small">Unfinished production requirements · components and unmapped dishes</p></div><strong>'+fmt(totalDue)+' due</strong></div>'+
  '<div class="kds-dag-controls"><span>Prepare by</span>'+[5,15,30,0].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+(n?'+'+n+'m':'All')+'</button>').join('')+'</div>'+
@@ -1214,7 +1242,9 @@ function kitchenDagView(active){
  '<h3 class="kds-prod-section-title">Ready by · 5-minute groups</h3>'+
  (scheduleRows.length?'<div class="kds-prod-schedule-groups">'+scheduleRows.map(g=>'<section class="kds-prod-schedule-group"><div class="kds-prod-schedule-header"><strong>'+clock(g.time)+(g.time<now?' · Overdue':'')+'</strong><span>'+g.components.length+' tasks</span></div>'+g.components.sort((a,b)=>a.name.localeCompare(b.name)).map(b=>'<div class="kds-prod-schedule-row"><span>'+esc(b.name)+'</span><strong>×'+fmt(b.quantity)+'</strong></div>').join('')+'</section>').join('')+'</div>':'<p class="muted small">No timed production deadlines in this window.</p>')+
  (unscheduledTotal?'<p class="muted small">'+fmt(unscheduledTotal)+' production units have no Ready by deadline'+(dagRangeMinutes===0?' (included above).':' (select All to include).')+'</p>':'')+
- '<p class="muted small">Quantities are component units, not dish counts. Completing an order item removes its mapped component requirements.</p></section>';
+ '<p class="muted small">Quantities are component units, not dish counts. Completing an order item removes its mapped component requirements.</p>'+
+ '<h3 class="kds-prod-section-title">Dish Assembly · Ready by</h3><p class="muted small">Tap ✓ to complete a dish. Grouped dishes expand to show individual tickets.</p>'+
+ (dishGroups.length?'<div class="kds-prod-schedule-groups">'+dishHtml+'</div>':'<p class="muted small">No unfinished dishes in this time window.</p>')+'</section>';
 }
 function bindKitchenViewTabs(){
  document.querySelectorAll('[data-kds-view]').forEach(button=>button.onclick=()=>{
@@ -1264,6 +1294,29 @@ function kitchen(){
  document.querySelectorAll('[data-dag-category]').forEach(btn=>btn.onclick=()=>{const category=decodeURIComponent(btn.dataset.dagCategory);if(dagCollapsedCategories.has(category))dagCollapsedCategories.delete(category);else dagCollapsedCategories.add(category);kitchen()});
  document.querySelectorAll('[data-dag-range]').forEach(btn=>btn.onclick=()=>{dagRangeMinutes=Number(btn.dataset.dagRange);dagSelectedNode='';kitchen()});
  document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{acknowledgeKitchenProductionComponent(decodeURIComponent(btn.dataset.dagNode));dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
+ document.querySelectorAll('[data-assembly-expand]').forEach(btn=>btn.onclick=()=>{const key=decodeURIComponent(btn.dataset.assemblyExpand);if(dagAssemblyExpanded.has(key))dagAssemblyExpanded.delete(key);else dagAssemblyExpanded.add(key);kitchen()});
+ document.querySelectorAll('[data-assembly-done]').forEach(btn=>btn.onclick=async()=>{
+  const id=btn.dataset.assemblyDone;
+  if(kitchenBusy.has(id))return;
+  const order=orders.find(o=>(o.items||[]).some(i=>String(i.id)===id));
+  const item=order?.items.find(i=>String(i.id)===id);
+  if(!item||item.is_done)return;
+  kitchenBusy.add(id);btn.disabled=true;
+  kitchenPending.set(id,true);
+  try{
+   await api('/order-items/'+id+'/done','PATCH',{});
+   const confirmed=await api('/orders');
+   const saved=confirmed.flatMap(o=>o.items||[]).find(i=>String(i.id)===id);
+   if(!saved||!saved.is_done)throw Error('Completion not confirmed');
+   acknowledgeKitchenProductionItem(id);
+   kitchenPending.delete(id);
+   await refresh();
+  }catch(e){
+   kitchenPending.delete(id);
+   notify('Could not save dish: '+e.message);
+   await refresh();
+  }finally{kitchenBusy.delete(id)}
+ });
  const retry=document.querySelector('#dag-production-retry');if(retry)retry.onclick=()=>loadKitchenProduction();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
