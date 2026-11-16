@@ -1057,7 +1057,7 @@ function kitchenViewTabs(){
  return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
 }
 function kitchenDagView(active){
- const now=Date.now(),defaultDineInMinutes=20;
+ const now=Date.now(),defaultDineInMinutes=Number(kitchenProduction?.dine_in_minutes)||20;
  const deadlineFor=order=>{
   const explicit=order.platform_deadline_at?Date.parse(order.platform_deadline_at):NaN;
   if(Number.isFinite(explicit))return explicit;
@@ -1106,7 +1106,7 @@ function kitchenDagView(active){
   const summary=[...totals].map(([name,qty])=>esc(name)+' ×'+Number(qty.toFixed(2))).join(' · ');
   return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+' · '+(overdue?'Overdue ':'Ready by ')+due+'</span>'+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track"><div class="kds-dag-bar" style="left:'+start+'%;width:'+Math.max(1,Math.min(100-start,end-start))+'%;'+(overdue?'background:#dc6b53;':'')+'"></div><div class="kds-dag-now" style="left:'+nowPct+'%"></div></div></div><details class="kds-dag-detail"><summary>View '+g.items.length+' ticket items</summary>'+g.items.map(({order,item})=>'<div><strong>#'+esc(order.id.slice(0,8))+'</strong> · '+Number(item.quantity||1)+' × '+esc(item.name)+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</details>';
  }).join('')+
- (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Dine-in: 20 minutes from receipt. Delivery: kitchen-selected deadline. Component preparation times are not used. Delivery tickets without a deadline show Not set.</p></section>';
+ (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Dine-in: '+defaultDineInMinutes+' minutes from receipt. Delivery: kitchen-selected deadline. Component preparation times are not used. Delivery tickets without a deadline show Not set.</p></section>';
 }
 function bindKitchenViewTabs(){
  document.querySelectorAll('[data-kds-view]').forEach(button=>button.onclick=()=>{
@@ -1559,14 +1559,16 @@ async function loadProduction(){
  if(!v3Loaded)await loadV3Stores();
  if(!productionStore)productionStore='global';
  if(productionStore)productionData=await api('/production-components?store_id='+encodeURIComponent(productionStore));
+ pcTiming=productionStore==='global'?null:await api('/production-timing?store_id='+encodeURIComponent(productionStore));
  else productionData={components:[],mappings:[]};
 }
-let pcOpenComponent='',pcCategory='All',pcSearch='',pcEditComponent='';
+let pcOpenComponent='',pcCategory='All',pcSearch='',pcEditComponent='',pcTiming=null;
 function productionPanel(){
  const stores='<option value="global" '+(productionStore==='global'?'selected':'')+'>Global — All Restaurants</option>'+v3Stores.filter(x=>x.active).map(x=>'<option value="'+esc(x.id)+'" '+(x.id===productionStore?'selected':'')+'>'+esc(x.name)+'</option>').join('');
  const categories=['All',...new Set(adminMenu.map(m=>m.category||'Other'))];
  return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Production Components</h2><p>Choose a component, then assign dishes using the same category and search workflow as Modifiers.</p></div></div>'+
  '<label>Restaurant<select id="pc-store">'+stores+'</select></label>'+
+ (productionStore!=='global'?'<form id="pc-timing" class="admin-inline-form"><h3>Kitchen Timeline Settings</h3><div class="menu-form-grid"><label>Dine-in Default Ready Time (minutes)<input name="dine_in_minutes" type="number" min="1" max="240" required value="'+Number(pcTiming?.dine_in_minutes??20)+'"></label></div><button type="submit">Save timeline settings</button><p class="muted small">Delivery orders use the deadline selected by kitchen staff.</p></form>':'')+
  '<form id="pc-create" class="admin-inline-form"><div class="menu-form-grid"><label>Component Name<input name="name" placeholder="e.g. Fried Chicken" required maxlength="100"></label><label>Unit<input name="unit" value="portion" required></label><label>Estimated Preparation Time (min)<input name="prep_minutes" type="number" min="0" max="1440" value="0"></label></div><button type="submit">+ Add component</button></form>'+
  productionData.components.map(c=>{
  const links=productionData.mappings.filter(m=>m.component_id===c.id);
@@ -1591,6 +1593,8 @@ function productionPanel(){
 }
 function bindProductionPanel(){
  const store=document.querySelector('#pc-store');if(!store)return;
+ const timingForm=document.querySelector('#pc-timing');if(timingForm)timingForm.onsubmit=async e=>{e.preventDefault();const mins=Number(new FormData(timingForm).get('dine_in_minutes'));try{await api('/production-timing','PUT',{store_id:productionStore,dine_in_minutes:mins});await loadProduction();admin();notify('Timeline settings saved')}catch(err){notify(err.message)}};
+
  store.onchange=()=>{productionStore=store.value;loadProduction().then(admin).catch(e=>notify(e.message))};
  document.querySelector('#pc-create').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await api('/production-components','POST',{store_id:productionStore,name:f.get('name'),unit:f.get('unit'),prep_minutes:Number(f.get('prep_minutes'))});await loadProduction();admin()}catch(e){notify(e.message)}};
  document.querySelectorAll('[data-pc-open]').forEach(el=>el.onclick=()=>{pcOpenComponent=pcOpenComponent===el.dataset.pcOpen?'':el.dataset.pcOpen;pcCategory='All';pcSearch='';admin()});
