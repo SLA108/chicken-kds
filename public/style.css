@@ -1096,3 +1096,13 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-production-board .kds-prod-chevron{align-self:flex-end;font-size:22px;color:#cbd5e1;line-height:1}
 .kds-production-board .kds-prod-card-head:focus-visible{outline:2px solid #93c5fd;outline-offset:-3px}
 @media(max-width:650px){.kds-production-board .kds-prod-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.kds-production-board .kds-prod-card-head{min-height:122px;padding:11px;gap:4px}.kds-production-board .kds-prod-name{font-size:12px;gap:4px}.kds-production-board .kds-prod-emoji{font-size:16px}.kds-production-board .kds-prod-quantity>strong{font-size:25px}.kds-production-board .kds-prod-meta{font-size:10px}.kds-production-board .kds-prod-chevron{font-size:17px}}
+
+/* POS-inspired green A+B production count */
+.kds-production-board .kds-prod-quantity{flex-wrap:wrap;gap:8px}
+.kds-production-board .kds-prod-math{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;font-weight:800;line-height:1}
+.kds-production-board .kds-prod-math-overdue,.kds-production-board .kds-prod-math-upcoming{display:inline-flex;align-items:center;justify-content:center;min-width:34px;min-height:34px;padding:5px 8px;border-radius:9px;background:#145c42;border:1px solid #2b9a6b;color:#a7f3d0;font-size:23px}
+.kds-production-board .kds-prod-math-overdue{background:#743e32;border-color:#d07a5b;color:#ffddd2}
+.kds-production-board .kds-prod-math-plus,.kds-production-board .kds-prod-math-equals{font-size:18px;color:#a6d6bd}
+.kds-production-board .kds-prod-math-total{font-size:29px;color:#7df1ac}
+.kds-production-board .kds-prod-quantity>small{font-size:12px}
+@media(max-width:650px){.kds-production-board .kds-prod-math{gap:3px}.kds-production-board .kds-prod-math-overdue,.kds-production-board .kds-prod-math-upcoming{min-width:25px;min-height:28px;padding:3px 5px;font-size:17px}.kds-production-board .kds-prod-math-total{font-size:21px}.kds-production-board .kds-prod-math-plus,.kds-production-board .kds-prod-math-equals{font-size:14px}}
