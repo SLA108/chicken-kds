@@ -1532,16 +1532,27 @@ async function loadProduction(){
  if(productionStore)productionData=await api('/production-components?store_id='+encodeURIComponent(productionStore));
  else productionData={components:[],mappings:[]};
 }
+let pcOpenComponent='',pcCategory='All',pcSearch='';
 function productionPanel(){
- const options='<option value="global" '+(productionStore==='global'?'selected':'')+'>Global — All Restaurants</option>'+v3Stores.filter(x=>x.active).map(x=>'<option value="'+esc(x.id)+'" '+(x.id===productionStore?'selected':'')+'>'+esc(x.name)+'</option>').join('');
- const menuOptions=adminMenu.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');
- return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Production Components</h2><p>Map menu dishes and modifier options to shared kitchen production tasks.</p></div></div>'+
- '<label>Restaurant <select id="pc-store">'+options+'</select></label>'+
- '<form id="pc-create" class="toolbar" style="align-items:end;flex-wrap:wrap"><label>Component Name<input name="name" placeholder="e.g. Fried Chicken" required maxlength="100"></label><label>Unit<input name="unit" placeholder="portion" value="portion" required></label><label>Estimated Preparation Time (min)<input name="prep_minutes" type="number" min="0" max="1440" value="0"></label><button type="submit">+ Add component</button></form>'+
- productionData.components.map(c=>'<div class="panel" style="margin:12px 0;padding:16px"><div class="admin-section-head"><div><h3>'+esc(c.name)+'</h3><p>'+esc(c.unit)+' · '+c.prep_minutes+' min · '+(c.active?'Active':'Inactive')+'</p></div><button type="button" class="alt" data-pc-edit="'+esc(c.id)+'">Edit</button></div>'+
- '<div>'+productionData.mappings.filter(m=>m.component_id===c.id).map(m=>'<div class="toolbar"><span>'+esc(adminMenu.find(x=>x.id===m.menu_id)?.name||m.menu_id)+' · '+m.quantity_per_dish+' '+esc(c.unit)+(m.modifier_option_id?' · modifier '+esc(m.modifier_option_id):'')+'</span><button type="button" class="alt" data-pc-remove="'+esc(m.id)+'">Remove</button></div>').join('')+'</div>'+
- (c.scope==='global'&&productionStore!=='global'?'<p>Inherited from Global. Manage dish links in Global.</p>':'<form class="toolbar" data-pc-map="'+esc(c.id)+'"><select name="menu_id" required><option value="">Select menu dish</option>'+menuOptions+'</select><input name="quantity_per_dish" type="number" step="0.01" min="0.01" value="1" required title="Quantity per dish"><select name="modifier_option_id"><option value="">Always required (no modifier condition)</option>'+adminModifiers.options.map(o=>'<option value="'+esc(o.id)+'" data-group="'+esc(o.group_id)+'">'+esc(o.name)+'</option>').join('')+'<button type="submit">+ Link dish</button></form>')+'</div>').join('')+
- '</section>';
+ const stores='<option value="global" '+(productionStore==='global'?'selected':'')+'>Global — All Restaurants</option>'+v3Stores.filter(x=>x.active).map(x=>'<option value="'+esc(x.id)+'" '+(x.id===productionStore?'selected':'')+'>'+esc(x.name)+'</option>').join('');
+ const categories=['All',...new Set(adminMenu.map(m=>m.category||'Other'))];
+ return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Production Components</h2><p>Choose a component, then assign dishes using the same category and search workflow as Modifiers.</p></div></div>'+
+ '<label>Restaurant<select id="pc-store">'+stores+'</select></label>'+
+ '<form id="pc-create" class="admin-inline-form"><div class="menu-form-grid"><label>Component Name<input name="name" placeholder="e.g. Fried Chicken" required maxlength="100"></label><label>Unit<input name="unit" value="portion" required></label><label>Estimated Preparation Time (min)<input name="prep_minutes" type="number" min="0" max="1440" value="0"></label></div><button type="submit">+ Add component</button></form>'+
+ productionData.components.map(c=>{
+ const links=productionData.mappings.filter(m=>m.component_id===c.id);
+ const inherited=c.scope==='global'&&productionStore!=='global';
+ const open=pcOpenComponent===c.id;
+ const visible=adminMenu.filter(m=>(pcCategory==='All'||(m.category||'Other')===pcCategory)&&(!pcSearch||m.name.toLowerCase().includes(pcSearch.toLowerCase())));
+ const mapped=new Set(links.filter(m=>!m.modifier_option_id).map(m=>m.menu_id));
+ return '<section class="panel" style="margin:12px 0;padding:16px"><div class="admin-section-head"><div><h3>'+esc(c.name)+'</h3><p>'+esc(c.unit)+' · '+c.prep_minutes+' min · '+(c.active?'Active':'Inactive')+' · '+links.length+' assignments'+(inherited?' · Inherited':'')+'</p></div><div class="toolbar"><button type="button" class="alt" data-pc-edit="'+esc(c.id)+'">Edit</button><button type="button" class="alt" data-pc-open="'+esc(c.id)+'">'+(open?'Close':'Apply to dishes')+'</button></div></div>'+
+ (open?'<div class="admin-inline-form"><div class="toolbar"><label>Category<select id="pc-category">'+categories.map(cat=>'<option value="'+esc(cat)+'" '+(cat===pcCategory?'selected':'')+'>'+esc(cat==='All'?'All categories':cat)+'</option>').join('')+'</select></label><label>Search dishes<input id="pc-search" placeholder="Search by dish name" value="'+esc(pcSearch)+'"></label></div>'+
+ '<p class="muted small">'+links.length+' assignments · '+visible.length+' dishes shown'+(inherited?' · Manage assignments in Global':'')+'</p>'+
+ '<div class="modifier-dish-list">'+visible.map(m=>'<label class="row" style="padding:9px 4px;gap:12px;justify-content:flex-start"><input type="checkbox" data-pc-dish="'+esc(m.id)+'" '+(mapped.has(m.id)?'checked':'')+' '+(inherited?'disabled':'')+'><span>'+esc(m.name)+'</span></label>').join('')+'</div>'+
+ (inherited?'':'<div class="toolbar"><label>Quantity per selected dish<input id="pc-quantity" type="number" min="0.01" step="0.01" value="1"></label><button type="button" id="pc-save-dishes" data-component="'+esc(c.id)+'">Save dish assignments</button></div>')+
+ (links.some(m=>m.modifier_option_id)?'<p class="muted small">Conditional modifier mappings are preserved separately:</p>'+links.filter(m=>m.modifier_option_id).map(m=>'<div>'+esc(adminMenu.find(x=>x.id===m.menu_id)?.name||m.menu_id)+' · '+esc(adminModifiers.options.find(o=>o.id===m.modifier_option_id)?.name||m.modifier_option_id)+' · '+m.quantity_per_dish+'</div>').join(''):'')+
+ '</div>':'')+'</section>';
+ }).join('')+'</section>';
 }
 function bindProductionPanel(){
  const store=document.querySelector('#pc-store');if(!store)return;
