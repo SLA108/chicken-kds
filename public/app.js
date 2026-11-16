@@ -1057,7 +1057,8 @@ function kitchenViewTabs(){
  return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
 }
 function kitchenDagView(active){
- const now=Date.now(),defaultDineInMinutes=Number(kitchenProduction?.dine_in_minutes)||20;
+ const now=Date.now(),componentData=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
+ const defaultDineInMinutes=Number(componentData?.dine_in_minutes)||20;
  const deadlineFor=order=>{
   const explicit=order.platform_deadline_at?Date.parse(order.platform_deadline_at):NaN;
   if(Number.isFinite(explicit))return explicit;
@@ -1065,48 +1066,67 @@ function kitchenDagView(active){
   const received=Date.parse(order.created_at);
   return Number.isFinite(received)?received+defaultDineInMinutes*60000:null;
  };
+ const modifierSignature=item=>(item.modifiers||[]).map(m=>[String(m.option_id||m.id||''),String(m.name||m.option_name||''),Number(m.quantity||1)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
  const groups=new Map();
  for(const order of active)for(const item of order.items||[]){
   if(item.is_done)continue;
-  const deadline=deadlineFor(order);
-  const key=JSON.stringify([item.menu_id||item.name,deadline,item.modifiers||[],item.note||'']);
-  if(!groups.has(key))groups.set(key,{name:item.name,quantity:0,items:[],deadline,first:order.created_at});
-  const g=groups.get(key);g.quantity+=Number(item.quantity)||1;g.items.push({order,item});if(order.created_at<g.first)g.first=order.created_at;
+  const deadline=deadlineFor(order),signature=modifierSignature(item);
+  const key=JSON.stringify([item.menu_id||item.name,signature,item.note||'']);
+  if(!groups.has(key))groups.set(key,{name:item.name,signature,note:item.note||'',quantity:0,items:[],deadlines:new Map(),first:order.created_at});
+  const group=groups.get(key),qty=Number(item.quantity)||1,deadlineKey=deadline===null?'unset':String(deadline);
+  group.quantity+=qty;group.items.push({order,item,deadline});
+  if(!group.deadlines.has(deadlineKey))group.deadlines.set(deadlineKey,{deadline,quantity:0,items:[]});
+  const slot=group.deadlines.get(deadlineKey);slot.quantity+=qty;slot.items.push({order,item});
+  if(order.created_at<group.first)group.first=order.created_at;
  }
- const list=[...groups.values()].sort((a,b)=>(a.deadline??Infinity)-(b.deadline??Infinity)||a.first.localeCompare(b.first));
- const componentData=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
+ const list=[...groups.values()].sort((a,b)=>{
+  const earliest=g=>Math.min(...[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite),Infinity);
+  return earliest(a)-earliest(b)||a.first.localeCompare(b.first);
+ });
  const components=componentData?.production_components||[];
  const componentByItem=new Map();
  for(const component of components)for(const source of component.sources||[]){
   const key=String(source.order_item_id),row=componentByItem.get(key)||[];
   row.push({name:component.name,unit:component.unit,quantity:source.quantity});componentByItem.set(key,row);
  }
- const times=list.flatMap(g=>[Date.parse(g.first),g.deadline].filter(Number.isFinite));
- const minTime=Math.min(now-15*60000,...times),maxTime=Math.max(now+30*60000,...times);
- const windowStart=Math.floor(minTime/(5*60000))*5*60000;
- const windowEnd=Math.ceil(maxTime/(5*60000))*5*60000+5*60000;
- const span=windowEnd-windowStart;
+ const deadlines=list.flatMap(g=>[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite));
+ const minTime=Math.min(now-15*60000,...deadlines),maxTime=Math.max(now+30*60000,...deadlines);
+ const windowStart=Math.floor(minTime/(5*60000))*5*60000,windowEnd=Math.ceil(maxTime/(5*60000))*5*60000+5*60000,span=windowEnd-windowStart;
  const ticks=Array.from({length:7},(_,i)=>windowStart+span*i/6);
  const axis=ticks.map(t=>'<span>'+warsawClock(new Date(t).toISOString()).slice(0,5)+'</span>').join('');
  const nowPct=Math.max(0,Math.min(100,(now-windowStart)/span*100));
- return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">Dish deadlines and shared component demand across unfinished tickets</p></div><strong>'+list.reduce((n,g)=>n+g.quantity,0)+' portions</strong></div>'+
+ const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
+ const total=list.reduce((n,g)=>n+g.quantity,0);
+ return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">One timeline per dish and modifier combination · each marker is a Ready by deadline</p></div><strong>'+total+' portions</strong></div>'+
  (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="badge" style="padding:6px 10px;border-radius:9px;background:var(--panel,#edf0f3)">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<p class="muted small">No mapped production components for active dishes.</p>')+
- '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Dish / Ready by</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
+ '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Dish / Modifiers</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
  list.map(g=>{
-  const received=Date.parse(g.first)||now;
-  const start=Math.max(0,Math.min(100,(received-windowStart)/span*100));
-  const finish=g.deadline??now;
-  const end=Math.max(start+1,Math.min(100,(finish-windowStart)/span*100));
-  const due=g.deadline?warsawClock(new Date(g.deadline).toISOString()).slice(0,5):'Not set';
-  const overdue=g.deadline!==null&&g.deadline<now;
+  const slots=[...g.deadlines.values()].sort((a,b)=>(a.deadline??Infinity)-(b.deadline??Infinity));
+  const modifiers=g.signature.map(m=>m[1]||m[0]).filter(Boolean).join(' · ');
   const totals=new Map();
   for(const {item} of g.items)for(const c of componentByItem.get(String(item.id))||[]){
    const key=c.name+' / '+c.unit;totals.set(key,(totals.get(key)||0)+Number(c.quantity));
   }
   const summary=[...totals].map(([name,qty])=>esc(name)+' ×'+Number(qty.toFixed(2))).join(' · ');
-  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+' · '+(overdue?'Overdue ':'Ready by ')+due+'</span>'+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track"><div class="kds-dag-bar" style="left:'+start+'%;width:'+Math.max(1,Math.min(100-start,end-start))+'%;'+(overdue?'background:#dc6b53;':'')+'"></div><div class="kds-dag-now" style="left:'+nowPct+'%"></div></div></div><details class="kds-dag-detail"><summary>View '+g.items.length+' ticket items</summary>'+g.items.map(({order,item})=>'<div><strong>#'+esc(order.id.slice(0,8))+'</strong> · '+Number(item.quantity||1)+' × '+esc(item.name)+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</details>';
+  const markerGroups=new Map();
+  for(const slot of slots)if(slot.deadline!==null){
+   const pct=Math.max(0,Math.min(100,(slot.deadline-windowStart)/span*100));
+   const bucket=Math.round(pct/2);
+   const bucketSlots=markerGroups.get(bucket)||[];bucketSlots.push({...slot,pct});markerGroups.set(bucket,bucketSlots);
+  }
+  const markers=[...markerGroups.values()].map(bucket=>{
+   const pct=bucket.reduce((n,x)=>n+x.pct,0)/bucket.length,qty=bucket.reduce((n,x)=>n+x.quantity,0);
+   const earliest=Math.min(...bucket.map(x=>x.deadline)),late=earliest<now,urgent=!late&&earliest-now<=5*60000;
+   const bg=late?'#d96857':urgent?'#e8a648':'#559bdb';
+   const label=bucket.map(x=>clock(x.deadline)+' ×'+x.quantity).join(' / ');
+   return '<span class="kds-dag-deadline-marker" title="'+esc(label)+'" style="position:absolute;left:'+pct+'%;top:50%;transform:translate(-50%,-50%);min-width:30px;height:30px;padding:0 5px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:'+bg+';color:#fff;font-size:12px;font-weight:750;z-index:2;white-space:nowrap;box-shadow:0 1px 6px #0005">×'+qty+'</span>';
+  }).join('');
+  const unset=slots.filter(x=>x.deadline===null).reduce((n,x)=>n+x.quantity,0);
+  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+(modifiers?' · '+esc(modifiers):' · No modifiers')+'</span>'+(g.note?'<small>'+esc(g.note)+'</small>':'')+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div><div class="kds-dag-now" style="left:'+nowPct+'%"></div>'+markers+'</div></div>'+
+ '<details class="kds-dag-detail"><summary>Ready by: '+slots.map(x=>(x.deadline===null?'Not set':clock(x.deadline))+' ×'+x.quantity).join(' · ')+(unset?'':'')+' · View '+g.items.length+' ticket items</summary>'+
+ slots.map(slot=>'<div style="margin:8px 0"><strong>'+(slot.deadline===null?'Not set':clock(slot.deadline))+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</div>').join('')+'</details>';
  }).join('')+
- (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Dine-in: '+defaultDineInMinutes+' minutes from receipt. Delivery: kitchen-selected deadline. Component preparation times are not used. Delivery tickets without a deadline show Not set.</p></section>';
+ (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Markers show portions due at each deadline, not preparation duration. Red = overdue · Amber = due within 5 minutes · Blue = upcoming. Dine-in: '+defaultDineInMinutes+' minutes from receipt; delivery: kitchen-selected deadline.</p></section>';
 }
 function bindKitchenViewTabs(){
  document.querySelectorAll('[data-kds-view]').forEach(button=>button.onclick=()=>{
