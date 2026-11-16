@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/v3-multistore-foundation
+      - feature/kitchen-dag-quick-order
   pull_request:
   workflow_dispatch:
 
