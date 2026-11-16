@@ -347,18 +347,33 @@ async function openCourierCollection(){
  }catch(e){list.textContent='Collection queue unavailable: '+e.message;}};
  await load();
 }
-let platformReadySeenIds=new Set(),platformReadyNewIds=new Set(),platformReadyInitialized=false;
+let platformReadySeenIds=new Set(),platformReadyNewIds=new Set(),platformReadyInitialized=false,platformReadyStorageScope='';
+function platformReadyKey(){
+ const store=currentDeviceStore?.id||localStorage.getItem(lastStoreKey)||'legacy';
+ return 'ck_pos_ready_v1_'+store;
+}
+function savePlatformReadyState(){
+ try{localStorage.setItem(platformReadyStorageScope,JSON.stringify({seen:[...platformReadySeenIds],unread:[...platformReadyNewIds]}))}catch(e){console.warn('Ready state could not be saved',e)}
+}
 function syncPlatformReadyIndicators(nextOrders){
  if(page!=='pos')return;
+ const key=platformReadyKey();
+ if(platformReadyStorageScope!==key){
+  platformReadyStorageScope=key;platformReadyInitialized=false;platformReadySeenIds=new Set();platformReadyNewIds=new Set();
+  try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved&&Array.isArray(saved.seen)&&Array.isArray(saved.unread)){platformReadySeenIds=new Set(saved.seen);platformReadyNewIds=new Set(saved.unread);platformReadyInitialized=true}}catch(e){console.warn('Ready state could not be restored',e)}
+ }
  const readyIds=new Set(nextOrders.filter(o=>o.platform&&!o.collected_at&&o.status!=='cancelled'&&o.kitchen_completed_at).map(o=>o.id||o.order_id));
  if(!platformReadyInitialized){platformReadySeenIds=new Set(readyIds);platformReadyInitialized=true;}
  else for(const id of readyIds)if(!platformReadySeenIds.has(id))platformReadyNewIds.add(id);
  for(const id of platformReadyNewIds)if(!readyIds.has(id))platformReadyNewIds.delete(id);
  for(const id of platformReadySeenIds)if(!readyIds.has(id))platformReadySeenIds.delete(id);
+ savePlatformReadyState();
 }
 function acknowledgePlatformReady(){
  const ready=orders.filter(o=>o.platform&&!o.collected_at&&o.status!=='cancelled'&&o.kitchen_completed_at);
  platformReadySeenIds=new Set(ready.map(o=>o.id||o.order_id));platformReadyNewIds.clear();platformReadyInitialized=true;
+ if(!platformReadyStorageScope)platformReadyStorageScope=platformReadyKey();
+ savePlatformReadyState();
 }
 let platformWorkspaceFilter='active',platformWorkspaceSearch='',platformWorkspacePlatform='all',platformCollectedHistory=[],platformWorkspaceLoading=false;
 const platformBrandThemes={uber_eats:{name:'Uber Eats',color:'#000000',ink:'#FFFFFF'},wolt:{name:'Wolt',color:'#009DE0',ink:'#FFFFFF'},pyszne:{name:'Pyszne.pl',color:'#FF8000',ink:'#FFFFFF'},pyszne_pl:{name:'Pyszne.pl',color:'#FF8000',ink:'#FFFFFF'},bolt_food:{name:'Bolt Food',color:'#32BB78',ink:'#092C1B'},glovo:{name:'Glovo',color:'#FFBF42',ink:'#241B08'}};
@@ -776,7 +791,7 @@ document.querySelector('#pickup-sound').onclick=enablePickupSound;
 document.querySelector('#pickup-nav').onclick=openPickupQueue;
 document.querySelectorAll('[data-pickup-ack]').forEach(b=>b.onclick=()=>acknowledgePickup(b.dataset.pickupAck));
 document.querySelectorAll('[data-pickup-all]').forEach(b=>b.onclick=()=>acknowledgePickupAll(b.dataset.pickupAll));
-document.querySelectorAll('[data-foh-tab]').forEach(b=>b.onclick=()=>{saveFields();const next=b.dataset.fohTab;if(next===fohTab&&!(next==='order'&&editingOrder))return;if(configuredCart.length&&!confirm('Discard the current unsent items?'))return;editingOrder='';configuredCart=[];note='';itemDialog=null;pendingKey=crypto.randomUUID();fohTab=next;pos();if(next==='history')loadPosHistory();if(next==='reservations')loadPosReservations();if(next==='platform')loadPlatformWorkspace()});
+document.querySelectorAll('[data-foh-tab]').forEach(b=>b.onclick=()=>{saveFields();const next=b.dataset.fohTab;if(next===fohTab&&!(next==='order'&&editingOrder))return;if(configuredCart.length&&!confirm('Discard the current unsent items?'))return;editingOrder='';configuredCart=[];note='';itemDialog=null;pendingKey=crypto.randomUUID();fohTab=next;pos();if(next==='history')loadPosHistory();if(next==='reservations')loadPosReservations();if(next==='platform'){if(platformHistoryOpen)loadPlatformHistory();else loadPlatformWorkspace()}});
 if(fohTab==='history'){
  document.querySelectorAll('[data-pos-history-detail]').forEach(btn=>btn.onclick=()=>openPosHistoryDetail(btn.dataset.posHistoryDetail));
  const apply=()=>{
