@@ -109,3 +109,15 @@ test('editing guards changed dishes against concurrent kitchen completion',()=>{
  assert.match(api,/i\.is_done=1 AND i\.id IN/);
  assert.match(api,/for\(const item of changed\)/);
 });
+
+test('ready time starts at dialog opening plus 15 minutes and adjustments are cumulative',()=>{
+ assert.match(ui,/const openedAt=Date\.now\(\)/);
+ assert.match(ui,/let readyMinutes=15/);
+ assert.match(ui,/openedAt\+readyMinutes\*60000/);
+ assert.match(ui,/data-ready-adjust="-10"/);
+ assert.match(ui,/data-ready-adjust="-5"/);
+ assert.match(ui,/data-ready-adjust="5"/);
+ assert.match(ui,/data-ready-adjust="10"/);
+ assert.match(ui,/readyMinutes\+Number\(button\.dataset\.readyAdjust\)/);
+ assert.match(ui,/ready_by:deadlineInput\.value/);
+});
