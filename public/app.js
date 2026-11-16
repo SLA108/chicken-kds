@@ -1239,10 +1239,6 @@ function kitchenDagView(active){
  '<div class="kds-dag-controls"><span>Prepare by</span>'+[5,15,30,0].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+(n?'+'+n+'m':'All')+'</button>').join('')+'</div>'+
  '<p class="muted small">Includes overdue requirements. Time windows are measured from now; All includes orders without a deadline.</p>'+
  (visible.length?'<div class="kds-prod-grid">'+summary+'</div>':'<p class="muted">No production requirements in this time window.</p>')+
- '<h3 class="kds-prod-section-title">Ready by · 5-minute groups</h3>'+
- (scheduleRows.length?'<div class="kds-prod-schedule-groups">'+scheduleRows.map(g=>'<section class="kds-prod-schedule-group"><div class="kds-prod-schedule-header"><strong>'+clock(g.time)+(g.time<now?' · Overdue':'')+'</strong><span>'+g.components.length+' tasks</span></div>'+g.components.sort((a,b)=>a.name.localeCompare(b.name)).map(b=>'<div class="kds-prod-schedule-row"><span>'+esc(b.name)+'</span><strong>×'+fmt(b.quantity)+'</strong></div>').join('')+'</section>').join('')+'</div>':'<p class="muted small">No timed production deadlines in this window.</p>')+
- (unscheduledTotal?'<p class="muted small">'+fmt(unscheduledTotal)+' production units have no Ready by deadline'+(dagRangeMinutes===0?' (included above).':' (select All to include).')+'</p>':'')+
- '<p class="muted small">Quantities are component units, not dish counts. Completing an order item removes its mapped component requirements.</p>'+
  '<h3 class="kds-prod-section-title">Dish Assembly · Ready by</h3><p class="muted small">Tap ✓ to complete a dish. Grouped dishes expand to show individual tickets.</p>'+
  (dishGroups.length?'<div class="kds-prod-schedule-groups">'+dishHtml+'</div>':'<p class="muted small">No unfinished dishes in this time window.</p>')+'</section>';
 }
