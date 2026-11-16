@@ -1576,8 +1576,6 @@ function productionPanel(){
  const open=pcOpenComponent===c.id;
  const visible=adminMenu.filter(m=>(pcCategory==='All'||(m.category||'Other')===pcCategory)&&(!pcSearch||m.name.toLowerCase().includes(pcSearch.toLowerCase())));
  const mapped=new Set(links.filter(m=>!m.modifier_option_id).map(m=>m.menu_id));
- const eligibleOptions=adminModifiers.options.filter(o=>adminModifiers.links.some(l=>l.group_id===o.group_id));
- const dishChoices=adminMenu.filter(m=>adminModifiers.links.some(l=>l.menu_id===m.id&&eligibleOptions.some(o=>o.group_id===l.group_id)));
  const editing=pcEditComponent===c.id;
  return '<section class="panel" style="margin:12px 0;padding:16px"><div class="admin-section-head"><div><h3>'+esc(c.name)+'</h3><p>'+esc(c.unit)+' · '+c.prep_minutes+' min · '+(c.active?'Active':'Inactive')+' · '+links.length+' assignments'+(inherited?' · Inherited':'')+'</p></div><div class="toolbar"><button type="button" class="alt" data-pc-edit="'+esc(c.id)+'">'+(editing?'Cancel edit':'Edit')+'</button><button type="button" class="alt" data-pc-open="'+esc(c.id)+'">'+(open?'Close':'Apply to dishes')+'</button></div></div>'+
  (editing?'<form class="admin-inline-form" data-pc-edit-form="'+esc(c.id)+'"><div class="menu-form-grid"><label>Component Name<input name="name" required maxlength="100" value="'+esc(c.name)+'" '+(inherited?'readonly':'')+'></label><label>Unit<input name="unit" required maxlength="30" value="'+esc(c.unit)+'" '+(inherited?'readonly':'')+'></label><label>Estimated Preparation Time (min)<input name="prep_minutes" type="number" min="0" max="1440" required value="'+Number(c.prep_minutes)+'"></label><label>Status<select name="active"><option value="1" '+(c.active?'selected':'')+'>Active</option><option value="0" '+(!c.active?'selected':'')+'>Inactive</option></select></label></div><button type="submit">Save component</button>'+(inherited?'<p class="muted small">Name and unit are inherited from Global; this restaurant can override time and status.</p>':'')+'</form>':'')+
@@ -1585,9 +1583,20 @@ function productionPanel(){
  '<p class="muted small">'+links.length+' assignments · '+visible.length+' dishes shown'+(inherited?' · Manage assignments in Global':'')+'</p>'+
  '<div class="modifier-dish-list">'+visible.map(m=>'<label class="modifier-link"><input type="checkbox" data-pc-dish="'+esc(m.id)+'" '+(mapped.has(m.id)?'checked':'')+' '+(inherited?'disabled':'')+'><span>'+esc(m.name)+'</span><small class="muted">'+esc(m.category||'Other')+'</small></label>').join('')+'</div>'+
  (inherited?'':'<div class="toolbar"><label>Quantity per selected dish<input id="pc-quantity" type="number" min="0.01" step="0.01" value="1"></label><button type="button" id="pc-save-dishes" data-component="'+esc(c.id)+'">Save dish assignments</button></div>')+
- '<div class="admin-inline-form"><h4>Modifier conditions</h4><p class="muted small">Count this component only when the selected modifier option is present on the dish.</p>'+
- (inherited?'<p class="muted small">Edit conditional mappings in Global.</p>':'<form data-pc-condition="'+esc(c.id)+'" class="menu-form-grid"><label>Dish<select name="menu_id" required><option value="">Select a dish</option>'+dishChoices.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.name)+'</option>').join('')+'</select></label><label>Required modifier<select name="modifier_option_id" required><option value="">Choose a dish first</option></select></label><label>Quantity per dish<input name="quantity_per_dish" type="number" min="0.01" max="100000" step="0.01" value="1" required></label><button type="submit">Add modifier condition</button></form>')+
- links.filter(m=>m.modifier_option_id).map(m=>'<div class="modifier-link"><span>'+esc(adminMenu.find(x=>x.id===m.menu_id)?.name||m.menu_id)+' · '+esc(adminModifiers.options.find(o=>o.id===m.modifier_option_id)?.name||m.modifier_option_id)+' · ×'+Number(m.quantity_per_dish)+'</span>'+(inherited?'':'<button type="button" class="alt" data-pc-remove-condition="'+esc(m.id)+'">Remove</button>')+'</div>').join('')+'</div>'+
+ '<div class="admin-inline-form"><h4>Modifier-specific components</h4><p class="muted small">Expand a dish to choose one or more modifier options. Each option has its own Component Quantity. These conditions count only when the option is selected in a ticket.</p>'+
+ visible.filter(m=>adminModifiers.links.some(l=>l.menu_id===m.id)).map(m=>{
+  const groups=adminModifiers.groups.filter(g=>adminModifiers.links.some(l=>l.menu_id===m.id&&l.group_id===g.id));
+  const conditions=links.filter(l=>l.menu_id===m.id&&l.modifier_option_id);
+  return '<details class="panel" style="padding:10px;margin:8px 0" data-pc-condition-dish="'+esc(m.id)+'"><summary><strong>'+esc(m.name)+'</strong> · '+conditions.length+' modifier conditions'+(mapped.has(m.id)?' · Always required also enabled':'')+'</summary>'+
+  (mapped.has(m.id)?'<p class="muted small">Note: Always required is enabled above. Modifier conditions will add to that quantity.</p>':'')+
+  groups.map(g=>'<div class="admin-inline-form"><strong>'+esc(g.name)+'</strong>'+
+   adminModifiers.options.filter(o=>o.group_id===g.id&&o.active).map(o=>{
+    const existing=conditions.find(l=>l.modifier_option_id===o.id);
+    return '<div class="modifier-link" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;flex:1;min-width:180px"><input type="checkbox" data-pc-option="'+esc(o.id)+'" '+(existing?'checked':'')+' '+(inherited?'disabled':'')+'><span>'+esc(o.name)+'</span></label><label style="display:flex;align-items:center;gap:6px">Component Quantity<input type="number" data-pc-option-qty="'+esc(o.id)+'" min="0.01" max="100000" step="0.01" value="'+Number(existing?.quantity_per_dish||1)+'" style="width:88px" '+(inherited?'disabled':'')+'></label></div>';
+   }).join('')+'</div>').join('')+
+ (inherited?'<p class="muted small">Manage inherited assignments in Global.</p>':'<button type="button" class="alt" data-pc-save-conditions="'+esc(m.id)+'" data-component="'+esc(c.id)+'">Save modifier options</button>')+
+ '</details>';
+ }).join('')+'</div>'+
  '</div>':'')+'</section>';
  }).join('')+'</section>';
 }
@@ -1603,8 +1612,33 @@ function bindProductionPanel(){
  const save=document.querySelector('#pc-save-dishes');if(save)save.onclick=async()=>{const component=save.dataset.component;const quantity=Number(document.querySelector('#pc-quantity')?.value);if(!(quantity>0)){notify('Enter a positive quantity');return}const visibleInputs=[...document.querySelectorAll('[data-pc-dish]')].filter(x=>!x.parentElement.hidden);const selected=new Set(visibleInputs.filter(x=>x.checked).map(x=>x.dataset.pcDish));const visible=new Set(visibleInputs.map(x=>x.dataset.pcDish));const existing=productionData.mappings.filter(m=>m.component_id===component&&!m.modifier_option_id&&visible.has(m.menu_id));save.disabled=true;try{for(const m of existing){if(!selected.has(m.menu_id))await api('/production-mappings/'+encodeURIComponent(m.id)+'?store_id='+encodeURIComponent(productionStore),'DELETE');}const mapped=new Set(existing.map(m=>m.menu_id));for(const id of selected){if(!mapped.has(id))await api('/production-mappings','POST',{store_id:productionStore,component_id:component,menu_id:id,quantity_per_dish:quantity,modifier_option_id:null});}await loadProduction();admin();notify('Dish assignments saved')}catch(e){notify(e.message);save.disabled=false}};
  document.querySelectorAll('[data-pc-edit]').forEach(el=>el.onclick=()=>{pcEditComponent=pcEditComponent===el.dataset.pcEdit?'':el.dataset.pcEdit;admin()});
  document.querySelectorAll('[data-pc-edit-form]').forEach(form=>form.onsubmit=async e=>{e.preventDefault();const c=productionData.components.find(x=>x.id===form.dataset.pcEditForm);if(!c)return;const f=new FormData(form);const payload={store_id:productionStore,name:f.get('name'),unit:f.get('unit'),prep_minutes:Number(f.get('prep_minutes')),active:Number(f.get('active'))};if(c.scope==='global'&&productionStore!=='global'){payload.name=c.name;payload.unit=c.unit;}try{await api('/production-components/'+encodeURIComponent(c.id),'PATCH',payload);pcEditComponent='';await loadProduction();admin();notify('Component updated')}catch(err){notify(err.message)}});
- document.querySelectorAll('[data-pc-condition]').forEach(form=>{const dish=form.querySelector('[name="menu_id"]'),option=form.querySelector('[name="modifier_option_id"]');const update=()=>{const groups=new Set(adminModifiers.links.filter(l=>l.menu_id===dish.value).map(l=>l.group_id));const opts=adminModifiers.options.filter(o=>groups.has(o.group_id));option.innerHTML='<option value="">Select modifier option</option>'+opts.map(o=>'<option value="'+esc(o.id)+'">'+esc(o.name)+'</option>').join('');};dish.onchange=update;update();form.onsubmit=async e=>{e.preventDefault();const f=new FormData(form);const menuId=String(f.get('menu_id')),modifierId=String(f.get('modifier_option_id')),qty=Number(f.get('quantity_per_dish'));if(!menuId||!modifierId||!(qty>0))return notify('Select a dish, modifier and quantity');if(productionData.mappings.some(m=>m.component_id===form.dataset.pcCondition&&m.menu_id===menuId&&m.modifier_option_id===modifierId))return notify('This modifier condition is already assigned');const button=form.querySelector('[type="submit"]');button.disabled=true;try{await api('/production-mappings','POST',{store_id:productionStore,component_id:form.dataset.pcCondition,menu_id:menuId,modifier_option_id:modifierId,quantity_per_dish:qty});await loadProduction();admin();notify('Modifier condition added')}catch(err){notify(err.message);button.disabled=false}}});
- document.querySelectorAll('[data-pc-remove-condition]').forEach(el=>el.onclick=async()=>{el.disabled=true;try{await api('/production-mappings/'+encodeURIComponent(el.dataset.pcRemoveCondition)+'?store_id='+encodeURIComponent(productionStore),'DELETE');await loadProduction();admin();notify('Modifier condition removed')}catch(err){notify(err.message);el.disabled=false}});
+ document.querySelectorAll('[data-pc-save-conditions]').forEach(button=>button.onclick=async()=>{
+  const dishId=button.dataset.pcSaveConditions,componentId=button.dataset.component;
+  const panel=button.closest('[data-pc-condition-dish]');
+  const options=[...panel.querySelectorAll('[data-pc-option]')];
+  const desired=new Map();
+  for(const input of options){
+   if(!input.checked)continue;
+   const qty=Number(panel.querySelector('[data-pc-option-qty="'+input.dataset.pcOption+'"]')?.value);
+   if(!(qty>0&&qty<=100000)){notify('Component Quantity must be between 0.01 and 100000');return}
+   desired.set(input.dataset.pcOption,qty);
+  }
+  const existing=productionData.mappings.filter(m=>m.component_id===componentId&&m.menu_id===dishId&&m.modifier_option_id);
+  button.disabled=true;
+  try{
+   for(const mapping of existing){
+    const wanted=desired.get(mapping.modifier_option_id);
+    if(wanted===undefined||Number(mapping.quantity_per_dish)!==wanted){
+     await api('/production-mappings/'+encodeURIComponent(mapping.id)+'?store_id='+encodeURIComponent(productionStore),'DELETE');
+    }
+   }
+   for(const [optionId,quantity] of desired){
+    if(existing.some(m=>m.modifier_option_id===optionId&&Number(m.quantity_per_dish)===quantity))continue;
+    await api('/production-mappings','POST',{store_id:productionStore,component_id:componentId,menu_id:dishId,modifier_option_id:optionId,quantity_per_dish:quantity});
+   }
+   await loadProduction();admin();notify('Modifier options saved');
+  }catch(err){notify(err.message);button.disabled=false}
+ });
 
 }
 function admin(){
