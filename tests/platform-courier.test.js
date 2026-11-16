@@ -241,3 +241,17 @@ test('Kitchen Refresh only refreshes kitchen orders and never renders Back Offic
  assert.doesNotMatch(kitchen,/loadOverview\(\)/);
  assert.doesNotMatch(kitchen,/admin\(\)/);
 });
+
+test('POS courier handoff uses accessible branded confirmation instead of native browser confirm',()=>{
+ const start=ui.indexOf('function confirmPlatformCollection(id){');
+ const end=ui.indexOf('function renderPlatformWorkspace()',start);
+ assert.ok(start>=0&&end>start);
+ const modal=ui.slice(start,end);
+ assert.match(modal,/role="dialog" aria-modal="true"/);
+ assert.match(modal,/platformBrand\(order\.platform\)/);
+ assert.match(modal,/Confirm collected/);
+ assert.match(modal,/Collection failed:/);
+ assert.match(modal,/e\.key==='Escape'/);
+ assert.doesNotMatch(modal,/\bconfirm\(/);
+ assert.match(ui,/data-platform-workspace-collect'\]'.*confirmPlatformCollection/);
+});
