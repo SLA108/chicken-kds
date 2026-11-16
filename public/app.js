@@ -382,8 +382,10 @@ async function openQuickOrderDialog(){
  form.elements.platform.onchange=async()=>{
   const next=form.elements.platform.value;
   if(next===loadedPlatform)return;
-  if(itemsNode.children.length&&!confirm('Changing the delivery platform will clear the selected dishes and modifiers. Continue?')){
-   form.elements.platform.value=loadedPlatform;return;
+  if([...itemsNode.children].some(row=>row.querySelector('select[aria-label="Dish"]')?.selectedIndex!==0||Number(row.querySelector('input[aria-label="Quantity"]')?.value)!==1||row.querySelector('[data-platform-option]:checked'))||itemsNode.children.length>1){
+   if(!confirm('Changing the delivery platform will clear the selected dishes and modifiers. Continue?')){
+    form.elements.platform.value=loadedPlatform;return;
+   }
   }
   loadedPlatform=next;await load();
  };
