@@ -77,7 +77,38 @@ async function api(path,method='GET',data){
  const out=await r.json();if(!valid())throw Error('Store changed; request discarded');
  if(!r.ok)throw Error(out.error||'Request failed');return out;
 }
-function notify(msg){const el=document.createElement('div');el.className='notice';el.style.cssText='position:fixed;bottom:15px;right:15px;z-index:99;box-shadow:0 8px 30px #0002;max-width:350px';el.textContent=msg;document.body.append(el);setTimeout(()=>el.remove(),3800)}
+const toastStyle=document.createElement('style');
+toastStyle.textContent='.ck-toast-stack{position:fixed;right:16px;bottom:16px;z-index:3200;width:min(370px,calc(100vw - 32px));display:flex;flex-direction:column;gap:9px;pointer-events:none}.ck-toast{pointer-events:auto;position:relative;display:grid;grid-template-columns:4px minmax(0,1fr) 26px;gap:12px;align-items:start;background:#1e293b!important;color:#f8fafc!important;border:1px solid #475569;border-radius:12px;padding:12px 12px 12px 0;box-shadow:0 12px 32px #0006;animation:ck-toast-in .2s ease-out;min-width:0}.ck-toast:focus-visible{outline:2px solid #93c5fd}.ck-toast-accent{height:100%;min-height:38px;border-radius:6px;background:var(--toast-accent,#60a5fa)}.ck-toast-body{display:grid;gap:4px;min-width:0}.ck-toast-title{font-weight:750;font-size:14px;color:#fff;line-height:1.3}.ck-toast-message{font-size:13px;color:#cbd5e1;overflow-wrap:anywhere;line-height:1.4}.ck-toast-close{background:transparent!important;border:0!important;color:#cbd5e1!important;padding:2px!important;min-width:0!important;min-height:24px!important;cursor:pointer}.ck-toast-brand{display:inline-block;padding:3px 7px;border-radius:5px;font-size:11px;font-weight:800;margin-bottom:4px;background:var(--toast-brand,#64748b);color:var(--toast-ink,#fff)}@keyframes ck-toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@media(max-width:600px){.ck-toast-stack{right:10px;left:10px;bottom:10px;width:auto}.ck-toast{padding:10px 10px 10px 0}}@media(prefers-reduced-motion:reduce){.ck-toast{animation:none}}';
+document.head.append(toastStyle);
+function notify(message,options={}){
+ const text=String(message??'');
+ const kind=options.kind||(/failed|error|unavailable|invalid|blocked|unauthorized/i.test(text)?'error':/warning|changed|refresh|overdue/i.test(text)?'warning':/success|created|updated|recorded|saved/i.test(text)?'success':'info');
+ const colors={success:'#34d399',warning:'#fbbf24',error:'#fb7185',info:'#60a5fa'};
+ let stack=document.querySelector('#ck-toast-stack');
+ if(!stack){stack=document.createElement('div');stack.id='ck-toast-stack';stack.className='ck-toast-stack';stack.setAttribute('aria-live','polite');document.body.append(stack);}
+ const el=document.createElement('div');el.className='ck-toast';el.style.setProperty('--toast-accent',colors[kind]||colors.info);
+ const brand=options.platform&&typeof platformBrand==='function'?platformBrand(options.platform):null;
+ if(brand){el.style.setProperty('--toast-brand',brand.color);el.style.setProperty('--toast-ink',brand.ink);}
+ const body=document.createElement('div');body.className='ck-toast-body';
+ if(brand){const tag=document.createElement('span');tag.className='ck-toast-brand';tag.textContent=brand.name;body.append(tag);}
+ const title=document.createElement('div');title.className='ck-toast-title';title.textContent=options.title||({success:'Success',warning:'Notice',error:'Action failed',info:'Notification'}[kind]);body.append(title);
+ const description=document.createElement('div');description.className='ck-toast-message';description.textContent=text;body.append(description);
+ const accent=document.createElement('span');accent.className='ck-toast-accent';el.append(accent,body);
+ const close=document.createElement('button');close.type='button';close.className='ck-toast-close';close.textContent='×';close.setAttribute('aria-label','Dismiss notification');close.onclick=e=>{e.stopPropagation();el.remove()};el.append(close);
+ if(typeof options.onClick==='function'){el.style.cursor='pointer';el.setAttribute('role','button');el.tabIndex=0;el.onclick=e=>{if(e.target===close)return;options.onClick();el.remove()};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();options.onClick();el.remove()}};}
+ stack.append(el);while(stack.children.length>4)stack.firstElementChild.remove();
+ setTimeout(()=>el.remove(),options.duration||3800);
+}
+const kitchenPlatformAlertSeen=new Set();
+function notifyKitchenPlatformOrder(data){
+ if(page!=='pos'||!data?.id||kitchenPlatformAlertSeen.has(data.id))return;
+ kitchenPlatformAlertSeen.add(data.id);
+ if(kitchenPlatformAlertSeen.size>300)kitchenPlatformAlertSeen.delete(kitchenPlatformAlertSeen.values().next().value);
+ const brand=platformBrand(data.platform);
+ notify((Number(data.dishes)||0)+' portions · #'+String(data.external_order_id||data.id.slice(0,8)),{kind:'info',title:'New platform order from Kitchen',platform:data.platform,duration:6000,onClick:()=>{fohTab='platform';pos();loadPlatformWorkspace()}});
+ if(pickupSoundReady)pickupChime();
+}
+
 function sound(){if(!beepEnabled||!audio)return;try{const t=audio.currentTime;const osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.setValueAtTime(880,t);osc.frequency.setValueAtTime(660,t+.17);gain.gain.setValueAtTime(.15,t);gain.gain.exponentialRampToValueAtTime(.001,t+.4);osc.connect(gain).connect(audio.destination);osc.start(t);osc.stop(t+.4)}catch{}}
 let pickupItems=[],pickupInitialized=false,pickupSerial=0,pickupSoundReady=false,pickupBellAt=0;
 function pickupLabel(i){return i.source==='dinein'?'Table '+i.table_no:(sourceName[i.source]||i.source||'Takeaway')}
@@ -238,7 +269,7 @@ function connect(){
  ws=socket;
  const current=()=>generation===wsGeneration&&ws===socket;
  socket.onopen=()=>{if(!current())return;connected=true;if(page==='pos'){catchUpReservationEvents();loadPosReservations();const status=document.querySelector('header .status');if(status){status.className='status online';status.textContent='● Live'}else render()}else render();refresh();};
- socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='platform_order_edited'){lastRealtimeMessage=Date.now();refresh().then(()=>platformOrderUpdateAlert(m.data?.id||''));}else if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
+ socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='platform_order_kitchen_created'){lastRealtimeMessage=Date.now();notifyKitchenPlatformOrder(m.data);}else if(m.type==='platform_order_edited'){lastRealtimeMessage=Date.now();refresh().then(()=>platformOrderUpdateAlert(m.data?.id||''));}else if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
  socket.onclose=async event=>{if(!current())return;ws=null;connected=false;
  if(event.code===1008&&deviceMode()){
   const recovered=await renewDeviceSession();
