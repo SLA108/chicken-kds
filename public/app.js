@@ -1087,8 +1087,8 @@ function kitchenDagView(active){
   const itemMenu=menuById.get(String(item.menu_id));
   const dagGroup=String(itemMenu?.dag_group||'').trim();
   const itemCategory=String(itemMenu?.category||'Other Dishes');
-  const key=JSON.stringify([itemCategory,dagGroup||String(item.menu_id||item.name)]);
-  if(!groups.has(key))groups.set(key,{key,name:dagGroup||item.name,category:itemCategory,quantity:0,items:[],deadlines:new Map(),first:order.created_at});
+  const key=dagGroup?JSON.stringify(['group',dagGroup]):JSON.stringify(['item',String(item.menu_id||item.name)]);
+  if(!groups.has(key))groups.set(key,{key,name:dagGroup||item.name,category:dagGroup?'DAG Groups':itemCategory,quantity:0,items:[],deadlines:new Map(),first:order.created_at});
   const group=groups.get(key),qty=Number(item.quantity)||1,deadlineKey=deadline===null?'unset':String(deadline);
   group.quantity+=qty;group.items.push({order,item,deadline});
   if(!group.deadlines.has(deadlineKey))group.deadlines.set(deadlineKey,{deadline,quantity:0,items:[]});
