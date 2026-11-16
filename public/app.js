@@ -1098,6 +1098,21 @@ function kitchenDagView(active){
  const fmt=n=>Number(n.toFixed(2));
  const visible=rows.filter(r=>r.qty>0||dagRangeMinutes===0);
  const totalDue=visible.reduce((n,r)=>n+r.qty,0);
+ const componentEmoji=name=>{
+  const n=String(name||'').toLowerCase();
+  if(/egg|jaj|鸡蛋|ไข่/.test(n))return '🍳';
+  if(/chicken|kurczak|炸鸡|鸡肉/.test(n))return '🍗';
+  if(/beef|wołow|牛肉/.test(n))return '🥩';
+  if(/rice|ryż|米饭|米饭/.test(n))return '🍚';
+  if(/tteokbokki|떡볶이|年糕/.test(n))return '🍢';
+  if(/kimchi.*soup|soup.*kimchi|zupa.*kimchi|泡菜汤/.test(n))return '🍲';
+  if(/miso|doenjang|味噌/.test(n))return '🥣';
+  if(/soup|zupa|汤/.test(n))return '🍜';
+  if(/mandu|dumpling|pierog|饺/.test(n))return '🥟';
+  if(/tofu|豆腐/.test(n))return '🧈';
+  if(/vegetable|warzyw|蔬菜/.test(n))return '🥬';
+  return '🍽️';
+ };
  const summary=visible.map(r=>{
   const id=encodeURIComponent(String(r.component.component_id)),open=dagSelectedNode===id;
   const breakdown=[...r.byDish.values()].sort((a,b)=>b.quantity-a.quantity);
@@ -1109,7 +1124,7 @@ function kitchenDagView(active){
    '<strong>Ready by</strong>'+
    ([...buckets].map(([time,b])=>'<div class="kds-prod-deadline"><strong>'+clock(time)+(time<now?' · Overdue':'')+' · ×'+fmt(b.quantity)+'</strong>'+b.items.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>').join('')||'<p class="muted small">No timed deadlines</p>')+
    (dagRangeMinutes===0&&r.unscheduled.length?'<div class="kds-prod-deadline"><strong>Deadline not set · ×'+fmt(r.unscheduled.reduce((n,x)=>n+x.quantity,0))+'</strong>'+r.unscheduled.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>':'')+'</div>';
-  return '<div class="kds-prod-card"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span><strong>'+esc(r.component.name)+'</strong><small>'+fmt(r.qty)+' '+esc(r.component.unit||'unit')+' required'+(dagRangeMinutes===0?'':' · '+fmt(r.total)+' all')+(r.late?' · '+fmt(r.late)+' overdue':'')+'</small></span><strong class="kds-prod-big">×'+fmt(r.qty)+'</strong></button>'+
+  return '<div class="kds-prod-card'+(open?' is-expanded':'')+'"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span class="kds-prod-main"><span class="kds-prod-name"><span class="kds-prod-emoji" aria-hidden="true">'+componentEmoji(r.component.name)+'</span><strong>'+esc(r.component.name)+'</strong></span><span class="kds-prod-quantity"><strong>'+fmt(r.qty)+'</strong><small>'+esc(r.component.unit||'unit')+'</small></span><span class="kds-prod-meta">All orders: '+fmt(r.total)+(r.late?' · '+fmt(r.late)+' overdue':'')+'</span></span><span class="kds-prod-chevron" aria-hidden="true">'+(open?'⌃':'⌄')+'</span></button>'+
   (open?detail:'')+'</div>';
  }).join('');
  const schedule=rows.flatMap(r=>r.sources.filter(x=>x.deadline!==null&&(dagRangeMinutes===0||x.deadline<=cutoff)).map(x=>({name:r.component.name,unit:r.component.unit,quantity:x.quantity,deadline:x.deadline,item:x.item,order:x.order})));
