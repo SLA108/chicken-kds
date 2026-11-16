@@ -1112,3 +1112,12 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-production-board .kds-prod-number{font-size:30px;font-weight:750;color:#f8fafc;line-height:1;font-variant-numeric:tabular-nums}
 .kds-production-board .kds-prod-new-delta{font-size:16px;font-weight:800;color:#4ade80;line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
 @media(max-width:650px){.kds-production-board .kds-prod-number{font-size:25px}.kds-production-board .kds-prod-new-delta{font-size:13px}}
+
+/* Group production schedule by deadline, with component and unmapped dish tasks */
+.kds-production-board .kds-prod-schedule-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}
+.kds-production-board .kds-prod-schedule-group{border:1px solid #46566f;border-radius:12px;background:#29374b;overflow:hidden;min-width:0}
+.kds-production-board .kds-prod-schedule-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;border-bottom:1px solid #46566f;background:#34435a}
+.kds-production-board .kds-prod-schedule-header strong{font-size:20px;color:#f8fafc;font-variant-numeric:tabular-nums}
+.kds-production-board .kds-prod-schedule-header span{font-size:12px;color:#cbd5e1}
+.kds-production-board .kds-prod-schedule-group .kds-prod-schedule-row{grid-template-columns:minmax(0,1fr) 50px;gap:12px}
+@media(max-width:650px){.kds-production-board .kds-prod-schedule-groups{grid-template-columns:1fr}}
