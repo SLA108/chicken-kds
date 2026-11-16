@@ -483,6 +483,26 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   return json({id},201);
  }
 
+ // Shared kitchen assembly checks: server-authoritative, store-scoped, and idempotent.
+ if(path==='/api/store/kitchen/assembly-checks'&&req.method==='GET'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const rows=(await env.DB.prepare("SELECT c.order_item_id FROM kitchen_assembly_checks c JOIN order_items i ON i.id=c.order_item_id JOIN orders o ON o.id=i.order_id WHERE c.store_id=? AND o.store_id=? AND i.is_done=0 AND o.status!='cancelled' AND o.kitchen_completed_at IS NULL").bind(session.storeId,session.storeId).all()).results;
+  return json({ids:rows.map(row=>String(row.order_item_id))});
+ }
+ const assemblyCheck=path.match(/^\/api\/store\/kitchen\/assembly-checks\/([^/]+)$/);
+ if(assemblyCheck&&(req.method==='PUT'||req.method==='DELETE')){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const itemId=assemblyCheck[1];
+  if(req.method==='PUT'){
+   const item=await env.DB.prepare("SELECT i.id FROM order_items i JOIN orders o ON o.id=i.order_id WHERE i.id=? AND o.store_id=? AND i.is_done=0 AND o.status!='cancelled' AND o.kitchen_completed_at IS NULL").bind(itemId,session.storeId).first();
+   if(!item)return json({error:'Dish is no longer available'},409);
+   await env.DB.prepare("INSERT INTO kitchen_assembly_checks(store_id,order_item_id,checked_at,checked_by) VALUES(?,?,?,?) ON CONFLICT(store_id,order_item_id) DO NOTHING").bind(session.storeId,itemId,new Date().toISOString(),session.deviceId||session.role).run();
+  }else{
+   await env.DB.prepare('DELETE FROM kitchen_assembly_checks WHERE store_id=? AND order_item_id=?').bind(session.storeId,itemId).run();
+  }
+  await broadcastStore(env,session.storeId,'assembly_checks',{});
+  return json({ok:true});
+ }
  const scopedItemDone=path.match(/^\/api\/store\/order-items\/([^/]+)\/done$/);
  if(scopedItemDone&&req.method==='PATCH'){
   if(session.role!=='kitchen')return json({error:'Forbidden'},403);
