@@ -68,7 +68,7 @@ test('kitchen and POS may enter and edit platform orders; courier handoff stays 
 });
 
 test('POS consolidates platform entry, editing and courier handoff into one workspace tab',()=>{
- assert.match(ui,/\['platform','Platform Orders'\]/);
+ assert.match(ui,/\['platform','Platform Orders \('/);
  assert.match(ui,/function platformWorkspaceHtml\(/);
  assert.match(ui,/function bindPlatformWorkspace\(/);
  assert.match(ui,/data-platform-workspace-edit/);
