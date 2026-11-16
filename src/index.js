@@ -258,7 +258,8 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const localMappings=(await env.DB.prepare('SELECT component_id,menu_id,modifier_option_id,quantity_per_dish FROM production_component_mappings WHERE store_id=?').bind(session.storeId).all()).results;
   const valid=new Map(components.map(c=>[c.id,c]));
   const mappings=[...globalMappings,...localMappings].filter(m=>valid.has(m.component_id)).map(m=>({...m,component_name:valid.get(m.component_id).name,unit:valid.get(m.component_id).unit,store_id:session.storeId}));
-  return json({store_id:session.storeId,generated_at:new Date().toISOString(),groups:buildKitchenDag(orders,{storeId:session.storeId}),production_components:aggregateProductionComponents(orders,mappings,{storeId:session.storeId})});
+  const timing=await env.DB.prepare('SELECT dine_in_minutes FROM production_timing WHERE store_id=?').bind(session.storeId).first();
+  return json({store_id:session.storeId,generated_at:new Date().toISOString(),dine_in_minutes:timing?.dine_in_minutes??20,groups:buildKitchenDag(orders,{storeId:session.storeId}),production_components:aggregateProductionComponents(orders,mappings,{storeId:session.storeId})});
  }
  if(path==='/api/store/platform-orders/history/search'&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
@@ -1194,6 +1195,23 @@ if(modifierLinkMatch&&req.method==='PUT'){
  await broadcast(env,'menu',{});return json({ok:true});
 }
 // Production components are administrator-managed and scoped to a selected restaurant.
+if(path==='/api/production-timing'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const storeId=url.searchParams.get('store_id')||'';
+ if(!storeId||storeId==='global')return json({error:'Select a restaurant'},400);
+ const row=await env.DB.prepare('SELECT dine_in_minutes FROM production_timing WHERE store_id=?').bind(storeId).first();
+ return json({store_id:storeId,dine_in_minutes:row?.dine_in_minutes??20});
+}
+if(path==='/api/production-timing'&&req.method==='PUT'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),storeId=String(b?.store_id||''),minutes=Number(b?.dine_in_minutes);
+ if(!storeId||storeId==='global'||!Number.isInteger(minutes)||minutes<1||minutes>240)return json({error:'Invalid restaurant or minutes (1–240)'},400);
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first();
+ if(!store)return json({error:'Restaurant not found'},404);
+ await env.DB.prepare('INSERT INTO production_timing(store_id,dine_in_minutes) VALUES(?,?) ON CONFLICT(store_id) DO UPDATE SET dine_in_minutes=excluded.dine_in_minutes').bind(storeId,minutes).run();
+ await broadcastStore(env,storeId,'orders',{});
+ return json({ok:true,store_id:storeId,dine_in_minutes:minutes});
+}
 if(path==='/api/production-components'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const storeId=url.searchParams.get('store_id')||'';
