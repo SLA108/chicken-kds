@@ -420,9 +420,13 @@ function platformWorkspaceHtml(){
  const all=platformWorkspaceFilter==='collected'?platformCollectedHistory:platformWorkspaceFilter==='ready'?ready:platformWorkspaceFilter==='preparing'?preparing:active;
  const q=platformWorkspaceSearch.toLowerCase();
  const filtered=all.filter(o=>(platformWorkspacePlatform==='all'||o.platform===platformWorkspacePlatform)&&[o.platform,o.external_order_id,...(o.items||[]).map(i=>i.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>{
-  const timeField=platformWorkspaceFilter==='collected'?'collected_at':platformWorkspaceFilter==='ready'?'kitchen_completed_at':'created_at';
-  const aTime=Date.parse(a[timeField]||a.created_at||'')||0,bTime=Date.parse(b[timeField]||b.created_at||'')||0;
-  return bTime-aTime||String(b.id||b.order_id||'').localeCompare(String(a.id||a.order_id||''));
+  if(platformWorkspaceFilter==='active'){
+   const aTime=Date.parse(a.created_at||'')||0,bTime=Date.parse(b.created_at||'')||0;
+   return bTime-aTime;
+  }
+  if(platformWorkspaceFilter==='collected')return (Date.parse(b.collected_at||'')||0)-(Date.parse(a.collected_at||'')||0);
+  const aTime=Date.parse(a.created_at||'')||0,bTime=Date.parse(b.created_at||'')||0;
+  return aTime-bTime;
  });
  const cards=filtered.map(o=>{
   const items=o.items||[],done=items.filter(i=>i.is_done).length,total=items.length;
