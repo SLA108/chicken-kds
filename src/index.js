@@ -201,6 +201,27 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   return json({id,store_id:storeId,platform:b.platform,external_order_id:b.external_order_id,ready_by:b.ready_by},201);
  }
 
+ const platformEdit=path.match(/^\/api\/store\/platform-orders\/([^/]+)\/edit$/);
+ if(platformEdit&&req.method==='POST'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const id=platformEdit[1],storeId=session.storeId,b=await parse(req);
+  if(!b||typeof b.expected_updated_at!=='string'||typeof b.note!=='string'||b.note.length>500||!Array.isArray(b.items)||b.items.length<1||b.items.length>100||b.items.some(i=>!i||typeof i.id!=='string'||!Number.isInteger(i.quantity)||i.quantity<1||i.quantity>99)||new Set(b.items.map(i=>i.id)).size!==b.items.length)return json({error:'Invalid platform edit'},400);
+  const order=await env.DB.prepare("SELECT o.updated_at,o.status,o.kitchen_completed_at,pm.collected_at FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=?").bind(id,storeId).first();
+  if(!order)return json({error:'Platform order not found'},404);
+  if(order.status==='cancelled'||order.kitchen_completed_at||order.collected_at)return json({error:'Platform order is no longer editable'},409);
+  if(order.updated_at!==b.expected_updated_at)return json({error:'Order changed; refresh'},409);
+  const existing=(await env.DB.prepare('SELECT id,quantity,is_done FROM order_items WHERE order_id=? ORDER BY id').bind(id).all()).results;
+  if(existing.length!==b.items.length||existing.some(i=>i.is_done)||existing.some(i=>!b.items.some(x=>x.id===i.id)))return json({error:'Kitchen has started or order items changed; refresh'},409);
+  const now=new Date().toISOString(),revision=uid();
+  const guard="EXISTS(SELECT 1 FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=? AND o.updated_at=? AND o.kitchen_completed_at IS NULL AND pm.collected_at IS NULL)";
+  const statements=[env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_items WHERE order_id=? AND is_done=1) AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)").bind(revision,b.note,id,storeId,b.expected_updated_at,id)];
+  for(const item of b.items)statements.push(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
+  statements.push(env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'platform_order_edited',?,?,? WHERE "+guard).bind(uid(),id,session.role,JSON.stringify({store_id:storeId,quantities:b.items.map(i=>({id:i.id,quantity:i.quantity}))}),now,id,storeId,revision));
+  const results=await env.DB.batch(statements);
+  if(results[0].meta.changes!==1||results.slice(1,1+b.items.length).some(r=>r.meta.changes!==1))return json({error:'Order changed; refresh'},409);
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true,updated_at:revision});
+ }
  if(path==='/api/store/kitchen/dag'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
