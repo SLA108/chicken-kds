@@ -202,3 +202,20 @@ test('POS and Kitchen notifications share dark theme and accessible toast styles
  assert.match(ui,/aria-live','polite'/);
  assert.match(ui,/prefers-reduced-motion:reduce/);
 });
+
+test('device pairing start sets the actual 64-character secret in the role pairing cookie',()=>{
+ const start=api.indexOf("if(path==='/api/device/pair/start'&&req.method==='POST')");
+ const end=api.indexOf("if(path==='/api/device/pair/status'&&req.method==='GET')",start);
+ assert.ok(start>=0&&end>start);
+ const code=api.slice(start,end);
+ assert.match(code,/pairCookie\(role,secret\)/);
+ assert.doesNotMatch(code,/pairCookie\(secret\)/);
+});
+test('device pairing polling shows authorization errors instead of silently hanging',()=>{
+ const start=ui.indexOf('async function beginPairing()');
+ const end=ui.indexOf('function login()',start);
+ const code=ui.slice(start,end);
+ assert.match(code,/400,401,403,409/);
+ assert.match(code,/failure\.error/);
+ assert.match(code,/clearInterval\(pairPoll\)/);
+});
