@@ -105,9 +105,9 @@ test('platform edits broadcast a dedicated update notification',()=>{
 });
 
 test('editing guards changed dishes against concurrent kitchen completion',()=>{
- assert.match(api,/const changeGuard=changed\.length/);
- assert.match(api,/i\.is_done=1 AND i\.id IN/);
- assert.match(api,/for\(const item of changed\)/);
+ assert.ok(api.includes('const changeGuard=touched.length'));
+ assert.ok(api.includes('i.is_done=1 AND i.id IN'));
+ assert.ok(api.includes('for(const item of changed)'));
 });
 
 test('ready time starts at dialog opening plus 15 minutes and adjustments are cumulative',()=>{
@@ -147,10 +147,10 @@ test('platform edit aborts the entire D1 batch on a concurrent zero-row guarded 
  const end=api.indexOf("if(path==='/api/store/kitchen/dag'",start);
  assert.ok(start>=0&&end>start);
  const edit=api.slice(start,end);
- assert.match(edit,/for\(const statement of statements\)/);
- assert.match(edit,/SELECT CASE WHEN changes\(\)=1 THEN 1 ELSE json_extract/);
- assert.match(edit,/await env\.DB\.batch\(checked\)/);
- assert.match(edit,/Order changed; refresh/);
+ assert.ok(edit.includes('for(const write of writes)'));
+ assert.ok(edit.includes('SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract'));
+ assert.ok(edit.includes('await env.DB.batch(checked)'));
+ assert.ok(edit.includes('Order changed; refresh'));
 });
 
 test('platform edit supports adding and removing pending dishes with server-side menu and modifier validation',()=>{
