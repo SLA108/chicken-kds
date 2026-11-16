@@ -37,10 +37,10 @@ async function getStoreOrders(env,storeId,limit=120){
  const modifiers=itemIds.length?(await env.DB.prepare(`SELECT m.* FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(storeId,...itemIds).all()).results:[];
  return orders.map(o=>({...o,...(metaByOrder.get(o.id)||{}),items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));
 }
-async function prepareOrderItems(env,items,orderId,now,storeId=null){
+async function prepareOrderItems(env,items,orderId,now,storeId=null,platform=null){
  const unique=[...new Set(items.map(x=>x.menu_id))];
  const rows=storeId
-  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,COALESCE(o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,...unique).all()).results
+  ?(await env.DB.prepare('SELECT m.id,m.name,m.category,m.vat_rate,COALESCE(p.price_cents,o.price_cents,m.price_cents) AS price_cents FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? LEFT JOIN platform_menu_overrides p ON p.menu_id=m.id AND p.store_id=? AND p.platform=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0 AND COALESCE(p.active,1)=1 AND m.id IN ('+unique.map(()=>'?').join(',')+')').bind(storeId,storeId,platform||'',...unique).all()).results
   :(await env.DB.prepare('SELECT * FROM menu WHERE active=1 AND id IN ('+unique.map(()=>'?').join(',')+')').bind(...unique).all()).results;
  const lookup=new Map(rows.map(x=>[x.id,x]));
  if(unique.some(id=>!lookup.has(id))||items.some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))throw Error('Invalid items');
@@ -167,6 +167,13 @@ if(sessionToken){
  return json({store_id:session.storeId,server_time:now,period_ms:QR_PERIOD_MS,expires_at:(first+4)*QR_PERIOD_MS,tokens});
 }
 if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,attendance_qr_enabled:(await env.DB.prepare('SELECT enabled FROM device_attendance_qr_access WHERE device_id=?').bind(session.deviceId).first())?.enabled===1,api_enabled:false});
+ if(path==='/api/store/quick-order/menu'&&req.method==='GET'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const platform=url.searchParams.get('platform');
+  if(!QUICK_ORDER_PLATFORMS.includes(platform))return json({error:'Invalid platform'},400);
+  const rows=(await env.DB.prepare("SELECT m.id,m.name AS kitchen_name,COALESCE(p.platform_name,m.name) AS name,m.category,COALESCE(p.price_cents,s.price_cents,m.price_cents) AS price_cents,m.vat_rate FROM menu m LEFT JOIN store_menu_overrides s ON s.menu_id=m.id AND s.store_id=? LEFT JOIN platform_menu_overrides p ON p.menu_id=m.id AND p.store_id=? AND p.platform=? WHERE COALESCE(s.active,m.active)=1 AND COALESCE(s.sold_out,0)=0 AND COALESCE(p.active,1)=1 ORDER BY m.sort_order,m.name").bind(session.storeId,session.storeId,platform).all()).results;
+  return json(rows);
+ }
  if(path==='/api/store/quick-orders'&&req.method==='POST'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   let b;
@@ -178,7 +185,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(already)return json({error:'Platform order ID already registered',id:already.order_id},409);
   const id=uid(),now=new Date().toISOString();
   const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key,store_id) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,'delivery','', 'new',b.note,now,now,session.role,b.client_key,storeId)];
-  try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId));}catch(e){return json({error:e.message},400);}
+  try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId,b.platform));}catch(e){return json({error:e.message},400);}
   statements.push(env.DB.prepare('INSERT INTO order_platform_metadata(order_id,store_id,platform,external_order_id,platform_deadline_at,created_at) VALUES(?,?,?,?,?,?)').bind(id,storeId,b.platform,b.external_order_id,b.ready_by,now));
   statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',session.role,JSON.stringify({store_id:storeId,platform:b.platform,external_order_id:b.external_order_id,ready_by:b.ready_by}),now));
   statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created',JSON.stringify({store_id:storeId,platform:b.platform}),now));
@@ -778,6 +785,24 @@ if(storeMenuMatch&&req.method==='GET'){
  if(!store)return json({error:'Store not found'},404);
  const items=(await env.DB.prepare('SELECT m.id,m.name,m.category,m.price_cents AS base_price_cents,m.active AS base_active,o.price_cents AS override_price_cents,o.active AS override_active,COALESCE(o.sold_out,0) AS sold_out,o.updated_at FROM menu m LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? ORDER BY m.category,m.sort_order,m.name').bind(id).all()).results;
  return json({store,items});
+}
+const platformMenuRoute=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/platform-menu$/);
+if(platformMenuRoute&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const storeId=platformMenuRoute[1],platform=url.searchParams.get('platform');
+ if(!QUICK_ORDER_PLATFORMS.includes(platform))return json({error:'Invalid platform'},400);
+ const rows=(await env.DB.prepare("SELECT m.id,m.name AS kitchen_name,m.category,COALESCE(s.price_cents,m.price_cents) AS base_price_cents,p.platform_name,p.price_cents AS platform_price_cents,COALESCE(p.active,1) AS platform_active FROM menu m LEFT JOIN store_menu_overrides s ON s.store_id=? AND s.menu_id=m.id LEFT JOIN platform_menu_overrides p ON p.store_id=? AND p.platform=? AND p.menu_id=m.id WHERE COALESCE(s.active,m.active)=1 ORDER BY m.category,m.sort_order,m.name").bind(storeId,storeId,platform).all()).results;
+ return json(rows);
+}
+const platformMenuItemRoute=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/platform-menu\/([^/]+)$/);
+if(platformMenuItemRoute&&req.method==='PUT'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const storeId=platformMenuItemRoute[1],menuId=decodeURIComponent(platformMenuItemRoute[2]),b=await parse(req);
+ if(!b||!QUICK_ORDER_PLATFORMS.includes(b.platform)||!(b.platform_name===null||typeof b.platform_name==='string'&&b.platform_name.trim().length>0&&b.platform_name.trim().length<=150)||!(b.price_cents===null||Number.isInteger(b.price_cents)&&b.price_cents>=0&&b.price_cents<=10000000)||typeof b.active!=='boolean')return json({error:'Invalid platform menu override'},400);
+ const [store,item]=await Promise.all([env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first(),env.DB.prepare('SELECT id FROM menu WHERE id=?').bind(menuId).first()]);
+ if(!store||!item)return json({error:'Store or dish not found'},404);
+ await env.DB.prepare('INSERT INTO platform_menu_overrides(store_id,platform,menu_id,platform_name,price_cents,active,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(store_id,platform,menu_id) DO UPDATE SET platform_name=excluded.platform_name,price_cents=excluded.price_cents,active=excluded.active,updated_at=excluded.updated_at').bind(storeId,b.platform,menuId,b.platform_name===null?null:b.platform_name.trim(),b.price_cents,b.active?1:0,new Date().toISOString()).run();
+ return json({ok:true});
 }
 const storeMenuItemMatch=path.match(/^\/api\/admin\/stores\/([a-zA-Z0-9_-]{1,64})\/menu\/([^/]+)$/);
 if(storeMenuItemMatch&&req.method==='PUT'){
