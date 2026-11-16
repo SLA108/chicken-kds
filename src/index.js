@@ -604,7 +604,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   return json({groups:groups.results,options:options.results,links:links.results});
  }
  if(path==='/api/store/kitchen/categories'&&req.method==='GET'){
-  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  if(!['kitchen','pos'].includes(session.role))return json({error:'Forbidden'},403);
   return json((await env.DB.prepare('SELECT name,sort_order FROM menu_categories ORDER BY sort_order,name').all()).results);
  }
 
