@@ -946,7 +946,7 @@ function kitchen(){
  if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);updateKitchenClock();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
- document.querySelector('#sync').onclick=()=>{if(adminTab==='overview')loadOverview().then(()=>{if(adminTab==='overview')admin()});else refresh();};
+ document.querySelector('#sync').onclick=()=>refresh();
  document.querySelectorAll('[data-item-done]').forEach(btn=>btn.onclick=async()=>{
   const id=btn.dataset.itemDone;
   if(kitchenBusy.has(id))return;
