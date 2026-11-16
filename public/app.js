@@ -424,6 +424,7 @@ function platformWorkspaceHtml(){
    const aReady=!!a.kitchen_completed_at,bReady=!!b.kitchen_completed_at;
    if(aReady!==bReady)return aReady?-1:1;
   }
+  if(platformWorkspaceFilter==='collected')return (Date.parse(b.collected_at||'')||0)-(Date.parse(a.collected_at||'')||0);
   const aTime=Date.parse(a.created_at||'')||0,bTime=Date.parse(b.created_at||'')||0;
   return aTime-bTime;
  });
@@ -490,7 +491,7 @@ function renderPlatformWorkspace(){
 async function loadPlatformWorkspace(){
  if(platformWorkspaceLoading)return;platformWorkspaceLoading=true;
  try{
-  const [latest,history]=await Promise.all([api('/orders'),api('/platform-orders/history')]);
+  const [latest,history]=await Promise.all([api('/orders'),api('/platform-orders/history?limit=40')]);
   if(fohTab!=='platform')return;
   syncPlatformReadyIndicators(latest);orders=latest;platformCollectedHistory=(history.orders||[]).map(o=>({...o,id:o.order_id,items:[]}));
   renderPlatformWorkspace();
