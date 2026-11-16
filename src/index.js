@@ -212,10 +212,14 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(order.updated_at!==b.expected_updated_at)return json({error:'Order changed; refresh'},409);
   const existing=(await env.DB.prepare('SELECT id,quantity,is_done FROM order_items WHERE order_id=? ORDER BY id').bind(id).all()).results;
   if(existing.length!==b.items.length||existing.some(i=>!b.items.some(x=>x.id===i.id))||existing.some(i=>i.is_done&&b.items.find(x=>x.id===i.id)?.quantity!==i.quantity))return json({error:'Completed dishes cannot be modified; refresh'},409);
-  const now=new Date().toISOString(),revision=now;
+  const now=new Date().toISOString(),revision=now.slice(0,-1)+String(Math.floor(Math.random()*1000)).padStart(3,'0')+'Z';
+  const changed=b.items.filter(i=>{const prev=existing.find(x=>x.id===i.id);return !prev.is_done&&prev.quantity!==i.quantity;});
+  // The first SQL write checks the current dish state inside the D1 transaction.
+  // If Kitchen marked a changed dish Done since our read, no writes may proceed.
+  const changeGuard=changed.length?' AND NOT EXISTS(SELECT 1 FROM order_items i WHERE i.order_id=orders.id AND i.is_done=1 AND i.id IN ('+changed.map(()=>'?').join(',')+'))':'';
   const guard="EXISTS(SELECT 1 FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=? AND o.updated_at=? AND o.kitchen_completed_at IS NULL AND pm.collected_at IS NULL AND o.status!='cancelled')";
-  const statements=[env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)").bind(revision,b.note,id,storeId,b.expected_updated_at)];
-  for(const item of b.items.filter(i=>!existing.find(x=>x.id===i.id).is_done))statements.push(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
+  const statements=[env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)"+changeGuard).bind(revision,b.note,id,storeId,b.expected_updated_at,...changed.map(i=>i.id))];
+  for(const item of changed)statements.push(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
   statements.push(env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'platform_order_edited',?,?,? WHERE "+guard).bind(uid(),id,session.role,JSON.stringify({store_id:storeId,quantities:b.items.map(i=>({id:i.id,quantity:i.quantity}))}),now,id,storeId,revision));
   const results=await env.DB.batch(statements);
   if(results[0].meta.changes!==1||results.slice(1,-1).some(r=>r.meta.changes!==1))return json({error:'Order changed; refresh'},409);
