@@ -1098,7 +1098,7 @@ function kitchenDagView(active){
  const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
  const total=list.reduce((n,g)=>n+g.quantity,0);
  return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">One timeline per dish and modifier combination · each marker is a Ready by deadline</p></div><strong>'+total+' portions</strong></div>'+
- (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="badge" style="padding:6px 10px;border-radius:9px;background:var(--panel,#edf0f3)">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<div class="admin-inline-form" style="margin:10px 0"><strong>Production components not matched</strong><p class="muted small">'+(()=>{
+ (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="kds-production-chip">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<div class="admin-inline-form" style="margin:10px 0"><strong>Production components not matched</strong><p class="muted small">'+(()=>{
   const d=componentData?.production_diagnostics;
   if(!d)return 'Production mapping diagnostics unavailable. Reload the kitchen page after deployment.';
   if(!d.active_components)return 'No active production components are available for this restaurant. Check Backoffice → Production Components and the selected restaurant.';
