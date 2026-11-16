@@ -319,7 +319,7 @@ async function openCourierCollection(){
 function openPosPlatformOrders(){
  const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:1250;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px';
  const panel=document.createElement('div');panel.style.cssText='width:min(680px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:16px;padding:clamp(12px,3vw,24px);display:grid;gap:14px';
- const editable=orders.filter(o=>o.platform&&!o.kitchen_completed_at&&!o.collected_at&&o.status!=='cancelled');
+ let editable=orders.filter(o=>o.platform&&!o.kitchen_completed_at&&!o.collected_at&&o.status!=='cancelled');
  panel.innerHTML='<header style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><h2 style="margin:0">Platform Orders</h2><small class="muted">Assist kitchen · Edit unfinished orders</small></div><button type="button" class="alt" id="pos-platform-close">Close</button></header><label style="display:grid;gap:5px">Find order<input type="search" id="pos-platform-search" placeholder="Platform, order ID or dish"></label><div id="pos-platform-list" style="display:grid;gap:10px"></div>';
  overlay.append(panel);document.body.append(overlay);
  const close=()=>overlay.remove();panel.querySelector('#pos-platform-close').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
@@ -335,6 +335,8 @@ function openPosPlatformOrders(){
   list.querySelectorAll('[data-pos-platform-edit]').forEach(button=>button.onclick=()=>{const id=button.dataset.posPlatformEdit;close();editPlatformOrder(id)});
  };
  panel.querySelector('#pos-platform-search').oninput=render;render();
+ // Refresh the list from the store rather than relying on an old POS snapshot.
+ api('/orders').then(latest=>{if(!overlay.isConnected)return;editable=latest.filter(o=>o.platform&&!o.kitchen_completed_at&&!o.collected_at&&o.status!=='cancelled');render()}).catch(e=>notify('Could not refresh platform orders: '+e.message));
 }
 async function editPlatformOrder(id){
  const order=orders.find(o=>o.id===id&&o.platform);
@@ -355,7 +357,7 @@ async function openQuickOrderDialog(){
  const platforms=[['wolt','Wolt'],['uber_eats','Uber Eats'],['pyszne','Pyszne.pl'],['glovo','Glovo'],['bolt_food','Bolt Food'],['other','Other']];
  form.innerHTML='<h2>New Platform Order</h2><label>Platform<select name="platform">'+platforms.map(([v,n])=>'<option value="'+v+'">'+n+'</option>').join('')+'</select></label><label>Platform order ID<input name="external_order_id" required maxlength="100"></label><label>Ready By<input name="ready_by" type="datetime-local" required></label><div id="quick-order-items" style="display:grid;gap:8px"></div><button type="button" id="quick-order-add" class="alt">+ Add dish</button><label>Kitchen note<textarea name="note" maxlength="500"></textarea></label><p class="muted small">Prices and names follow this store and platform. Kitchen uses the canonical dish name. No automatic payment is recorded.</p><div class="row"><button type="button" id="quick-order-cancel" class="alt">Cancel</button><button type="submit" id="quick-order-submit">Send to Kitchen</button></div>';
  overlay.append(form);document.body.append(overlay);
- const close=()=>{overlay.remove();quickOrderStyle.remove()};
+ const close=()=>{++loading;overlay.remove();quickOrderStyle.remove()};
  form.querySelector('#quick-order-cancel').onclick=close;
  overlay.onclick=e=>{if(e.target===overlay)close()};
  let platformMenu=[],loading=0,platformModifiers={groups:[],options:[],links:[]};
