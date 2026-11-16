@@ -40,3 +40,8 @@ test('platform order modifiers are available to kitchen and validated before sub
  assert.match(ui,/selected<g\.min_select\|\|selected>g\.max_select/);
  assert.match(ui,/quantity:Number\(row\.querySelector\('input\[aria-label="Quantity"\]'\)\.value\),option_ids/);
 });
+
+test('collected platform orders cannot be reopened or changed via ordinary POS item API',()=>{
+ assert.match(api,/Courier has already collected this platform order/);
+ assert.match(api,/Use Platform Orders to manage platform items/);
+});
