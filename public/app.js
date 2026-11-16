@@ -195,7 +195,7 @@ async function beginPairing(){
   try{
    const response=await fetch('/api/device/pair/status?role='+encodeURIComponent(page),{credentials:'same-origin'});
    if(response.status===410){clearInterval(pairPoll);box.textContent='Pairing expired. Click Pair this device to try again.';return;}
-   if(!response.ok){if(response.status===409||response.status===403){clearInterval(pairPoll);box.textContent='Pairing unavailable. Please request a new code.';}return;}
+   if(!response.ok){const failure=await response.json().catch(()=>({}));if([400,401,403,409].includes(response.status)){clearInterval(pairPoll);box.textContent=(failure.error||'Pairing unavailable')+'. Click Pair this device to request a new code.';}else{box.textContent='Waiting for approval · Connection issue ('+response.status+'). Retrying automatically.';}return;}
    const data=await response.json();if(data.status!=='approved')return;
    clearInterval(pairPoll);
    if(data.role!==page){box.textContent='Approved for '+data.role+'. Open the corresponding role page.';return;}
