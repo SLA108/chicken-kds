@@ -311,9 +311,16 @@ async function openQuickOrderDialog(){
  const load=async()=>{const current=++loading;const platform=form.elements.platform.value;form.querySelector('#quick-order-submit').disabled=true;try{const result=await api('/quick-order/menu?platform='+encodeURIComponent(platform));if(current!==loading)return;platformMenu=result;itemsNode.innerHTML='';if(result.length)add();else notify('No available dishes for '+platform);form.querySelector('#quick-order-submit').disabled=!result.length;}catch(e){if(current===loading)notify('Platform menu failed: '+e.message);}};
  form.elements.platform.onchange=load;
  form.querySelector('#quick-order-add').onclick=add;
- const local=new Date(Date.now()+30*60000);form.elements.ready_by.value=new Date(local.getTime()-local.getTimezoneOffset()*60000).toISOString().slice(0,16);
+ const deadlineInput=form.elements.ready_by;
+ const localInputValue=date=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
+ const suggestedDeadline=()=>localInputValue(new Date(Date.now()+30*60000));
+ deadlineInput.value=suggestedDeadline();
+ const deadlineHint=document.createElement('small');deadlineHint.className='muted';deadlineHint.textContent='Deadline must be in the future (within 48 hours).';deadlineInput.parentElement.append(deadlineHint);
+ const checkDeadline=()=>{const ms=new Date(deadlineInput.value).getTime(),now=Date.now();const valid=Number.isFinite(ms)&&ms>now&&ms<=now+48*3600000;deadlineInput.setCustomValidity(valid?'':'Choose a future time within 48 hours');deadlineHint.textContent=valid?'Kitchen deadline · '+Math.ceil((ms-now)/60000)+' minutes remaining':'Ready By must be in the future (within 48 hours).';return valid;};
+ deadlineInput.addEventListener('change',checkDeadline);checkDeadline();
  let pendingKey=crypto.randomUUID();
  form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('#quick-order-submit');button.disabled=true;try{
+  if(!checkDeadline()){deadlineInput.reportValidity();throw Error('Ready By must be a future time within 48 hours');}
   const items=[...itemsNode.children].map(row=>({menu_id:row.querySelector('select').value,quantity:Number(row.querySelector('input').value)}));
   if(!items.length)throw Error('Add at least one dish');
   const result=await api('/quick-orders','POST',{platform:form.elements.platform.value,external_order_id:form.elements.external_order_id.value,ready_by:new Date(form.elements.ready_by.value).toISOString(),note:form.elements.note.value,items,client_key:pendingKey});
@@ -672,6 +679,13 @@ function updateKitchenClock(){
   el.textContent=kitchenDuration(age);
   const head=el.closest('.kds-order-head');if(head)head.dataset.ageBand=kitchenAgeBand(age);
  });
+ document.querySelectorAll('[data-kitchen-deadline]').forEach(el=>{
+  const remaining=Math.ceil((new Date(el.dataset.kitchenDeadline).getTime()-Date.now())/60000);
+  if(!Number.isFinite(remaining))return;
+  el.textContent=remaining<=0?'OVERDUE '+Math.abs(remaining)+'m':remaining<=60?'DUE IN '+remaining+'m':'DUE IN '+Math.floor(remaining/60)+'h '+remaining%60+'m';
+  el.style.cssText='display:block;font-weight:900;font-size:1.25rem;line-height:1.2;padding:8px;border-radius:8px;text-align:center;background:'+(remaining<=0?'#b91c1c':remaining<=10?'#c2410c':remaining<=20?'#a16207':'#0f766e')+';color:white;';
+  el.closest('.kds-order')?.setAttribute('data-deadline-urgency',remaining<=0?'overdue':remaining<=10?'urgent':'normal');
+ });
 }
 function kitchen(){
  const active=orders.filter(o=>o.status!=='cancelled'&&!o.kitchen_completed_at&&!kitchenCompleting.has(o.id)&&o.items.length).sort((a,b)=>a.created_at.localeCompare(b.created_at));
@@ -684,7 +698,7 @@ function kitchen(){
     '<div class="kds-head-row"><span>Received '+warsawClock(o.created_at)+'</span><span>'+done+'/'+o.items.length+' Done</span></div>'+
     '<div class="kds-head-id">#'+esc(o.id.slice(0,8))+(o.paid_at?' · Paid':'')+'</div>'+
     (o.platform?'<div class="kds-head-row"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+'</strong><span>#'+esc(o.external_order_id||'')+'</span></div>':'')+
-    (o.platform_deadline_at?'<div class="kds-head-row"><span>Ready By '+warsawClock(o.platform_deadline_at)+'</span><strong data-kitchen-deadline="'+esc(o.platform_deadline_at)+'">'+esc(o.platform_deadline_at)+'</strong></div>':'')+
+    (o.platform_deadline_at?'<div class="kds-deadline" style="margin-top:8px;padding:8px;border:2px solid #fbbf24;border-radius:10px"><div style="font-size:0.8rem;font-weight:800">READY BY · '+warsawClock(o.platform_deadline_at)+'</div><strong data-kitchen-deadline="'+esc(o.platform_deadline_at)+'" style="display:block;font-size:1.25rem;font-weight:900">Calculating…</strong></div>':'')+
    '</div>'+
    '<button class="kds-complete" data-kitchen-complete="'+esc(o.id)+'" '+(ready?'':'disabled')+'>'+(ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+done+'/'+o.items.length)+'</button>'+
    items.map((i,index)=>{const dish=menu.find(m=>m.id===i.menu_id);
