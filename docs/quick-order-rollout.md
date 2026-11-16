@@ -46,3 +46,12 @@ npm test
 - Quick Order uses a stable client key on retry to avoid creating duplicate orders after ambiguous network failures.
 - The existing `migrations/quick_order_platform.sql` is also required if not previously applied.
 - Run `npm run check:syntax && npm test` and manually test POS/Kitchen device sessions, platform menu editing, platform price snapshot, cross-store isolation, and ordinary POS checkout before rollout.
+
+## Platform Orders and courier collection
+- Apply `migrations/platform_courier_collection.sql` to D1 **before** deploying this version. It adds `collected_at` and `collected_by` to `order_platform_metadata`.
+- UI name is **Platform Orders**; existing `/quick-orders` endpoint remains for compatibility.
+- Platform orders are excluded from ordinary POS Open Tickets, Checkout, and the dine-in/takeaway Pickup Queue.
+- When the kitchen marks the whole order complete, it becomes **Ready for Courier** and appears in **Courier Collection** on POS and Kitchen.
+- Either POS or Kitchen staff can record **Collected by Courier**. The server requires kitchen completion and stores the collection timestamp and actor.
+- After collection, the platform order is removed from the live store order feed. A dedicated platform collection history screen is not yet implemented.
+- Validate migration, run `npm run check:syntax && npm test`, then test both devices and the collection queue before deployment.
