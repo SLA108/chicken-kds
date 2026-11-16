@@ -121,3 +121,13 @@ test('ready time starts at dialog opening plus 15 minutes and adjustments are cu
  assert.match(ui,/readyMinutes\+Number\(button\.dataset\.readyAdjust\)/);
  assert.match(ui,/ready_by:deadlineInput\.value/);
 });
+
+test('quick entry has platform buttons, category browser and top submit',()=>{
+ assert.match(ui,/quick-platform-buttons/);
+ assert.match(ui,/data-quick-platform/);
+ assert.match(ui,/quick-dish-categories/);
+ assert.match(ui,/quick-dish-results/);
+ assert.match(ui,/quick-order-sticky/);
+ assert.match(ui,/renderCatalog/);
+ assert.match(ui,/data-quick-dish/);
+});
