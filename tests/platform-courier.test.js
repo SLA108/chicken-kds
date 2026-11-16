@@ -101,9 +101,23 @@ test('platform modifiers use responsive compact option rows',()=>{
  assert.match(ui,/quickOrderStyle\.remove\(\)/);
 });
 
-test('changing platform warns before clearing dish selections',()=>{
- assert.match(ui,/Changing the delivery platform will clear the selected dishes and modifiers/);
- assert.match(ui,/form\.elements\.platform\.value=loadedPlatform/);
+test('changing quick-entry platform preserves selected dishes and avoids browser confirmation',()=>{
+ const start=ui.indexOf('async function openQuickOrderDialog()');
+ const end=ui.indexOf("document.addEventListener('click'",start);
+ const code=ui.slice(start,end);
+ assert.ok(start>=0&&end>start);
+ assert.match(code,/const snapshots=\[\.\.\.itemsNode\.children\]/);
+ assert.match(code,/selected:\[\.\.\.row\.querySelectorAll/);
+ assert.match(code,/select\.innerHTML=choices\(\);select\.value=snapshot\.id/);
+ assert.match(code,/input\.checked=snapshot\.selected\.includes/);
+ assert.match(code,/row\.dataset\.unavailable='1'/);
+ assert.doesNotMatch(code,/confirm\(/);
+ assert.doesNotMatch(code,/itemsNode\.innerHTML=''/);
+});
+test('selected platform is visibly marked with checkmark and high-contrast outline',()=>{
+ assert.match(ui,/\.quick-platform-buttons button\[data-quick-platform\]\.selected::after/);
+ assert.match(ui,/outline:3px solid #1d4ed8/);
+ assert.match(ui,/aria-pressed/);
 });
 test('POS platform order workspace supports searching and status filters',()=>{
  assert.match(ui,/platform-workspace-search/);
