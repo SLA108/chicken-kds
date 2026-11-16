@@ -1106,3 +1106,9 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-production-board .kds-prod-math-total{font-size:29px;color:#7df1ac}
 .kds-production-board .kds-prod-quantity>small{font-size:12px}
 @media(max-width:650px){.kds-production-board .kds-prod-math{gap:3px}.kds-production-board .kds-prod-math-overdue,.kds-production-board .kds-prod-math-upcoming{min-width:25px;min-height:28px;padding:3px 5px;font-size:17px}.kds-production-board .kds-prod-math-total{font-size:21px}.kds-production-board .kds-prod-math-plus,.kds-production-board .kds-prod-math-equals{font-size:14px}}
+
+/* POS-style transient new-order count: 11 +5 = 16 */
+.kds-production-board .kds-prod-quantity{display:flex;align-items:baseline;flex-wrap:wrap;gap:7px}
+.kds-production-board .kds-prod-number{font-size:30px;font-weight:750;color:#f8fafc;line-height:1;font-variant-numeric:tabular-nums}
+.kds-production-board .kds-prod-new-delta{font-size:16px;font-weight:800;color:#4ade80;line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
+@media(max-width:650px){.kds-production-board .kds-prod-number{font-size:25px}.kds-production-board .kds-prod-new-delta{font-size:13px}}
