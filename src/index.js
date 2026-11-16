@@ -177,7 +177,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   return json(rows);
  }
  if(path==='/api/store/quick-orders'&&req.method==='POST'){
-  if(session.role!=='kitchen')return json({error:'Kitchen role required for Platform Order entry'},403);
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   let b;
   try{b=validateQuickOrder(await parse(req));}catch(e){return json({error:e.message},400);}
   const storeId=session.storeId;
@@ -203,7 +203,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
 
  const platformEdit=path.match(/^\/api\/store\/platform-orders\/([^/]+)\/edit$/);
  if(platformEdit&&req.method==='POST'){
-  if(session.role!=='kitchen')return json({error:'Kitchen role required for Platform Order edits'},403);
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const id=platformEdit[1],storeId=session.storeId,b=await parse(req);
   if(!b||typeof b.expected_updated_at!=='string'||typeof b.note!=='string'||b.note.length>500||!Array.isArray(b.items)||b.items.length<1||b.items.length>100||b.items.some(i=>!i||typeof i.id!=='string'||!Number.isInteger(i.quantity)||i.quantity<1||i.quantity>99)||new Set(b.items.map(i=>i.id)).size!==b.items.length)return json({error:'Invalid platform edit'},400);
   const order=await env.DB.prepare("SELECT o.updated_at,o.status,o.kitchen_completed_at,pm.collected_at FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=?").bind(id,storeId).first();
