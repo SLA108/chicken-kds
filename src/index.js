@@ -220,6 +220,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const results=await env.DB.batch(statements);
   if(results[0].meta.changes!==1||results.slice(1,-1).some(r=>r.meta.changes!==1))return json({error:'Order changed; refresh'},409);
   await broadcastStore(env,storeId,'orders',{id});
+  await broadcastStore(env,storeId,'platform_order_edited',{id});
   return json({ok:true,updated_at:revision});
  }
  if(path==='/api/store/kitchen/dag'&&req.method==='GET'){
