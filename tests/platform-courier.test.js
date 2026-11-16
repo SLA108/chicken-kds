@@ -22,7 +22,7 @@ test('courier collection requires kitchen completion and is store scoped',()=>{
 });
 test('platform UI is distinct from kitchen and POS pickup',()=>{
  assert.match(ui,/\+ Platform Order/);
- assert.match(ui,/New Platform Order/);
+ assert.match(ui,/Kitchen Quick Entry/);
  assert.match(ui,/Courier Collection/);
  assert.match(ui,/Collected by Courier/);
  assert.match(ui,/path==='\/platform-orders\/collection'/);
