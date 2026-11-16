@@ -394,6 +394,23 @@ async function openQuickOrderDialog(){
   });
  };
  const add=(selectedMenuId)=>{if(!platformMenu.length){notify('No dishes available for this platform');return}const row=document.createElement('div');row.className='platform-order-dish';row.innerHTML='<div class="platform-dish-top"><select aria-label="Dish">'+choices()+'</select><input aria-label="Quantity" type="number" min="1" max="99" value="1"><button type="button" class="alt" aria-label="Remove dish" title="Remove dish">×</button></div><div class="platform-modifiers"></div>';if(selectedMenuId)row.querySelector('select').value=selectedMenuId;row.querySelector('button').onclick=()=>{row.remove();updateDishCount()};row.querySelector('select').onchange=()=>renderModifiers(row);row.querySelector('input[aria-label="Quantity"]').oninput=updateDishCount;itemsNode.append(row);renderModifiers(row);updateDishCount();};
+ const updateDishCount=()=>{const n=[...itemsNode.children].reduce((sum,row)=>sum+(Number(row.querySelector('input[aria-label="Quantity"]')?.value)||0),0);form.querySelector('#quick-order-count').textContent=n+' '+(n===1?'dish':'dishes')};
+ let selectedCategory='All';
+ const categoriesNode=form.querySelector('#quick-dish-categories'),resultsNode=form.querySelector('#quick-dish-results'),searchNode=form.querySelector('#quick-dish-search');
+ const renderCatalog=()=>{
+  const categories=['All',...new Set(platformMenu.map(m=>m.category||'Other'))];
+  if(!categories.includes(selectedCategory))selectedCategory='All';
+  categoriesNode.innerHTML=categories.map(cat=>'<button type="button" data-quick-category="'+esc(cat)+'" class="alt '+(cat===selectedCategory?'selected':'')+'">'+esc(cat)+'</button>').join('');
+  categoriesNode.querySelectorAll('[data-quick-category]').forEach(button=>button.onclick=()=>{selectedCategory=button.dataset.quickCategory;renderCatalog()});
+  const q=searchNode.value.trim().toLowerCase();
+  const visible=platformMenu.filter(m=>(selectedCategory==='All'||(m.category||'Other')===selectedCategory)&&m.name.toLowerCase().includes(q));
+  resultsNode.innerHTML=visible.map(m=>'<button type="button" class="alt" data-quick-dish="'+esc(m.id)+'"><strong>'+esc(m.name)+'</strong><small style="display:block;opacity:.7">'+money(m.price_cents)+'</small></button>').join('')||'<p class="muted">No matching dishes</p>';
+  resultsNode.querySelectorAll('[data-quick-dish]').forEach(button=>button.onclick=()=>add(button.dataset.quickDish));
+ };
+ searchNode.oninput=renderCatalog;
+ const renderPlatforms=()=>form.querySelectorAll('[data-quick-platform]').forEach(button=>{button.classList.toggle('selected',button.dataset.quickPlatform===form.elements.platform.value);button.setAttribute('aria-pressed',String(button.dataset.quickPlatform===form.elements.platform.value))});
+ form.querySelectorAll('[data-quick-platform]').forEach(button=>button.onclick=()=>{form.elements.platform.value=button.dataset.quickPlatform;form.elements.platform.onchange()});
+ renderPlatforms();
  const load=async()=>{const current=++loading;const platform=form.elements.platform.value;form.querySelector('#quick-order-submit').disabled=true;try{const [result,modifiers]=await Promise.all([api('/quick-order/menu?platform='+encodeURIComponent(platform)),api('/menu/modifiers')]);if(current!==loading)return;platformMenu=result;platformModifiers=modifiers;itemsNode.innerHTML='';updateDishCount();selectedCategory='All';renderCatalog();if(!result.length)notify('No available dishes for '+platform);form.querySelector('#quick-order-submit').disabled=!result.length;}catch(e){if(current===loading)notify('Platform menu failed: '+e.message);}};
  let loadedPlatform=form.elements.platform.value;
  form.elements.platform.onchange=async()=>{
