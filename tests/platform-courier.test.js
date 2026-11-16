@@ -66,3 +66,10 @@ test('kitchen and POS may enter and edit platform orders; courier handoff stays 
  assert.match(api,/if\(platformEdit&&req\.method==='POST'\)\{\s*if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)/);
  assert.match(api,/if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)return json\(\{error:'Forbidden'\},403\);\s*const id=courierCollect/);
 });
+
+test('POS provides platform order entry and editing UI alongside courier handoff',()=>{
+ assert.match(ui,/id="pos-quick-order"/);
+ assert.match(ui,/id="pos-platform-orders"/);
+ assert.match(ui,/id="pos-courier-queue"/);
+ assert.match(ui,/openPosPlatformOrders/);
+});
