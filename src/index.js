@@ -1,4 +1,4 @@
-import { validateQuickOrder } from './quick-order.js';
+import { validateQuickOrder, QUICK_ORDER_PLATFORMS } from './quick-order.js';
 import { buildKitchenDag } from './kitchen-dag.js';
 import {attendanceQrToken,qrSlot,QR_PERIOD_MS} from './attendance-qr.js';
 import {isPairingCode,isDeviceRole,pairingExpired,approvalAttemptPolicy,parseDeviceCookie} from './device-pairing.js';
