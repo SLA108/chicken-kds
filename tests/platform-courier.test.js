@@ -219,3 +219,16 @@ test('device pairing polling shows authorization errors instead of silently hang
  assert.match(code,/failure\.error/);
  assert.match(code,/clearInterval\(pairPoll\)/);
 });
+
+test('POS platform navigation shows Ready/Active counts',()=>{
+ assert.match(ui,/\['platform','Platform Orders \('/);
+ assert.match(ui,/orders\.filter\(o=>o\.platform&&!o\.collected_at&&o\.status!=='cancelled'&&o\.kitchen_completed_at\)\.length/);
+});
+test('platform workspace clearly identifies selected filter and structures order cards',()=>{
+ assert.match(ui,/aria-pressed/);
+ assert.match(ui,/platform-filter-selected/);
+ assert.match(ui,/platform-workspace-order-id/);
+ assert.match(ui,/platform-workspace-dish-qty/);
+ assert.match(ui,/platform-workspace-actions/);
+ assert.match(ui,/platform-workspace-stats button\.selected/);
+});
