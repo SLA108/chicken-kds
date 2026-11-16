@@ -212,8 +212,8 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(order.updated_at!==b.expected_updated_at)return json({error:'Order changed; refresh'},409);
   const existing=(await env.DB.prepare('SELECT id,quantity,is_done FROM order_items WHERE order_id=? ORDER BY id').bind(id).all()).results;
   if(existing.length!==b.items.length||existing.some(i=>!b.items.some(x=>x.id===i.id))||existing.some(i=>i.is_done&&b.items.find(x=>x.id===i.id)?.quantity!==i.quantity))return json({error:'Completed dishes cannot be modified; refresh'},409);
-  const now=new Date().toISOString(),revision=uid();
-  const guard="EXISTS(SELECT 1 FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=? AND o.updated_at=? AND o.kitchen_completed_at IS NULL AND pm.collected_at IS NULL)";
+  const now=new Date().toISOString(),revision=now;
+  const guard="EXISTS(SELECT 1 FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=? AND o.updated_at=? AND o.kitchen_completed_at IS NULL AND pm.collected_at IS NULL AND o.status!='cancelled')";
   const statements=[env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)").bind(revision,b.note,id,storeId,b.expected_updated_at)];
   for(const item of b.items.filter(i=>!existing.find(x=>x.id===i.id).is_done))statements.push(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
   statements.push(env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'platform_order_edited',?,?,? WHERE "+guard).bind(uid(),id,session.role,JSON.stringify({store_id:storeId,quantities:b.items.map(i=>({id:i.id,quantity:i.quantity}))}),now,id,storeId,revision));
@@ -553,7 +553,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const now=new Date().toISOString();
   const result=await env.DB.prepare(action==='complete'
    ?"UPDATE orders SET kitchen_completed_at=?,status='done',updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NULL AND status!='cancelled'"
-   :"UPDATE orders SET kitchen_completed_at=NULL,status=CASE WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id=orders.id AND is_done=0) THEN 'new' ELSE 'done' END,updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled'"
+   :"UPDATE orders SET kitchen_completed_at=NULL,status=CASE WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id=orders.id AND is_done=0) THEN 'new' ELSE 'done' END,updated_at=? WHERE id=? AND store_id=? AND kitchen_completed_at IS NOT NULL AND status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NOT NULL)"
   ).bind(...(action==='complete'?[now,now,id,storeId]:[now,id,storeId])).run();
   if(result.meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await event(env,id,action==='complete'?'kitchen_completed':'kitchen_reopened',session.role,{store_id:storeId});
