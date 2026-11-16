@@ -50,7 +50,7 @@ test('platform editing uses optimistic revision and locks completed dishes',()=>
  assert.ok(api.includes("const platformEdit=path.match("));
  assert.match(api,/Order changed; refresh/);
  assert.match(api,/Completed dishes cannot be modified; refresh/);
- assert.match(api,/b.items.filter\(i=>!existing.find\(x=>x.id===i.id\).is_done\)/);
+ assert.match(api,/const changed=b.items.filter/);
  assert.match(ui,/Edit Platform Order/);
  assert.match(ui,/expected_updated_at:order\.updated_at/);
 });
@@ -76,7 +76,7 @@ test('POS provides platform order entry and editing UI alongside courier handoff
 
 test('platform edit preserves completed quantities and ISO order timestamps',()=>{
  assert.match(ui,/quantity:i\.is_done\?Number\(i\.quantity\):Number/);
- assert.match(api,/const now=new Date\(\)\.toISOString\(\),revision=now/);
+ assert.match(api,/const now=new Date\(\)\.toISOString\(\),revision=now.slice/);
 });
 test('reopening collected platform order is prevented in SQL update',()=>{
  assert.match(api,/AND NOT EXISTS\(SELECT 1 FROM order_platform_metadata pm WHERE pm\.order_id=orders\.id AND pm\.collected_at IS NOT NULL\)/);
@@ -102,4 +102,10 @@ test('platform edits broadcast a dedicated update notification',()=>{
  assert.match(api,/broadcastStore\(env,storeId,'platform_order_edited',\{id\}\)/);
  assert.match(ui,/ORDER UPDATED/);
  assert.match(ui,/platformOrderUpdateAlert/);
+});
+
+test('editing guards changed dishes against concurrent kitchen completion',()=>{
+ assert.match(api,/const changeGuard=changed\.length/);
+ assert.match(api,/i\.is_done=1 AND i\.id IN/);
+ assert.match(api,/for\(const item of changed\)/);
 });
