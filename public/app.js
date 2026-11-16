@@ -1137,6 +1137,24 @@ function kitchenDagView(active){
   for(const x of selected){const key=String(x.item.menu_id||x.item.name);const entry=byDish.get(key)||{name:x.item.name,quantity:0};entry.quantity+=x.quantity;byDish.set(key,entry)}
   return {component,sources,due,unscheduled,selected,total,qty,late,byDish};
  }).filter(x=>x.total>0);
+ // Items without any component mapping remain visible as dish-level production tasks.
+ const mappedItemIds=new Set(rows.flatMap(r=>r.sources.map(x=>String(x.item.id))));
+ const fallbackGroups=new Map();
+ for(const order of active)for(const item of order.items||[]){
+  if(item.is_done||mappedItemIds.has(String(item.id)))continue;
+  const key=String(item.menu_id||item.name);
+  const explicit=order.platform_deadline_at?Date.parse(order.platform_deadline_at):NaN;
+  const received=Date.parse(order.created_at);
+  const deadline=Number.isFinite(explicit)?explicit:order.platform?null:Number.isFinite(received)?received+dineInMinutes*60000:null;
+  const group=fallbackGroups.get(key)||{component:{component_id:'dish:'+key,name:item.name,unit:'dish',emoji:'🍽️'},sources:[]};
+  group.sources.push({item,order,quantity:Number(item.quantity)||1,deadline});
+  fallbackGroups.set(key,group);
+ }
+ for(const group of fallbackGroups.values()){
+  const sources=group.sources,selected=dagRangeMinutes===0?sources:sources.filter(x=>x.deadline!==null&&x.deadline<=cutoff);
+  const byDish=new Map([[String(group.component.component_id),{name:group.component.name,quantity:selected.reduce((n,x)=>n+x.quantity,0)}]]);
+  rows.push({...group,selected,byDish,unscheduled:sources.filter(x=>x.deadline===null),total:sources.reduce((n,x)=>n+x.quantity,0),qty:selected.reduce((n,x)=>n+x.quantity,0),late:sources.filter(x=>x.deadline!==null&&x.deadline<now).reduce((n,x)=>n+x.quantity,0),fallback:true});
+ }
  const fmt=n=>Number(n.toFixed(2));
  const visible=rows.filter(r=>r.qty>0||dagRangeMinutes===0);
  const totalDue=visible.reduce((n,r)=>n+r.qty,0);
@@ -1174,19 +1192,27 @@ function kitchenDagView(active){
  const schedule=rows.flatMap(r=>r.sources.filter(x=>x.deadline!==null&&(dagRangeMinutes===0||x.deadline<=cutoff)).map(x=>({name:r.component.name,unit:r.component.unit,quantity:x.quantity,deadline:x.deadline,item:x.item,order:x.order})));
  const timeBuckets=new Map();
  for(const x of schedule){
-  const time=Math.ceil(x.deadline/(5*60000))*5*60000;
+  const time=Math.floor(x.deadline/(5*60000))*5*60000;
   const key=String(time)+'|'+x.name+'|'+x.unit;
   const entry=timeBuckets.get(key)||{time,name:x.name,unit:x.unit,quantity:0,items:[]};
   entry.quantity+=x.quantity;entry.items.push(x);timeBuckets.set(key,entry);
  }
- const scheduleRows=[...timeBuckets.values()].sort((a,b)=>a.time-b.time||a.name.localeCompare(b.name));
+ const scheduleGroups=new Map();
+ for(const entry of timeBuckets.values()){
+  const key=String(entry.time);
+  if(!scheduleGroups.has(key))scheduleGroups.set(key,{time:entry.time,components:[],quantity:0});
+  const group=scheduleGroups.get(key);
+  group.components.push(entry);
+  group.quantity+=entry.quantity;
+ }
+ const scheduleRows=[...scheduleGroups.values()].sort((a,b)=>a.time-b.time);
  const unscheduledTotal=rows.reduce((n,r)=>n+r.unscheduled.reduce((n,x)=>n+x.quantity,0),0);
- return '<section class="panel kds-dag-view kds-production-board"><div class="kds-dag-heading"><div><h2>Kitchen Production Board</h2><p class="muted small">Unfinished production requirements · grouped by Production Components</p></div><strong>'+fmt(totalDue)+' due</strong></div>'+
+ return '<section class="panel kds-dag-view kds-production-board"><div class="kds-dag-heading"><div><h2>Kitchen Production Board</h2><p class="muted small">Unfinished production requirements · components and unmapped dishes</p></div><strong>'+fmt(totalDue)+' due</strong></div>'+
  '<div class="kds-dag-controls"><span>Prepare by</span>'+[5,15,30,0].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+(n?'+'+n+'m':'All')+'</button>').join('')+'</div>'+
  '<p class="muted small">Includes overdue requirements. Time windows are measured from now; All includes orders without a deadline.</p>'+
  (visible.length?'<div class="kds-prod-grid">'+summary+'</div>':'<p class="muted">No production requirements in this time window.</p>')+
- '<h3 class="kds-prod-section-title">Ready by · 5-minute buckets</h3>'+
- (scheduleRows.length?'<div class="kds-prod-schedule">'+scheduleRows.map(b=>'<div class="kds-prod-schedule-row"><span class="kds-prod-time">'+clock(b.time)+(b.time<=now?' · Late':'')+'</span><span>'+esc(b.name)+'</span><strong>×'+fmt(b.quantity)+'</strong></div>').join('')+'</div>':'<p class="muted small">No timed production deadlines in this window.</p>')+
+ '<h3 class="kds-prod-section-title">Ready by · 5-minute groups</h3>'+
+ (scheduleRows.length?'<div class="kds-prod-schedule-groups">'+scheduleRows.map(g=>'<section class="kds-prod-schedule-group"><div class="kds-prod-schedule-header"><strong>'+clock(g.time)+(g.time<now?' · Overdue':'')+'</strong><span>'+g.components.length+' tasks</span></div>'+g.components.sort((a,b)=>a.name.localeCompare(b.name)).map(b=>'<div class="kds-prod-schedule-row"><span>'+esc(b.name)+'</span><strong>×'+fmt(b.quantity)+'</strong></div>').join('')+'</section>').join('')+'</div>':'<p class="muted small">No timed production deadlines in this window.</p>')+
  (unscheduledTotal?'<p class="muted small">'+fmt(unscheduledTotal)+' production units have no Ready by deadline'+(dagRangeMinutes===0?' (included above).':' (select All to include).')+'</p>':'')+
  '<p class="muted small">Quantities are component units, not dish counts. Completing an order item removes its mapped component requirements.</p></section>';
 }
