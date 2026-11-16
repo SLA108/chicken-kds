@@ -227,7 +227,13 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const checked=[];
   for(const statement of statements){
    checked.push(statement);
-   checked.push(env.DB.prepare("SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract('INVALID_JSON','
+   checked.push(env.DB.prepare("SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract('INVALID_JSON', '$') END AS guard_ok"));
+  }
+  try{await env.DB.batch(checked);}
+  catch(e){
+   if(String(e?.message||e).includes('malformed JSON'))return json({error:'Order changed; refresh'},409);
+   throw e;
+  }
   await broadcastStore(env,storeId,'orders',{id});
   await broadcastStore(env,storeId,'platform_order_edited',{id});
   return json({ok:true,updated_at:revision});
