@@ -50,7 +50,14 @@ test('platform editing requires optimistic revision and unstarted kitchen work',
  assert.ok(api.includes("const platformEdit=path.match("));
  assert.match(api,/Order changed; refresh/);
  assert.match(api,/Kitchen has started or order items changed; refresh/);
- assert.match(api,/AND NOT EXISTS\(SELECT 1 FROM order_items WHERE order_id=\? AND is_done=1\)/);
+ assert.match(api,/Completed dishes cannot be modified; refresh/);
+ assert.match(api,/b.items.filter\(i=>!existing.find\(x=>x.id===i.id\).is_done\)/);
  assert.match(ui,/Edit Platform Order/);
  assert.match(ui,/expected_updated_at:order\.updated_at/);
+});
+
+test('completed platform dishes are locked while unfinished dishes remain editable',()=>{
+ assert.match(ui,/Done \(locked\)/);
+ assert.match(ui,/i.is_done\?'disabled':''/);
+ assert.match(api,/existing.some\(i=>i.is_done&&b.items.find/);
 });
