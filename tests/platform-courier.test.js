@@ -152,3 +152,27 @@ test('platform edit aborts the entire D1 batch on a concurrent zero-row guarded 
  assert.match(edit,/await env\.DB\.batch\(checked\)/);
  assert.match(edit,/Order changed; refresh/);
 });
+
+test('platform edit supports adding and removing pending dishes with server-side menu and modifier validation',()=>{
+ const start=api.indexOf('const platformEdit=path.match');
+ const end=api.indexOf("if(path==='/api/store/kitchen/dag'",start);
+ const edit=api.slice(start,end);
+ assert.match(edit,/removed_ids/);
+ assert.match(edit,/added_items/);
+ assert.match(edit,/prepareOrderItems\(env,added,id,now,storeId,order.platform\)/);
+ assert.match(edit,/removed.some\(x=>!existing.some\(i=>i.id===x&&!i.is_done\)\)/);
+ assert.match(edit,/DELETE FROM order_item_modifiers/);
+ assert.match(edit,/DELETE FROM order_items/);
+ assert.match(edit,/await env\.DB\.batch\(checked\)/);
+});
+test('platform editor allows replacing pending dishes and editing modifier options',()=>{
+ const start=ui.indexOf('async function editPlatformOrder(id)');
+ const end=ui.indexOf('async function openQuickOrderDialog()',start);
+ const edit=ui.slice(start,end);
+ assert.match(edit,/data-edit-replace/);
+ assert.match(edit,/data-edit-remove/);
+ assert.match(edit,/data-edit-option/);
+ assert.match(edit,/removed_ids:/);
+ assert.match(edit,/added_items/);
+ assert.match(edit,/item.is_done\?'disabled'/);
+});
