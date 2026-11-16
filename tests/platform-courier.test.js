@@ -267,5 +267,5 @@ test('POS courier handoff uses accessible branded confirmation instead of native
  assert.match(modal,/Collection failed:/);
  assert.match(modal,/e\.key==='Escape'/);
  assert.doesNotMatch(modal,/\bconfirm\(/);
- assert.match(ui,/data-platform-workspace-collect'\]'.*confirmPlatformCollection/);
+ assert.match(ui,/querySelectorAll\('\[data-platform-workspace-collect\]'\)\.forEach\(b=>b\.onclick=\(\)=>confirmPlatformCollection\(b\.dataset\.platformWorkspaceCollect\)\)/);
 });
