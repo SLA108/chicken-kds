@@ -1056,6 +1056,18 @@ function kitchenProductionView(){
 function kitchenViewTabs(){
  return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
 }
+let dagRangeMinutes=30,dagSelectedNode='';
+function kitchenDagCluster(slots,windowStart,windowEnd){
+ const span=windowEnd-windowStart,threshold=42,trackWidth=Math.max(340,Math.min(1200,typeof window!=='undefined'?window.innerWidth*.52:600));
+ const visible=slots.filter(x=>Number.isFinite(x.deadline)&&x.deadline>=windowStart&&x.deadline<=windowEnd).sort((a,b)=>a.deadline-b.deadline);
+ const clusters=[];
+ for(const slot of visible){
+  const last=clusters[clusters.length-1],pixel=(slot.deadline-windowStart)/span*trackWidth;
+  if(last&&pixel-last.lastPixel<threshold){last.slots.push(slot);last.lastPixel=pixel;last.quantity+=slot.quantity;}
+  else clusters.push({slots:[slot],lastPixel:pixel,quantity:slot.quantity,deadline:slot.deadline});
+ }
+ return clusters;
+}
 function kitchenDagView(active){
  const now=Date.now(),componentData=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
  const defaultDineInMinutes=Number(componentData?.dine_in_minutes)||20;
@@ -1090,8 +1102,7 @@ function kitchenDagView(active){
   row.push({name:component.name,unit:component.unit,quantity:source.quantity});componentByItem.set(key,row);
  }
  const deadlines=list.flatMap(g=>[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite));
- const minTime=Math.min(now-15*60000,...deadlines),maxTime=Math.max(now+30*60000,...deadlines);
- const windowStart=Math.floor(minTime/(5*60000))*5*60000,windowEnd=Math.ceil(maxTime/(5*60000))*5*60000+5*60000,span=windowEnd-windowStart;
+ const windowStart=Math.floor((now-5*60000)/(5*60000))*5*60000,windowEnd=windowStart+dagRangeMinutes*60000,span=windowEnd-windowStart;
  const ticks=Array.from({length:7},(_,i)=>windowStart+span*i/6);
  const axis=ticks.map(t=>'<span>'+warsawClock(new Date(t).toISOString()).slice(0,5)+'</span>').join('');
  const nowPct=Math.max(0,Math.min(100,(now-windowStart)/span*100));
@@ -1107,6 +1118,7 @@ function kitchenDagView(active){
   if(!d.mapped_items)return 'Mappings exist, but none of the unfinished dishes match an assigned dish. Check the dish assignments in Backoffice.';
   return 'Mapped dishes exist, but no production conditions matched. Check modifier options, component status, and assigned quantities.';
  })()+'</p>'+(componentData?.production_diagnostics?'<p class="muted small">Diagnostics: '+componentData.production_diagnostics.active_components+' active components · '+componentData.production_diagnostics.active_mappings+' mappings · '+componentData.production_diagnostics.unfinished_items+' unfinished items · '+componentData.production_diagnostics.mapped_items+' mapped items · '+componentData.production_diagnostics.matched_components+' matched components</p>':'')+'</div>')+
+ '<div class="kds-dag-controls"><span>Timeline range</span>'+[15,30,60].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+n+' min</button>').join('')+'</div>'+
  '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Dish / Modifiers</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
  list.map(g=>{
   const slots=[...g.deadlines.values()].sort((a,b)=>(a.deadline??Infinity)-(b.deadline??Infinity));
@@ -1116,21 +1128,23 @@ function kitchenDagView(active){
    const key=c.name+' / '+c.unit;totals.set(key,(totals.get(key)||0)+Number(c.quantity));
   }
   const summary=[...totals].map(([name,qty])=>esc(name)+' ×'+Number(qty.toFixed(2))).join(' · ');
-  const markerGroups=new Map();
-  for(const slot of slots)if(slot.deadline!==null){
-   const pct=Math.max(0,Math.min(100,(slot.deadline-windowStart)/span*100));
-   const bucket=Math.round(pct/2);
-   const bucketSlots=markerGroups.get(bucket)||[];bucketSlots.push({...slot,pct});markerGroups.set(bucket,bucketSlots);
-  }
-  const markers=[...markerGroups.values()].map(bucket=>{
-   const pct=bucket.reduce((n,x)=>n+x.pct,0)/bucket.length,qty=bucket.reduce((n,x)=>n+x.quantity,0);
-   const earliest=Math.min(...bucket.map(x=>x.deadline)),late=earliest<now,urgent=!late&&earliest-now<=5*60000;
+  const clusters=kitchenDagCluster(slots,windowStart,windowEnd);
+  const markers=clusters.map(cluster=>{
+   const pct=(cluster.deadline-windowStart)/span*100,late=cluster.deadline<now,urgent=!late&&cluster.deadline-now<=5*60000;
    const bg=late?'#d96857':urgent?'#e8a648':'#559bdb';
-   const label=bucket.map(x=>clock(x.deadline)+' ×'+x.quantity).join(' / ');
-   return '<span class="kds-dag-deadline-marker" title="'+esc(label)+'" style="position:absolute;left:'+pct+'%;top:50%;transform:translate(-50%,-50%);min-width:30px;height:30px;padding:0 5px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:'+bg+';color:#fff;font-size:12px;font-weight:750;z-index:2;white-space:nowrap;box-shadow:0 1px 6px #0005">×'+qty+'</span>';
-  }).join('');
+   const id=encodeURIComponent(JSON.stringify([g.name,g.signature,g.note,cluster.slots.map(x=>x.deadline)]));
+   const selected=dagSelectedNode===id;
+   const details=cluster.slots.map(slot=>'<div class="kds-dag-node-slot"><strong>'+clock(slot.deadline)+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+'</div>').join('')+'</div>').join('');
+   const node='<button type="button" class="kds-dag-deadline-marker'+(selected?' is-selected':'')+'" data-dag-node="'+esc(id)+'" aria-expanded="'+selected+'" title="'+esc(cluster.slots.map(x=>clock(x.deadline)+' ×'+x.quantity).join(' / '))+'" style="left:'+pct+'%;background:'+bg+'">×'+cluster.quantity+'</button>';
+   return {node,details,id,selected,cluster};
+  });
+  const selectedMarker=markers.find(x=>x.selected);
+  const before=slots.filter(x=>x.deadline!==null&&x.deadline<windowStart).reduce((n,x)=>n+x.quantity,0);
+  const after=slots.filter(x=>x.deadline!==null&&x.deadline>windowEnd).reduce((n,x)=>n+x.quantity,0);
+  const markersHtml=markers.map(x=>x.node).join('');
+  const detailHtml=selectedMarker?'<div class="kds-dag-node-detail"><strong>Ready by · '+selectedMarker.cluster.quantity+' portions · '+selectedMarker.cluster.slots.length+' deadline'+(selectedMarker.cluster.slots.length===1?'':'s')+'</strong>'+selectedMarker.details+'</div>':'';
   const unset=slots.filter(x=>x.deadline===null).reduce((n,x)=>n+x.quantity,0);
-  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+(modifiers?' · '+esc(modifiers):' · No modifiers')+'</span>'+(g.note?'<small>'+esc(g.note)+'</small>':'')+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div><div class="kds-dag-now" style="left:'+nowPct+'%"></div>'+markers+'</div></div>'+
+  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+(modifiers?' · '+esc(modifiers):' · No modifiers')+'</span>'+(g.note?'<small>'+esc(g.note)+'</small>':'')+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div>'+(nowPct>=0&&nowPct<=100?'<div class="kds-dag-now" style="left:'+nowPct+'%"></div>':'')+markersHtml+'</div></div>'+(before||after?'<div class="kds-dag-outside">'+(before?'← '+before+' portions due earlier ':'')+(after?' · '+after+' portions due later →':'')+'</div>':'')+detailHtml+
  '<details class="kds-dag-detail"><summary>Ready by: '+slots.map(x=>(x.deadline===null?'Not set':clock(x.deadline))+' ×'+x.quantity).join(' · ')+(unset?'':'')+' · View '+g.items.length+' ticket items</summary>'+
  slots.map(slot=>'<div style="margin:8px 0"><strong>'+(slot.deadline===null?'Not set':clock(slot.deadline))+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</div>').join('')+'</details>';
  }).join('')+
@@ -1181,6 +1195,8 @@ function kitchen(){
  '<div class="toolbar"><button class="alt" id="kds-history-prev" '+(historyPage<=1?'disabled':'')+'>Previous</button><span>Page '+historyPage+'</span><button class="alt" id="kds-history-next" '+(!historyResult.has_more?'disabled':'')+'>Next</button></div>':'<p class="muted small">Completed orders are archived here. Open only when needed.</p>')+'</section>');
  if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);updateKitchenClock();
  bindKitchenViewTabs();
+ document.querySelectorAll('[data-dag-range]').forEach(btn=>btn.onclick=()=>{dagRangeMinutes=Number(btn.dataset.dagRange);dagSelectedNode='';kitchen()});
+ document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
  const retry=document.querySelector('#dag-production-retry');if(retry)retry.onclick=()=>loadKitchenProduction();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
