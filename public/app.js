@@ -1112,7 +1112,19 @@ function kitchenDagCluster(slots,windowStart,windowEnd){
 }
 const dagAssemblyExpanded=new Set();
 const dagAssemblyArmed=new Set();
+let dagAssemblyArmedStore='';
+function kitchenAssemblyStorageKey(){return 'kds-assembly-checked:'+String(currentDeviceStore?.id||'unknown')}
+function loadKitchenAssemblyChecked(){
+ const key=kitchenAssemblyStorageKey();
+ if(dagAssemblyArmedStore===key)return;
+ dagAssemblyArmedStore=key;dagAssemblyArmed.clear();
+ try{const ids=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(ids))for(const id of ids)if(typeof id==='string')dagAssemblyArmed.add(id)}catch(_){/* Storage may be unavailable */}
+}
+function saveKitchenAssemblyChecked(){
+ try{localStorage.setItem(kitchenAssemblyStorageKey(),JSON.stringify([...dagAssemblyArmed]))}catch(_){/* Keep in-memory selections */}
+}
 function kitchenDagView(active){
+ loadKitchenAssemblyChecked();
  const now=Date.now(),data=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
  const components=data?.production_components||[],dineInMinutes=Number(data?.dine_in_minutes)||20;
  const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
@@ -1158,7 +1170,9 @@ function kitchenDagView(active){
   rows.push({...group,selected,byDish,unscheduled:sources.filter(x=>x.deadline===null),total:sources.reduce((n,x)=>n+x.quantity,0),qty:selected.reduce((n,x)=>n+x.quantity,0),late:sources.filter(x=>x.deadline!==null&&x.deadline<now).reduce((n,x)=>n+x.quantity,0),fallback:true});
  }
  const fmt=n=>Number(n.toFixed(2));
- for(const id of dagAssemblyArmed)if(!itemById.has(id)||itemById.get(id).item.is_done)dagAssemblyArmed.delete(id);
+ let removedChecked=false;
+ for(const id of dagAssemblyArmed)if(!itemById.has(id)||itemById.get(id).item.is_done){dagAssemblyArmed.delete(id);removedChecked=true}
+ if(removedChecked)saveKitchenAssemblyChecked();
  const visible=rows.filter(r=>r.qty>0||dagRangeMinutes===0);
  const totalDue=visible.reduce((n,r)=>n+r.qty,0);
  const componentEmoji=name=>{
@@ -1295,14 +1309,14 @@ function kitchen(){
  document.querySelectorAll('[data-dag-range]').forEach(btn=>btn.onclick=()=>{dagRangeMinutes=Number(btn.dataset.dagRange);dagSelectedNode='';kitchen()});
  document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{acknowledgeKitchenProductionComponent(decodeURIComponent(btn.dataset.dagNode));dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
  document.querySelectorAll('[data-assembly-expand]').forEach(btn=>btn.onclick=()=>{const key=decodeURIComponent(btn.dataset.assemblyExpand);if(dagAssemblyExpanded.has(key))dagAssemblyExpanded.delete(key);else dagAssemblyExpanded.add(key);kitchen()});
- document.querySelectorAll('[data-assembly-cancel]').forEach(btn=>{const cancel=event=>{event.stopPropagation();dagAssemblyArmed.delete(btn.dataset.assemblyCancel);kitchen()};btn.onclick=cancel;btn.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cancel(event)}}});
+ document.querySelectorAll('[data-assembly-cancel]').forEach(btn=>{const cancel=event=>{event.stopPropagation();dagAssemblyArmed.delete(btn.dataset.assemblyCancel);saveKitchenAssemblyChecked();kitchen()};btn.onclick=cancel;btn.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cancel(event)}}});
  document.querySelectorAll('[data-assembly-done]').forEach(btn=>btn.onclick=async()=>{
   const id=btn.dataset.assemblyDone;
   if(kitchenBusy.has(id))return;
   const order=orders.find(o=>(o.items||[]).some(i=>String(i.id)===id));
   const item=order?.items.find(i=>String(i.id)===id);
   if(!item||item.is_done)return;
-  if(!dagAssemblyArmed.has(id)){dagAssemblyArmed.clear();dagAssemblyArmed.add(id);kitchen();return;}
+  if(!dagAssemblyArmed.has(id)){dagAssemblyArmed.add(id);saveKitchenAssemblyChecked();kitchen();return;}
   kitchenBusy.add(id);btn.disabled=true;
   kitchenPending.set(id,true);
   try{
@@ -1312,6 +1326,7 @@ function kitchen(){
    if(!saved||!saved.is_done)throw Error('Completion not confirmed');
    acknowledgeKitchenProductionItem(id);
    dagAssemblyArmed.delete(id);
+   saveKitchenAssemblyChecked();
    kitchenPending.delete(id);
    await refresh();
   }catch(e){
