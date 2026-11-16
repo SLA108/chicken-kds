@@ -90,7 +90,7 @@ if(path==='/api/device/pair/start'&&req.method==='POST'){
  const now=new Date(),expiry=new Date(now.getTime()+10*60*1000);
  try{await env.DB.prepare("INSERT INTO device_pair_requests(id,code,secret_hash,created_at,expires_at) VALUES(?,?,?,?,?)").bind(id,code,await sha256Hex(secret),now.toISOString(),expiry.toISOString()).run();}
  catch{return json({error:'Please retry pairing'},409);}
- return json({code,expires_at:expiry.toISOString()},200,{'set-cookie':pairCookie(secret)});
+ return json({code,expires_at:expiry.toISOString()},200,{'set-cookie':pairCookie(role,secret)});
 }
 if(path==='/api/device/pair/status'&&req.method==='GET'){
  if(req.headers.get('sec-fetch-site')==='cross-site')return json({error:'Forbidden'},403);
