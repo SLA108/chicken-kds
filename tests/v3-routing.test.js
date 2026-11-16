@@ -42,7 +42,9 @@ test('order-item preparation uses platform, store, then master price without dup
  assert.ok(!section.includes('SELECT m.*,COALESCE('));
  assert.ok(section.includes('m.price_cents+extra'));
  assert.ok(section.includes('platform=null'));
- assert.ok(section.includes("platform||''"));
+ assert.ok(section.includes('storeId&&platform'));
+ assert.ok(section.includes('COALESCE(o.price_cents,m.price_cents) AS price_cents'));
+ assert.ok(section.includes('bind(storeId,...unique)'));
 });
 
 test('device Quick Order and platform menu routes use scoped endpoints',()=>{
