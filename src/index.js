@@ -296,6 +296,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const tipAmount=b?.tip_amount_cents??0;
   if(!Number.isSafeInteger(tipAmount)||tipAmount<0||tipAmount>10000000||(tipAmount>0&&!['cash','card'].includes(b?.tip_method)))return json({error:'Invalid tip'},400);
   const id=scopedCheckout[1],storeId=session.storeId;
+  if(await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE order_id=? AND store_id=?').bind(id,storeId).first())return json({error:'Platform Orders are collected by couriers, not checked out at POS'},409);
   const order=await env.DB.prepare('SELECT id,status,paid_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
   if(!order)return json({error:'Ticket not found'},404);
   if(order.paid_at||order.status==='cancelled')return json({error:'Ticket cannot be paid'},409);
@@ -447,7 +448,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(scopedPickup&&req.method==='POST'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
   const now=new Date().toISOString();
-  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS (SELECT 1 FROM orders WHERE id=order_items.order_id AND store_id=? AND status!='cancelled')").bind(now,scopedPickup[1],session.storeId).run();
+  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS (SELECT 1 FROM orders WHERE id=order_items.order_id AND store_id=? AND status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id))").bind(now,scopedPickup[1],session.storeId).run();
   if(!result.meta.changes)return json({error:'Dish unavailable'},409);
   await broadcastStore(env,session.storeId,'pickup',{item_id:scopedPickup[1]});
   return json({ok:true});
@@ -487,7 +488,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const order=await env.DB.prepare('SELECT status FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
   if(!order)return json({error:'Order not found'},404);
   if(order.status==='cancelled')return json({error:'Order cancelled'},409);
-  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled')").bind(now,id,id,session.storeId).run();
+  const result=await env.DB.prepare("UPDATE order_items SET picked_up_at=? WHERE order_id=? AND is_done=1 AND picked_up_at IS NULL AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id))").bind(now,id,id,session.storeId).run();
   if(result.meta.changes)await broadcastStore(env,session.storeId,'pickup',{order_id:id,acknowledged:result.meta.changes});
   return json({ok:true,count:result.meta.changes||0});
  }
