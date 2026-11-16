@@ -259,7 +259,11 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const valid=new Map(components.map(c=>[c.id,c]));
   const mappings=[...globalMappings,...localMappings].filter(m=>valid.has(m.component_id)).map(m=>({...m,component_name:valid.get(m.component_id).name,unit:valid.get(m.component_id).unit,store_id:session.storeId}));
   const timing=await env.DB.prepare('SELECT dine_in_minutes FROM production_timing WHERE store_id=?').bind(session.storeId).first();
-  return json({store_id:session.storeId,generated_at:new Date().toISOString(),dine_in_minutes:timing?.dine_in_minutes??20,groups:buildKitchenDag(orders,{storeId:session.storeId}),production_components:aggregateProductionComponents(orders,mappings,{storeId:session.storeId})});
+  const productionComponents=aggregateProductionComponents(orders,mappings,{storeId:session.storeId});
+  const unfinishedItems=orders.flatMap(o=>o.items||[]).filter(i=>!i.is_done&&Number(i.quantity)>0);
+  const mappedMenuIds=new Set(mappings.map(m=>m.menu_id));
+  const mappedItems=unfinishedItems.filter(i=>mappedMenuIds.has(i.menu_id));
+  return json({store_id:session.storeId,generated_at:new Date().toISOString(),dine_in_minutes:timing?.dine_in_minutes??20,groups:buildKitchenDag(orders,{storeId:session.storeId}),production_components:productionComponents,production_diagnostics:{active_components:components.length,active_mappings:mappings.length,unfinished_items:unfinishedItems.length,mapped_items:mappedItems.length,matched_components:productionComponents.length}});
  }
  if(path==='/api/store/platform-orders/history/search'&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
