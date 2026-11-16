@@ -722,7 +722,7 @@ function kitchen(){
  '<div class="kds-history-list">'+historyResult.orders.map(o=>'<div class="kds-history-row"><div><strong>'+esc(o.table_no||sourceName[o.source])+'</strong><small>#'+esc(o.id.slice(0,8))+' · '+warsawClock(o.kitchen_completed_at)+' · '+o.items.length+' dishes</small><details><summary>View dishes</summary>'+o.items.map(i=>'<div>'+i.quantity+' × '+esc(i.name)+'</div>').join('')+'</details></div><button class="alt" data-kitchen-reopen="'+esc(o.id)+'">Reopen</button></div>').join('')+
  (historyResult.orders.length?'':'<p class="muted">No completed orders found</p>')+'</div>'+
  '<div class="toolbar"><button class="alt" id="kds-history-prev" '+(historyPage<=1?'disabled':'')+'>Previous</button><span>Page '+historyPage+'</span><button class="alt" id="kds-history-next" '+(!historyResult.has_more?'disabled':'')+'>Next</button></div>':'<p class="muted small">Completed orders are archived here. Open only when needed.</p>')+'</section>');
- if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);
+ if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);updateKitchenClock();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
  document.querySelector('#sync').onclick=()=>{if(adminTab==='overview')loadOverview().then(()=>{if(adminTab==='overview')admin()});else refresh();};
