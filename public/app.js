@@ -4,7 +4,7 @@ function scopedApiPath(path){
  if(!deviceMode())return path;
  if(!['pos','kitchen'].includes(page))return path;
  if(path==='/pos/pickups'||path.startsWith('/pos/pickups/'))return '/store'+path.slice('/pos'.length);
- if(path==='/platform-orders/history'||path==='/platform-orders/collection'||/^\/platform-orders\/[^/]+\/collect$/.test(path)||path==='/quick-orders'||path==='/kitchen/dag'||path==='/quick-order/menu'||path.startsWith('/quick-order/menu?'))return '/store'+path;
+ if(/^\/platform-orders\/[^/]+\/edit$/.test(path)||path==='/platform-orders/history'||path==='/platform-orders/collection'||/^\/platform-orders\/[^/]+\/collect$/.test(path)||path==='/quick-orders'||path==='/kitchen/dag'||path==='/quick-order/menu'||path.startsWith('/quick-order/menu?'))return '/store'+path;
  if(path==='/menu'||path==='/orders'||path==='/tables'||path==='/menu/modifiers'||path==='/kitchen/categories'||path==='/reservations'||path.startsWith('/reservations?'))return '/store'+path;
  if(/^\/(?:orders|order-items|reservations|pos\/pickups|kitchen\/orders)\//.test(path))return '/store'+path;
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
@@ -305,6 +305,16 @@ async function openCourierCollection(){
  }catch(e){list.textContent='Collection queue unavailable: '+e.message;}};
  await load();
 }
+async function editPlatformOrder(id){
+ const order=orders.find(o=>o.id===id&&o.platform);
+ if(!order)return notify('Platform order not found; refresh');
+ if(order.kitchen_completed_at||order.collected_at||order.items.some(i=>i.is_done))return notify('Editing is available only before kitchen preparation starts');
+ const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:1300;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px';
+ const form=document.createElement('form');form.style.cssText='width:min(540px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:12px;padding:20px;display:grid;gap:12px';
+ form.innerHTML='<h2>Edit Platform Order · #'+esc(order.external_order_id||order.id.slice(0,8))+'</h2><p class="muted">Update quantities and kitchen note before preparation. Dish selection and modifiers are locked.</p>'+order.items.map(i=>'<label style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>'+esc(i.name)+'</span><input type="number" min="1" max="99" required value="'+Number(i.quantity)+'" data-edit-item="'+esc(i.id)+'" style="width:85px"></label>').join('')+'<label>Kitchen note<textarea name="note" maxlength="500">'+esc(order.note||'')+'</textarea></label><div class="row"><button type="button" class="alt" id="platform-edit-cancel">Cancel</button><button type="submit">Save changes</button></div>';
+ overlay.append(form);document.body.append(overlay);const close=()=>overlay.remove();form.querySelector('#platform-edit-cancel').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
+ form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('[type="submit"]');button.disabled=true;try{await api('/platform-orders/'+encodeURIComponent(id)+'/edit','POST',{expected_updated_at:order.updated_at,note:form.elements.note.value,items:[...form.querySelectorAll('[data-edit-item]')].map(input=>({id:input.dataset.editItem,quantity:Number(input.value)}))});close();notify('Platform order updated');await refresh();}catch(err){notify('Edit failed: '+err.message);button.disabled=false;}};
+}
 async function openQuickOrderDialog(){
  const overlay=document.createElement('div');
  overlay.style.cssText='position:fixed;inset:0;z-index:1000;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -355,6 +365,7 @@ async function openQuickOrderDialog(){
 }
 
 document.addEventListener('click',e=>{if(e.target.closest('#pos-courier-queue'))openCourierCollection();});
+document.addEventListener('click',e=>{const button=e.target.closest('[data-platform-edit]');if(button)editPlatformOrder(button.dataset.platformEdit);});
 function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();}
 function categoryButtons(){return `<div class="chips">${['All',...new Set(menu.map(x=>x.category))].map(x=>`<button data-cat="${esc(x)}" class="${category===x?'selected':''}">${esc(x)}</button>`).join('')}</div>`;}
 
@@ -726,6 +737,7 @@ function kitchen(){
     (o.platform?'<div class="kds-head-row"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+'</strong><span>#'+esc(o.external_order_id||'')+'</span></div>':'')+
     (o.platform_deadline_at?'<div class="kds-deadline" style="margin-top:8px;padding:8px;border:2px solid #fbbf24;border-radius:10px"><div style="font-size:0.8rem;font-weight:800">READY BY · '+warsawClock(o.platform_deadline_at)+'</div><strong data-kitchen-deadline="'+esc(o.platform_deadline_at)+'" style="display:block;font-size:1.25rem;font-weight:900">Calculating…</strong></div>':'')+
    '</div>'+
+   (o.platform&&!o.items.some(i=>i.is_done)?'<button type="button" class="alt" data-platform-edit="'+esc(o.id)+'">Edit Platform Order</button>':'')+
    '<button class="kds-complete" data-kitchen-complete="'+esc(o.id)+'" '+(ready?'':'disabled')+'>'+(ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+done+'/'+o.items.length)+'</button>'+
    items.map((i,index)=>{const dish=menu.find(m=>m.id===i.menu_id);
     const category=String(dish?.category||'Other').trim()||'Other';
