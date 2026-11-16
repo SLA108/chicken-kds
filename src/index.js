@@ -221,8 +221,24 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const statements=[env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)"+changeGuard).bind(revision,b.note,id,storeId,b.expected_updated_at,...changed.map(i=>i.id))];
   for(const item of changed)statements.push(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
   statements.push(env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'platform_order_edited',?,?,? WHERE "+guard).bind(uid(),id,session.role,JSON.stringify({store_id:storeId,quantities:b.items.map(i=>({id:i.id,quantity:i.quantity}))}),now,id,storeId,revision));
-  const results=await env.DB.batch(statements);
-  if(results[0].meta.changes!==1||results.slice(1,-1).some(r=>r.meta.changes!==1))return json({error:'Order changed; refresh'},409);
+  // D1 batch is transactional, but a conditional UPDATE affecting zero rows does not throw.
+  // Assert each guarded write changed exactly one row *inside* the batch so a race
+  // causes SQL failure and rolls back all earlier writes, including the order revision.
+  const checked=[];
+  for(const statement of statements){
+   checked.push(statement);
+   checked.push(env.DB.prepare("SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract('INVALID_JSON','
+  await broadcastStore(env,storeId,'orders',{id});
+  await broadcastStore(env,storeId,'platform_order_edited',{id});
+  return json({ok:true,updated_at:revision});
+ }
+) END AS guard_ok"));
+  }
+  try{await env.DB.batch(checked);}
+  catch(e){
+   if(String(e?.message||e).includes('malformed JSON')||String(e?.message||e).includes('INVALID_JSON'))return json({error:'Order changed; refresh'},409);
+   throw e;
+  }
   await broadcastStore(env,storeId,'orders',{id});
   await broadcastStore(env,storeId,'platform_order_edited',{id});
   return json({ok:true,updated_at:revision});
