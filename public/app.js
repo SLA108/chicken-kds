@@ -269,7 +269,7 @@ function connect(){
  ws=socket;
  const current=()=>generation===wsGeneration&&ws===socket;
  socket.onopen=()=>{if(!current())return;connected=true;if(page==='pos'){catchUpReservationEvents();loadPosReservations();const status=document.querySelector('header .status');if(status){status.className='status online';status.textContent='● Live'}else render()}else render();refresh();};
- socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='platform_order_kitchen_created'){lastRealtimeMessage=Date.now();notifyKitchenPlatformOrder(m.data);}else if(m.type==='platform_order_edited'){lastRealtimeMessage=Date.now();refresh().then(()=>platformOrderUpdateAlert(m.data?.id||''));}else if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
+ socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='platform_order_kitchen_created'){lastRealtimeMessage=Date.now();notifyKitchenPlatformOrder(m.data);}else if(m.type==='platform_order_edited'){lastRealtimeMessage=Date.now();refresh().then(()=>platformOrderUpdateAlert(m.data?.id||''));}else if(m.type==='assembly_checks'){lastRealtimeMessage=Date.now();if(page==='kitchen')loadKitchenAssemblyChecked()}else if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
  socket.onclose=async event=>{if(!current())return;ws=null;connected=false;
  if(event.code===1008&&deviceMode()){
   const recovered=await renewDeviceSession();
@@ -1080,6 +1080,8 @@ async function loadKitchenProduction(){
  try{
   const result=await api('/kitchen/dag');
   if(page!=='kitchen'||kitchenView!=='dag'||epoch!==storeEpoch||store!==(currentDeviceStore?.id||''))return;
+  await loadKitchenAssemblyChecked();
+  if(page!=='kitchen'||kitchenView!=='dag'||epoch!==storeEpoch||store!==(currentDeviceStore?.id||''))return;
   captureKitchenProductionChanges(result,store);
   kitchenProduction=result;kitchenProductionStore=store;
   kitchen();
@@ -1112,19 +1114,22 @@ function kitchenDagCluster(slots,windowStart,windowEnd){
 }
 const dagAssemblyExpanded=new Set();
 const dagAssemblyArmed=new Set();
-let dagAssemblyArmedStore='';
-function kitchenAssemblyStorageKey(){return 'kds-assembly-checked:'+String(currentDeviceStore?.id||'unknown')}
-function loadKitchenAssemblyChecked(){
- const key=kitchenAssemblyStorageKey();
- if(dagAssemblyArmedStore===key)return;
- dagAssemblyArmedStore=key;dagAssemblyArmed.clear();
- try{const ids=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(ids))for(const id of ids)if(typeof id==='string')dagAssemblyArmed.add(id)}catch(_){/* Storage may be unavailable */}
-}
-function saveKitchenAssemblyChecked(){
- try{localStorage.setItem(kitchenAssemblyStorageKey(),JSON.stringify([...dagAssemblyArmed]))}catch(_){/* Keep in-memory selections */}
+let dagAssemblyChecksStore='';
+let dagAssemblyChecksLoaded=false;
+let dagAssemblyChecksSerial=0;
+async function loadKitchenAssemblyChecked(){
+ if(page!=='kitchen'||!token)return;
+ const store=currentDeviceStore?.id||'',epoch=storeEpoch,serial=++dagAssemblyChecksSerial;
+ try{
+  const result=await api('/kitchen/assembly-checks');
+  if(epoch!==storeEpoch||store!==(currentDeviceStore?.id||'')||serial!==dagAssemblyChecksSerial)return;
+  dagAssemblyArmed.clear();
+  for(const id of result.ids||[])dagAssemblyArmed.add(String(id));
+  dagAssemblyChecksStore=store;dagAssemblyChecksLoaded=true;
+  if(page==='kitchen'&&kitchenView==='dag')kitchen();
+ }catch(e){console.warn('Shared assembly checks unavailable',e)}
 }
 function kitchenDagView(active){
- loadKitchenAssemblyChecked();
  const now=Date.now(),data=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
  const components=data?.production_components||[],dineInMinutes=Number(data?.dine_in_minutes)||20;
  const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
@@ -1172,7 +1177,7 @@ function kitchenDagView(active){
  const fmt=n=>Number(n.toFixed(2));
  let removedChecked=false;
  for(const id of dagAssemblyArmed)if(!itemById.has(id)||itemById.get(id).item.is_done){dagAssemblyArmed.delete(id);removedChecked=true}
- if(removedChecked)saveKitchenAssemblyChecked();
+ // The next server refresh will also prune stale checked rows.
  const visible=rows.filter(r=>r.qty>0||dagRangeMinutes===0);
  const totalDue=visible.reduce((n,r)=>n+r.qty,0);
  const componentEmoji=name=>{
@@ -1309,14 +1314,14 @@ function kitchen(){
  document.querySelectorAll('[data-dag-range]').forEach(btn=>btn.onclick=()=>{dagRangeMinutes=Number(btn.dataset.dagRange);dagSelectedNode='';kitchen()});
  document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{acknowledgeKitchenProductionComponent(decodeURIComponent(btn.dataset.dagNode));dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
  document.querySelectorAll('[data-assembly-expand]').forEach(btn=>btn.onclick=()=>{const key=decodeURIComponent(btn.dataset.assemblyExpand);if(dagAssemblyExpanded.has(key))dagAssemblyExpanded.delete(key);else dagAssemblyExpanded.add(key);kitchen()});
- document.querySelectorAll('[data-assembly-cancel]').forEach(btn=>{const cancel=event=>{event.stopPropagation();dagAssemblyArmed.delete(btn.dataset.assemblyCancel);saveKitchenAssemblyChecked();kitchen()};btn.onclick=cancel;btn.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cancel(event)}}});
+ document.querySelectorAll('[data-assembly-cancel]').forEach(btn=>{const cancel=async event=>{event.stopPropagation();const id=btn.dataset.assemblyCancel;if(kitchenBusy.has(id))return;kitchenBusy.add(id);try{await api('/kitchen/assembly-checks/'+encodeURIComponent(id),'DELETE');dagAssemblyArmed.delete(id);kitchen();await loadKitchenAssemblyChecked()}catch(e){notify('Could not uncheck dish: '+e.message)}finally{kitchenBusy.delete(id)}};btn.onclick=cancel;btn.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cancel(event)}}});
  document.querySelectorAll('[data-assembly-done]').forEach(btn=>btn.onclick=async()=>{
   const id=btn.dataset.assemblyDone;
   if(kitchenBusy.has(id))return;
   const order=orders.find(o=>(o.items||[]).some(i=>String(i.id)===id));
   const item=order?.items.find(i=>String(i.id)===id);
   if(!item||item.is_done)return;
-  if(!dagAssemblyArmed.has(id)){dagAssemblyArmed.add(id);saveKitchenAssemblyChecked();kitchen();return;}
+  if(!dagAssemblyArmed.has(id)){kitchenBusy.add(id);try{await api('/kitchen/assembly-checks/'+encodeURIComponent(id),'PUT');dagAssemblyArmed.add(id);kitchen();await loadKitchenAssemblyChecked()}catch(e){notify('Could not check dish: '+e.message)}finally{kitchenBusy.delete(id)}return;}
   kitchenBusy.add(id);btn.disabled=true;
   kitchenPending.set(id,true);
   try{
@@ -1326,7 +1331,7 @@ function kitchen(){
    if(!saved||!saved.is_done)throw Error('Completion not confirmed');
    acknowledgeKitchenProductionItem(id);
    dagAssemblyArmed.delete(id);
-   saveKitchenAssemblyChecked();
+   await api('/kitchen/assembly-checks/'+encodeURIComponent(id),'DELETE').catch(()=>{});
    kitchenPending.delete(id);
    await refresh();
   }catch(e){
