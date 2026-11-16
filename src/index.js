@@ -206,6 +206,13 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const orders=await getStoreOrders(env,session.storeId);
   return json({store_id:session.storeId,generated_at:new Date().toISOString(),groups:buildKitchenDag(orders,{storeId:session.storeId})});
  }
+ if(path==='/api/store/platform-orders/history'&&req.method==='GET'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const params=new URL(req.url).searchParams;
+  const limit=Math.min(100,Math.max(1,Number.parseInt(params.get('limit')||'40',10)||40));
+  const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,pm.collected_by,o.created_at,o.kitchen_completed_at,o.status,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND pm.collected_at IS NOT NULL ORDER BY pm.collected_at DESC LIMIT ?").bind(session.storeId,session.storeId,limit).all()).results;
+  return json({orders:rows});
+ }
  if(path==='/api/store/platform-orders/collection'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,o.kitchen_completed_at,o.created_at,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND o.status!='cancelled' AND pm.collected_at IS NULL AND o.kitchen_completed_at IS NOT NULL ORDER BY o.kitchen_completed_at ASC LIMIT 100").bind(session.storeId,session.storeId).all()).results;
@@ -564,7 +571,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   return json({orders,total:Number(summary.total),page,size,summary:{total_cents:Number(summary.total_cents),cash_cents:Number(summary.cash_cents),card_cents:Number(summary.card_cents),other_cents:Number(summary.other_cents)},filters:{range,method,from,to}});
  }
  if(path==='/api/store/menu/modifiers'&&req.method==='GET'){
-  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const [groups,options,links]=await Promise.all([env.DB.prepare('SELECT id,name,min_select,max_select FROM modifier_groups WHERE active=1').all(),env.DB.prepare('SELECT id,group_id,name,price_cents FROM modifier_options WHERE active=1').all(),env.DB.prepare("SELECT l.menu_id,l.group_id FROM menu_modifier_groups l JOIN menu m ON m.id=l.menu_id LEFT JOIN store_menu_overrides o ON o.menu_id=m.id AND o.store_id=? WHERE COALESCE(o.active,m.active)=1 AND COALESCE(o.sold_out,0)=0").bind(session.storeId).all()]);
   return json({groups:groups.results,options:options.results,links:links.results});
  }
