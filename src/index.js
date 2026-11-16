@@ -238,17 +238,6 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   await broadcastStore(env,storeId,'platform_order_edited',{id});
   return json({ok:true,updated_at:revision});
  }
-) END AS guard_ok"));
-  }
-  try{await env.DB.batch(checked);}
-  catch(e){
-   if(String(e?.message||e).includes('malformed JSON')||String(e?.message||e).includes('INVALID_JSON'))return json({error:'Order changed; refresh'},409);
-   throw e;
-  }
-  await broadcastStore(env,storeId,'orders',{id});
-  await broadcastStore(env,storeId,'platform_order_edited',{id});
-  return json({ok:true,updated_at:revision});
- }
  if(path==='/api/store/kitchen/dag'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
