@@ -27,11 +27,11 @@ function allowed(role,action){return !!role&&roles[action].includes(role);}
 async function event(env,orderId,type,actor,detail={}){const now=new Date().toISOString();await env.DB.batch([env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),orderId,type,actor,JSON.stringify(detail),now),env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),orderId,type,JSON.stringify(detail),now)]);}
 // Store-scoped read model. Store ID comes only from a verified signed session.
 async function getStoreOrders(env,storeId,limit=120){
- const orders=(await env.DB.prepare("SELECT * FROM orders WHERE store_id=? AND status!='cancelled' AND (kitchen_completed_at IS NULL OR paid_at IS NULL OR EXISTS (SELECT 1 FROM table_occupancy t WHERE t.order_id=orders.id AND t.store_id=orders.store_id)) ORDER BY created_at DESC LIMIT ?").bind(storeId,limit).all()).results;
+ const orders=(await env.DB.prepare("SELECT * FROM orders WHERE store_id=? AND status!='cancelled' AND (EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL) OR (NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id) AND (kitchen_completed_at IS NULL OR paid_at IS NULL OR EXISTS (SELECT 1 FROM table_occupancy t WHERE t.order_id=orders.id AND t.store_id=orders.store_id)))) ORDER BY created_at DESC LIMIT ?").bind(storeId,limit).all()).results;
  if(!orders.length)return [];
  const ids=orders.map(o=>o.id),placeholders=ids.map(()=>'?').join(',');
  const items=(await env.DB.prepare(`SELECT i.* FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id IN (${placeholders}) ORDER BY i.created_at ASC`).bind(storeId,...ids).all()).results;
- const metadata=(await env.DB.prepare(`SELECT order_id,platform,external_order_id,platform_deadline_at FROM order_platform_metadata WHERE store_id=? AND order_id IN (${placeholders})`).bind(storeId,...ids).all()).results;
+ const metadata=(await env.DB.prepare(`SELECT order_id,platform,external_order_id,platform_deadline_at,collected_at,collected_by FROM order_platform_metadata WHERE store_id=? AND order_id IN (${placeholders})`).bind(storeId,...ids).all()).results;
  const metaByOrder=new Map(metadata.map(m=>[m.order_id,m]));
  const itemIds=items.map(i=>i.id);
  const modifiers=itemIds.length?(await env.DB.prepare(`SELECT m.* FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(storeId,...itemIds).all()).results:[];
@@ -206,6 +206,26 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const orders=await getStoreOrders(env,session.storeId);
   return json({store_id:session.storeId,generated_at:new Date().toISOString(),groups:buildKitchenDag(orders,{storeId:session.storeId})});
  }
+ if(path==='/api/store/platform-orders/collection'&&req.method==='GET'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,o.kitchen_completed_at,o.created_at,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND o.status!='cancelled' AND pm.collected_at IS NULL AND o.kitchen_completed_at IS NOT NULL ORDER BY o.kitchen_completed_at ASC LIMIT 100").bind(session.storeId,session.storeId).all()).results;
+  return json({orders:rows});
+ }
+ const courierCollect=path.match(/^\/api\/store\/platform-orders\/([^/]+)\/collect$/);
+ if(courierCollect&&req.method==='POST'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  const id=courierCollect[1],storeId=session.storeId,now=new Date().toISOString();
+  const result=await env.DB.prepare("UPDATE order_platform_metadata SET collected_at=?,collected_by=? WHERE order_id=? AND store_id=? AND collected_at IS NULL AND EXISTS(SELECT 1 FROM orders o WHERE o.id=order_platform_metadata.order_id AND o.store_id=? AND o.status='done' AND o.kitchen_completed_at IS NOT NULL)").bind(now,session.deviceId||session.role,id,storeId,storeId).run();
+  if(result.meta.changes!==1){
+   const existing=await env.DB.prepare('SELECT pm.collected_at,o.kitchen_completed_at,o.status FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.order_id=? AND pm.store_id=?').bind(id,storeId).first();
+   if(!existing)return json({error:'Platform order not found'},404);
+   if(existing.collected_at)return json({ok:true,already_collected:true});
+   return json({error:'Order must be completed by kitchen before courier collection'},409);
+  }
+  await event(env,id,'courier_collected',session.role,{store_id:storeId,collected_at:now});
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true,collected_at:now});
+ }
  if(path==='/api/store/orders'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
@@ -236,7 +256,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  }
  if(path==='/api/store/pickups'&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
-  const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' ORDER BY oi.done_at ASC LIMIT 200").bind(session.storeId).all()).results;
+  const rows=(await env.DB.prepare("SELECT oi.id AS item_id,oi.order_id,oi.name,oi.quantity,oi.done_at,o.table_no,o.source FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND oi.is_done=1 AND oi.picked_up_at IS NULL AND o.status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=o.id) ORDER BY oi.done_at ASC LIMIT 200").bind(session.storeId).all()).results;
   return json({items:rows});
  }
 
