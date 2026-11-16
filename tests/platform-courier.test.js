@@ -143,10 +143,10 @@ test('courier collection does not reference quick entry form or catalog state',(
 });
 
 test('platform edit aborts the entire D1 batch on a concurrent zero-row guarded write',()=>{
- const start=server.indexOf('const platformEdit=path.match');
- const end=server.indexOf("if(path==='/api/store/kitchen/dag'",start);
+ const start=api.indexOf('const platformEdit=path.match');
+ const end=api.indexOf("if(path==='/api/store/kitchen/dag'",start);
  assert.ok(start>=0&&end>start);
- const edit=server.slice(start,end);
+ const edit=api.slice(start,end);
  assert.match(edit,/for\(const statement of statements\)/);
  assert.match(edit,/SELECT CASE WHEN changes\(\)=1 THEN 1 ELSE json_extract/);
  assert.match(edit,/await env\.DB\.batch\(checked\)/);
