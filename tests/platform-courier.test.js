@@ -131,3 +131,13 @@ test('quick entry has platform buttons, category browser and top submit',()=>{
  assert.match(ui,/renderCatalog/);
  assert.match(ui,/data-quick-dish/);
 });
+
+test('courier collection does not reference quick entry form or catalog state',()=>{
+ const start=ui.indexOf('async function openCourierCollection()');
+ const end=ui.indexOf('function openPosPlatformOrders()',start);
+ assert.ok(start>=0&&end>start);
+ const courier=ui.slice(start,end);
+ assert.doesNotMatch(courier,/updateDishCount|renderCatalog|renderPlatforms|quick-dish-categories|form\.elements\.platform/);
+ assert.match(courier,/const load=async\(\)=>/);
+ assert.match(courier,/await load\(\)/);
+});
