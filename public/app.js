@@ -1157,7 +1157,7 @@ function kitchenDagView(active){
   return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+'</span>'+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div>'+(nowPct>=0&&nowPct<=100?'<div class="kds-dag-now" style="left:'+nowPct+'%"></div>':'')+markersHtml+'</div></div>'+(before||after?'<div class="kds-dag-outside">'+(before?'← '+before+' portions due earlier ':'')+(after?' · '+after+' portions due later →':'')+'</div>':'')+detailHtml+
  (unset?'<div class="kds-dag-outside">'+unset+' portions without a deadline</div>':'');
  }).join(''));
-+
+ }).join('')+
  (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Markers show portions due at each deadline, not preparation duration. Red = overdue · Amber = due within 5 minutes · Blue = upcoming. Dine-in: '+defaultDineInMinutes+' minutes from receipt; delivery: kitchen-selected deadline.</p></section>';
 }
 function bindKitchenViewTabs(){
