@@ -1559,8 +1559,8 @@ async function loadProduction(){
  if(!v3Loaded)await loadV3Stores();
  if(!productionStore)productionStore='global';
  if(productionStore)productionData=await api('/production-components?store_id='+encodeURIComponent(productionStore));
- pcTiming=productionStore==='global'?null:await api('/production-timing?store_id='+encodeURIComponent(productionStore));
  else productionData={components:[],mappings:[]};
+ pcTiming=productionStore==='global'?null:await api('/production-timing?store_id='+encodeURIComponent(productionStore));
 }
 let pcOpenComponent='',pcCategory='All',pcSearch='',pcEditComponent='',pcTiming=null;
 function productionPanel(){
