@@ -291,7 +291,7 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(path==='/api/store/platform-orders/history'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const params=new URL(req.url).searchParams;
-  const limit=Math.min(100,Math.max(1,Number.parseInt(params.get('limit')||'40',10)||40));
+  const limit=Math.min(40,Math.max(1,Number.parseInt(params.get('limit')||'40',10)||40));
   const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,pm.collected_by,o.created_at,o.kitchen_completed_at,o.status,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND pm.collected_at IS NOT NULL ORDER BY pm.collected_at DESC LIMIT ?").bind(session.storeId,session.storeId,limit).all()).results;
   return json({orders:rows});
  }
