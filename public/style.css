@@ -1060,3 +1060,22 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-dag-view .kds-dag-label{display:flex;flex-direction:column;gap:3px;min-width:0}
 .kds-dag-view .kds-dag-label>span{color:#cbd5e1;font-size:12px}
 .kds-dag-view .kds-dag-label>small{color:#a9bdd5;font-size:11px;line-height:1.3}
+
+/* Time-aware production requirements board */
+.kds-production-board .kds-prod-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0 20px}
+.kds-production-board .kds-prod-card{min-width:0;background:#29374b;border:1px solid #42516a;border-radius:12px;overflow:hidden}
+.kds-production-board .kds-prod-card-head{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px;background:transparent;color:#f1f5f9;border:0;text-align:left;cursor:pointer}
+.kds-production-board .kds-prod-card-head>span{min-width:0;display:flex;flex-direction:column;gap:5px}
+.kds-production-board .kds-prod-card-head small{color:#b7c6d8;font-size:12px;line-height:1.35}
+.kds-production-board .kds-prod-big{font-size:25px;white-space:nowrap}
+.kds-production-board .kds-prod-detail{border-top:1px solid #4a5a71;padding:12px 16px;display:flex;flex-direction:column;gap:8px;color:#e6edf6;font-size:13px}
+.kds-production-board .kds-prod-breakdown{display:flex;justify-content:space-between;gap:10px}
+.kds-production-board .kds-prod-deadline{padding:9px 0;border-top:1px solid #46556a}
+.kds-production-board .kds-prod-deadline>div{margin-top:5px}
+.kds-production-board .kds-prod-section-title{margin:18px 0 10px;font-size:16px}
+.kds-production-board .kds-prod-schedule{border:1px solid #42516a;border-radius:10px;overflow:hidden}
+.kds-production-board .kds-prod-schedule-row{display:grid;grid-template-columns:110px minmax(0,1fr) 65px;gap:10px;padding:10px 12px;align-items:center;border-bottom:1px solid #42516a;font-size:13px}
+.kds-production-board .kds-prod-schedule-row:last-child{border-bottom:0}
+.kds-production-board .kds-prod-schedule-row strong{text-align:right}
+.kds-production-board .kds-prod-time{color:#e4b86c;font-variant-numeric:tabular-nums}
+@media(max-width:650px){.kds-production-board .kds-prod-grid{grid-template-columns:1fr}.kds-production-board .kds-prod-schedule-row{grid-template-columns:92px minmax(0,1fr) 45px;gap:6px;padding:10px 8px}}
