@@ -4,7 +4,7 @@ function scopedApiPath(path){
  if(!deviceMode())return path;
  if(!['pos','kitchen'].includes(page))return path;
  if(path==='/pos/pickups'||path.startsWith('/pos/pickups/'))return '/store'+path.slice('/pos'.length);
- if(path==='/platform-orders/collection'||/^\/platform-orders\/[^/]+\/collect$/.test(path)||path==='/quick-orders'||path==='/kitchen/dag'||path==='/quick-order/menu'||path.startsWith('/quick-order/menu?'))return '/store'+path;
+ if(path==='/platform-orders/history'||path==='/platform-orders/collection'||/^\/platform-orders\/[^/]+\/collect$/.test(path)||path==='/quick-orders'||path==='/kitchen/dag'||path==='/quick-order/menu'||path.startsWith('/quick-order/menu?'))return '/store'+path;
  if(path==='/menu'||path==='/orders'||path==='/tables'||path==='/menu/modifiers'||path==='/kitchen/categories'||path==='/reservations'||path.startsWith('/reservations?'))return '/store'+path;
  if(/^\/(?:orders|order-items|reservations|pos\/pickups|kitchen\/orders)\//.test(path))return '/store'+path;
  if(path.startsWith('/pos/history')||path.startsWith('/kitchen/history'))return '/store'+path;
@@ -296,10 +296,11 @@ function storeBanner(){
 async function openCourierCollection(){
  const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:1200;background:#0009;display:flex;align-items:center;justify-content:center;padding:14px';
  const panel=document.createElement('div');panel.style.cssText='width:min(640px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:14px;padding:20px';
- panel.innerHTML='<div class="row" style="justify-content:space-between"><h2>Courier Collection</h2><button class="alt" id="courier-close">Close</button></div><p class="muted">Kitchen-completed platform orders awaiting courier pickup.</p><div id="courier-list">Loading…</div>';
+ panel.innerHTML='<div class="row" style="justify-content:space-between"><h2>Courier Collection</h2><button class="alt" id="courier-close">Close</button></div><p class="muted">Kitchen-completed platform orders awaiting courier pickup.</p><div class="row" style="gap:8px"><button type="button" id="courier-pending">Awaiting Collection</button><button type="button" class="alt" id="courier-history">Collection History</button></div><div id="courier-list">Loading…</div>';
  overlay.append(panel);document.body.append(overlay);const close=()=>overlay.remove();panel.querySelector('#courier-close').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
- const list=panel.querySelector('#courier-list');
- const load=async()=>{try{const data=await api('/platform-orders/collection');if(!overlay.isConnected)return;list.innerHTML=data.orders.length?data.orders.map(o=>'<article class="panel" style="margin:10px 0;padding:12px"><div class="row" style="justify-content:space-between"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+' · #'+esc(o.external_order_id)+'</strong><span>'+Number(o.dish_count)+' dishes</span></div><p class="muted small">Ready '+warsawClock(o.kitchen_completed_at)+'</p><button type="button" data-courier-collect="'+esc(o.order_id)+'">Collected by Courier</button></article>').join(''):'<p class="muted">No orders awaiting courier collection.</p>';
+ const list=panel.querySelector('#courier-list');let historyMode=false;
+ panel.querySelector('#courier-pending').onclick=()=>{historyMode=false;load()};panel.querySelector('#courier-history').onclick=()=>{historyMode=true;load()};
+ const load=async()=>{try{panel.querySelector('#courier-pending').className=historyMode?'alt':'';panel.querySelector('#courier-history').className=historyMode?'':'alt';const data=await api(historyMode?'/platform-orders/history':'/platform-orders/collection');if(!overlay.isConnected)return;list.innerHTML=data.orders.length?data.orders.map(o=>'<article class="panel" style="margin:10px 0;padding:12px"><div class="row" style="justify-content:space-between"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+' · #'+esc(o.external_order_id)+'</strong><span>'+Number(o.dish_count)+' dishes</span></div><p class="muted small">Ready '+warsawClock(o.kitchen_completed_at)+'</p><button type="button" data-courier-collect="'+esc(o.order_id)+'">Collected by Courier</button></article>').join('') :'<p class="muted">'+(historyMode?'No collected platform orders yet.':'No orders awaiting courier collection.')+'</p>';
  list.querySelectorAll('[data-courier-collect]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await api('/platform-orders/'+encodeURIComponent(button.dataset.courierCollect)+'/collect','POST',{});notify('Courier collection recorded');await load();await refresh();}catch(e){notify('Collection failed: '+e.message);button.disabled=false;}});
  }catch(e){list.textContent='Collection queue unavailable: '+e.message;}};
  await load();
@@ -315,11 +316,24 @@ async function openQuickOrderDialog(){
  const close=()=>overlay.remove();
  form.querySelector('#quick-order-cancel').onclick=close;
  overlay.onclick=e=>{if(e.target===overlay)close()};
- let platformMenu=[],loading=0;
+ let platformMenu=[],loading=0,platformModifiers={groups:[],options:[],links:[]};
  const itemsNode=form.querySelector('#quick-order-items');
  const choices=()=>platformMenu.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.name)+' · '+money(m.price_cents)+'</option>').join('');
- const add=()=>{if(!platformMenu.length){notify('No dishes available for this platform');return}const row=document.createElement('div');row.style.cssText='display:flex;gap:8px';row.innerHTML='<select aria-label="Dish" style="flex:1;min-width:0">'+choices()+'</select><input aria-label="Quantity" type="number" min="1" max="99" value="1" style="width:70px"><button type="button" class="alt" aria-label="Remove">×</button>';row.querySelector('button').onclick=()=>row.remove();itemsNode.append(row);};
- const load=async()=>{const current=++loading;const platform=form.elements.platform.value;form.querySelector('#quick-order-submit').disabled=true;try{const result=await api('/quick-order/menu?platform='+encodeURIComponent(platform));if(current!==loading)return;platformMenu=result;itemsNode.innerHTML='';if(result.length)add();else notify('No available dishes for '+platform);form.querySelector('#quick-order-submit').disabled=!result.length;}catch(e){if(current===loading)notify('Platform menu failed: '+e.message);}};
+ const groupsFor=id=>platformModifiers.groups.filter(g=>platformModifiers.links.some(l=>l.menu_id===id&&l.group_id===g.id));
+ const renderModifiers=row=>{
+  const menuId=row.querySelector('select[aria-label="Dish"]').value;
+  const target=row.querySelector('.platform-modifiers');target.innerHTML=groupsFor(menuId).map(g=>{
+   const options=platformModifiers.options.filter(o=>o.group_id===g.id);
+   return '<fieldset style="border:1px solid var(--border,#ccc);border-radius:8px;padding:8px"><legend>'+esc(g.name)+' · '+(g.min_select>0?'Required':'Optional')+' ('+g.min_select+'–'+g.max_select+')</legend>'+options.map(o=>'<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-platform-option="'+esc(o.id)+'" data-platform-group="'+esc(g.id)+'"> '+esc(o.name)+' · +'+money(o.price_cents)+'</label>').join('')+'</fieldset>';
+  }).join('');
+  target.querySelectorAll('input[type="checkbox"]').forEach(input=>input.onchange=()=>{
+   const g=groupsFor(menuId).find(g=>g.id===input.dataset.platformGroup);
+   const selected=[...target.querySelectorAll('input[data-platform-group="'+input.dataset.platformGroup+'"]:checked')];
+   if(g&&selected.length>g.max_select){input.checked=false;notify('Maximum '+g.max_select+' selections for '+g.name);}
+  });
+ };
+ const add=()=>{if(!platformMenu.length){notify('No dishes available for this platform');return}const row=document.createElement('div');row.style.cssText='display:grid;gap:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:10px';row.innerHTML='<div class="row" style="gap:8px"><select aria-label="Dish" style="flex:1;min-width:0">'+choices()+'</select><input aria-label="Quantity" type="number" min="1" max="99" value="1" style="width:70px"><button type="button" class="alt" aria-label="Remove">×</button></div><div class="platform-modifiers" style="display:grid;gap:6px"></div>';row.querySelector('button').onclick=()=>row.remove();row.querySelector('select').onchange=()=>renderModifiers(row);itemsNode.append(row);renderModifiers(row);};
+ const load=async()=>{const current=++loading;const platform=form.elements.platform.value;form.querySelector('#quick-order-submit').disabled=true;try{const [result,modifiers]=await Promise.all([api('/quick-order/menu?platform='+encodeURIComponent(platform)),api('/menu/modifiers')]);if(current!==loading)return;platformMenu=result;platformModifiers=modifiers;itemsNode.innerHTML='';if(result.length)add();else notify('No available dishes for '+platform);form.querySelector('#quick-order-submit').disabled=!result.length;}catch(e){if(current===loading)notify('Platform menu failed: '+e.message);}};
  form.elements.platform.onchange=load;
  form.querySelector('#quick-order-add').onclick=add;
  const deadlineInput=form.elements.ready_by;
@@ -332,7 +346,7 @@ async function openQuickOrderDialog(){
  let pendingKey=crypto.randomUUID();
  form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('#quick-order-submit');button.disabled=true;try{
   if(!checkDeadline()){deadlineInput.reportValidity();throw Error('Ready By must be a future time within 48 hours');}
-  const items=[...itemsNode.children].map(row=>({menu_id:row.querySelector('select').value,quantity:Number(row.querySelector('input').value)}));
+  const items=[...itemsNode.children].map(row=>{const menu_id=row.querySelector('select[aria-label="Dish"]').value;const option_ids=[...row.querySelectorAll('[data-platform-option]:checked')].map(el=>el.dataset.platformOption);for(const g of groupsFor(menu_id)){const selected=option_ids.filter(id=>platformModifiers.options.some(o=>o.id===id&&o.group_id===g.id)).length;if(selected<g.min_select||selected>g.max_select)throw Error('Select '+g.min_select+'–'+g.max_select+' options for '+g.name);}return {menu_id,quantity:Number(row.querySelector('input[aria-label="Quantity"]').value),option_ids};});
   if(!items.length)throw Error('Add at least one dish');
   const result=await api('/quick-orders','POST',{platform:form.elements.platform.value,external_order_id:form.elements.external_order_id.value,ready_by:new Date(form.elements.ready_by.value).toISOString(),note:form.elements.note.value,items,client_key:pendingKey});
   close();notify('Platform Order created · '+result.id.slice(0,8));await refresh();
