@@ -293,23 +293,33 @@ function storeBanner(){
   };
  };
 }
-function openQuickOrderDialog(){
+async function openQuickOrderDialog(){
  const overlay=document.createElement('div');
  overlay.style.cssText='position:fixed;inset:0;z-index:1000;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px';
  const form=document.createElement('form');
- form.style.cssText='background:var(--surface,#fff);color:var(--text,#222);border-radius:14px;padding:22px;width:min(560px,100%);max-height:90vh;overflow:auto;display:grid;gap:12px';
- const choices=menu.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.name)+' · '+money(m.price_cents)+'</option>').join('');
- form.innerHTML='<h2>Quick Order · Delivery</h2><label>Platform<select name="platform">'+[['wolt','Wolt'],['uber_eats','Uber Eats'],['pyszne','Pyszne.pl'],['glovo','Glovo'],['bolt_food','Bolt Food'],['other','Other']].map(([v,n])=>'<option value="'+v+'">'+n+'</option>').join('')+'</select></label><label>Platform order ID<input name="external_order_id" required maxlength="100"></label><label>Ready By<input name="ready_by" type="datetime-local" required></label><div id="quick-order-items" style="display:grid;gap:8px"></div><button type="button" id="quick-order-add" class="alt">+ Add dish</button><label>Kitchen note<textarea name="note" maxlength="500"></textarea></label><p class="muted small">No automatic payment is recorded. Dishes requiring modifiers must be entered through regular POS until modifier selection is available.</p><div class="row"><button type="button" id="quick-order-cancel" class="alt">Cancel</button><button type="submit" id="quick-order-submit">Send to Kitchen</button></div>';
+ form.style.cssText='background:var(--surface,#fff);color:var(--text,#222);border-radius:14px;padding:22px;width:min(620px,100%);max-height:90vh;overflow:auto;display:grid;gap:12px';
+ const platforms=[['wolt','Wolt'],['uber_eats','Uber Eats'],['pyszne','Pyszne.pl'],['glovo','Glovo'],['bolt_food','Bolt Food'],['other','Other']];
+ form.innerHTML='<h2>Quick Order · Delivery</h2><label>Platform<select name="platform">'+platforms.map(([v,n])=>'<option value="'+v+'">'+n+'</option>').join('')+'</select></label><label>Platform order ID<input name="external_order_id" required maxlength="100"></label><label>Ready By<input name="ready_by" type="datetime-local" required></label><div id="quick-order-items" style="display:grid;gap:8px"></div><button type="button" id="quick-order-add" class="alt">+ Add dish</button><label>Kitchen note<textarea name="note" maxlength="500"></textarea></label><p class="muted small">Prices and names follow this store and platform. Kitchen uses the canonical dish name. No automatic payment is recorded.</p><div class="row"><button type="button" id="quick-order-cancel" class="alt">Cancel</button><button type="submit" id="quick-order-submit">Send to Kitchen</button></div>';
  overlay.append(form);document.body.append(overlay);
- const add=()=>{const row=document.createElement('div');row.style.cssText='display:flex;gap:8px';row.innerHTML='<select aria-label="Dish" style="flex:1;min-width:0">'+choices+'</select><input aria-label="Quantity" type="number" min="1" max="99" value="1" style="width:70px"><button type="button" class="alt" aria-label="Remove">×</button>';row.querySelector('button').onclick=()=>row.remove();form.querySelector('#quick-order-items').append(row);};
- add();form.querySelector('#quick-order-add').onclick=add;
+ const close=()=>overlay.remove();
+ form.querySelector('#quick-order-cancel').onclick=close;
+ overlay.onclick=e=>{if(e.target===overlay)close()};
+ let platformMenu=[],loading=0;
+ const itemsNode=form.querySelector('#quick-order-items');
+ const choices=()=>platformMenu.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.name)+' · '+money(m.price_cents)+'</option>').join('');
+ const add=()=>{if(!platformMenu.length){notify('No dishes available for this platform');return}const row=document.createElement('div');row.style.cssText='display:flex;gap:8px';row.innerHTML='<select aria-label="Dish" style="flex:1;min-width:0">'+choices()+'</select><input aria-label="Quantity" type="number" min="1" max="99" value="1" style="width:70px"><button type="button" class="alt" aria-label="Remove">×</button>';row.querySelector('button').onclick=()=>row.remove();itemsNode.append(row);};
+ const load=async()=>{const current=++loading;const platform=form.elements.platform.value;form.querySelector('#quick-order-submit').disabled=true;try{const result=await api('/quick-order/menu?platform='+encodeURIComponent(platform));if(current!==loading)return;platformMenu=result;itemsNode.innerHTML='';if(result.length)add();else notify('No available dishes for '+platform);form.querySelector('#quick-order-submit').disabled=!result.length;}catch(e){if(current===loading)notify('Platform menu failed: '+e.message);}};
+ form.elements.platform.onchange=load;
+ form.querySelector('#quick-order-add').onclick=add;
  const local=new Date(Date.now()+30*60000);form.elements.ready_by.value=new Date(local.getTime()-local.getTimezoneOffset()*60000).toISOString().slice(0,16);
- const close=()=>overlay.remove();form.querySelector('#quick-order-cancel').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
+ let pendingKey=crypto.randomUUID();
  form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('#quick-order-submit');button.disabled=true;try{
-  const items=[...form.querySelector('#quick-order-items').children].map(row=>({menu_id:row.querySelector('select').value,quantity:Number(row.querySelector('input').value)}));
-  const result=await api('/quick-orders','POST',{platform:form.elements.platform.value,external_order_id:form.elements.external_order_id.value,ready_by:new Date(form.elements.ready_by.value).toISOString(),note:form.elements.note.value,items,client_key:crypto.randomUUID()});
+  const items=[...itemsNode.children].map(row=>({menu_id:row.querySelector('select').value,quantity:Number(row.querySelector('input').value)}));
+  if(!items.length)throw Error('Add at least one dish');
+  const result=await api('/quick-orders','POST',{platform:form.elements.platform.value,external_order_id:form.elements.external_order_id.value,ready_by:new Date(form.elements.ready_by.value).toISOString(),note:form.elements.note.value,items,client_key:pendingKey});
   close();notify('Quick Order created · '+result.id.slice(0,8));await refresh();
  }catch(err){notify('Quick Order failed: '+err.message);button.disabled=false;}};
+ await load();
 }
 
 function render(){if(!token){login();return}if(page==='pos')pos();else if(page==='kitchen')kitchen();else if(page==='admin')admin();}
