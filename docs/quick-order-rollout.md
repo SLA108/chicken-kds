@@ -36,3 +36,13 @@ npm test
 - Menu pricing currently follows the existing store-specific menu override logic; platform-specific overrides are future work.
 - Dishes with mandatory modifiers must use the existing POS flow until Quick Order modifier selection is implemented.
 - Keep the PR as Draft until database migration, end-to-end testing and release checks are complete.
+
+## Platform menu mappings (development build)
+- Apply `migrations/platform_menu_overrides.sql` to the same D1 database **before deploying the updated Worker**.
+- Back Office → Menu → Delivery Platform Menus: select restaurant, platform, then configure name, price, and availability per canonical dish.
+- Empty platform name/price falls back to the master dish name and store-specific price.
+- Platform names appear in Quick Order selection; kitchen order items retain the canonical kitchen name.
+- POS and Kitchen device sessions route `/quick-orders`, `/quick-order/menu?platform=...`, and `/kitchen/dag` to their store-scoped endpoints.
+- Quick Order uses a stable client key on retry to avoid creating duplicate orders after ambiguous network failures.
+- The existing `migrations/quick_order_platform.sql` is also required if not previously applied.
+- Run `npm run check:syntax && npm test` and manually test POS/Kitchen device sessions, platform menu editing, platform price snapshot, cross-store isolation, and ordinary POS checkout before rollout.
