@@ -1,3 +1,4 @@
+import { validateQuickOrder } from './quick-order.js';
 import { buildKitchenDag } from './kitchen-dag.js';
 import {attendanceQrToken,qrSlot,QR_PERIOD_MS} from './attendance-qr.js';
 import {isPairingCode,isDeviceRole,pairingExpired,approvalAttemptPolicy,parseDeviceCookie} from './device-pairing.js';
@@ -30,9 +31,11 @@ async function getStoreOrders(env,storeId,limit=120){
  if(!orders.length)return [];
  const ids=orders.map(o=>o.id),placeholders=ids.map(()=>'?').join(',');
  const items=(await env.DB.prepare(`SELECT i.* FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND i.order_id IN (${placeholders}) ORDER BY i.created_at ASC`).bind(storeId,...ids).all()).results;
+ const metadata=(await env.DB.prepare(`SELECT order_id,platform,external_order_id,platform_deadline_at FROM order_platform_metadata WHERE store_id=? AND order_id IN (${placeholders})`).bind(storeId,...ids).all()).results;
+ const metaByOrder=new Map(metadata.map(m=>[m.order_id,m]));
  const itemIds=items.map(i=>i.id);
  const modifiers=itemIds.length?(await env.DB.prepare(`SELECT m.* FROM order_item_modifiers m JOIN order_items i ON i.id=m.order_item_id JOIN orders o ON o.id=i.order_id WHERE o.store_id=? AND m.order_item_id IN (${itemIds.map(()=>'?').join(',')})`).bind(storeId,...itemIds).all()).results:[];
- return orders.map(o=>({...o,items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));
+ return orders.map(o=>({...o,...(metaByOrder.get(o.id)||{}),items:items.filter(i=>i.order_id===o.id).map(i=>({...i,modifiers:modifiers.filter(m=>m.order_item_id===i.id)}))}));
 }
 async function prepareOrderItems(env,items,orderId,now,storeId=null){
  const unique=[...new Set(items.map(x=>x.menu_id))];
@@ -164,6 +167,31 @@ if(sessionToken){
  return json({store_id:session.storeId,server_time:now,period_ms:QR_PERIOD_MS,expires_at:(first+4)*QR_PERIOD_MS,tokens});
 }
 if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,store:{id:device.store_id,code:device.code,name:device.name},stores:await listAllowedDeviceStores(env,session.deviceId),expires_at:session.expiresAt,attendance_qr_enabled:(await env.DB.prepare('SELECT enabled FROM device_attendance_qr_access WHERE device_id=?').bind(session.deviceId).first())?.enabled===1,api_enabled:false});
+ if(path==='/api/store/quick-orders'&&req.method==='POST'){
+  if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
+  let b;
+  try{b=validateQuickOrder(await parse(req));}catch(e){return json({error:e.message},400);}
+  const storeId=session.storeId;
+  const existing=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
+  if(existing)return existing.store_id===storeId?json({id:existing.id,duplicate:true}):json({error:'Client key already used'},409);
+  const already=await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE store_id=? AND platform=? AND external_order_id=?').bind(storeId,b.platform,b.external_order_id).first();
+  if(already)return json({error:'Platform order ID already registered',id:already.order_id},409);
+  const id=uid(),now=new Date().toISOString();
+  const statements=[env.DB.prepare('INSERT INTO orders(id,source,table_no,status,note,created_at,updated_at,created_by,client_key,store_id) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,'delivery','', 'new',b.note,now,now,session.role,b.client_key,storeId)];
+  try{statements.push(...await prepareOrderItems(env,b.items,id,now,storeId));}catch(e){return json({error:e.message},400);}
+  statements.push(env.DB.prepare('INSERT INTO order_platform_metadata(order_id,store_id,platform,external_order_id,platform_deadline_at,created_at) VALUES(?,?,?,?,?,?)').bind(id,storeId,b.platform,b.external_order_id,b.ready_by,now));
+  statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'created',session.role,JSON.stringify({store_id:storeId,platform:b.platform,external_order_id:b.external_order_id,ready_by:b.ready_by}),now));
+  statements.push(env.DB.prepare('INSERT INTO sync_outbox(id,order_id,event,payload,created_at) VALUES(?,?,?,?,?)').bind(uid(),id,'created',JSON.stringify({store_id:storeId,platform:b.platform}),now));
+  try{await env.DB.batch(statements);}catch(e){
+   const duplicate=await env.DB.prepare('SELECT id,store_id FROM orders WHERE client_key=?').bind(b.client_key).first();
+   if(duplicate)return duplicate.store_id===storeId?json({id:duplicate.id,duplicate:true}):json({error:'Client key already used'},409);
+   if(String(e).includes('UNIQUE'))return json({error:'Platform order ID already registered'},409);
+   throw e;
+  }
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({id,store_id:storeId,platform:b.platform,external_order_id:b.external_order_id,ready_by:b.ready_by},201);
+ }
+
  if(path==='/api/store/kitchen/dag'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
