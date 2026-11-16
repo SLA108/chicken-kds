@@ -45,3 +45,12 @@ test('collected platform orders cannot be reopened or changed via ordinary POS i
  assert.match(api,/Courier has already collected this platform order/);
  assert.match(api,/Use Platform Orders to manage platform items/);
 });
+
+test('platform editing requires optimistic revision and unstarted kitchen work',()=>{
+ assert.match(api,/path\.match\(\/\^\\\/api\\\/store\\\/platform-orders/);
+ assert.match(api,/Order changed; refresh/);
+ assert.match(api,/Kitchen has started or order items changed; refresh/);
+ assert.match(api,/AND NOT EXISTS\(SELECT 1 FROM order_items WHERE order_id=\? AND is_done=1\)/);
+ assert.match(ui,/Edit Platform Order/);
+ assert.match(ui,/expected_updated_at:order\.updated_at/);
+});
