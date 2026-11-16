@@ -89,3 +89,17 @@ test('platform modifiers use responsive compact option rows',()=>{
  assert.match(ui,/platform-dish-top/);
  assert.match(ui,/quickOrderStyle\.remove\(\)/);
 });
+
+test('changing platform warns before clearing dish selections',()=>{
+ assert.match(ui,/Changing the delivery platform will clear the selected dishes and modifiers/);
+ assert.match(ui,/form\.elements\.platform\.value=loadedPlatform/);
+});
+test('POS platform order list supports filtering and compact cards',()=>{
+ assert.match(ui,/pos-platform-search/);
+ assert.match(ui,/No matching unfinished platform orders/);
+});
+test('platform edits broadcast a dedicated update notification',()=>{
+ assert.match(api,/broadcastStore\(env,storeId,'platform_order_edited',\{id\}\)/);
+ assert.match(ui,/ORDER UPDATED/);
+ assert.match(ui,/platformOrderUpdateAlert/);
+});
