@@ -1056,7 +1056,7 @@ function kitchenProductionView(){
 function kitchenViewTabs(){
  return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
 }
-let dagRangeMinutes=30,dagSelectedNode='',dagCollapsedCategories=new Set();
+let dagRangeMinutes=15,dagSelectedNode='',dagCollapsedCategories=new Set();
 function kitchenDagCluster(slots,windowStart,windowEnd){
  const span=windowEnd-windowStart,threshold=42,trackWidth=Math.max(340,Math.min(1200,typeof window!=='undefined'?window.innerWidth*.52:600));
  const visible=slots.filter(x=>Number.isFinite(x.deadline)&&x.deadline>=windowStart&&x.deadline<=windowEnd).sort((a,b)=>a.deadline-b.deadline);
@@ -1069,99 +1069,67 @@ function kitchenDagCluster(slots,windowStart,windowEnd){
  return clusters;
 }
 function kitchenDagView(active){
- const now=Date.now(),componentData=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
- const defaultDineInMinutes=Number(componentData?.dine_in_minutes)||20;
- const deadlineFor=order=>{
-  const explicit=order.platform_deadline_at?Date.parse(order.platform_deadline_at):NaN;
-  if(Number.isFinite(explicit))return explicit;
-  if(order.platform)return null;
-  const received=Date.parse(order.created_at);
-  return Number.isFinite(received)?received+defaultDineInMinutes*60000:null;
- };
- const modifierSignature=item=>(item.modifiers||[]).map(m=>[String(m.option_id||m.id||''),String(m.name||m.option_name||''),Number(m.quantity||1)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
- const menuById=new Map(menu.map(m=>[String(m.id),m]));
- const groups=new Map();
- for(const order of active)for(const item of order.items||[]){
-  if(item.is_done)continue;
-  const deadline=deadlineFor(order),signature=modifierSignature(item);
-  const itemMenu=menuById.get(String(item.menu_id));
-  const dagGroup=String(itemMenu?.dag_group||'').trim();
-  const itemCategory=String(itemMenu?.category||'Other Dishes');
-  const key=dagGroup?JSON.stringify(['group',dagGroup]):JSON.stringify(['item',String(item.menu_id||item.name)]);
-  if(!groups.has(key))groups.set(key,{key,name:dagGroup||item.name,category:dagGroup?'DAG Groups':itemCategory,quantity:0,items:[],deadlines:new Map(),first:order.created_at});
-  const group=groups.get(key),qty=Number(item.quantity)||1,deadlineKey=deadline===null?'unset':String(deadline);
-  group.quantity+=qty;group.items.push({order,item,deadline});
-  if(!group.deadlines.has(deadlineKey))group.deadlines.set(deadlineKey,{deadline,quantity:0,items:[]});
-  const slot=group.deadlines.get(deadlineKey);slot.quantity+=qty;slot.items.push({order,item});
-  if(order.created_at<group.first)group.first=order.created_at;
- }
- const list=[...groups.values()].sort((a,b)=>{
-  const earliest=g=>Math.min(...[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite),Infinity);
-  return earliest(a)-earliest(b)||a.first.localeCompare(b.first);
- });
- const categories=new Map();
- for(const group of list){if(!categories.has(group.category))categories.set(group.category,[]);categories.get(group.category).push(group)}
- const components=componentData?.production_components||[];
- const componentByItem=new Map();
- for(const component of components)for(const source of component.sources||[]){
-  const key=String(source.order_item_id),row=componentByItem.get(key)||[];
-  row.push({name:component.name,unit:component.unit,quantity:source.quantity});componentByItem.set(key,row);
- }
- const deadlines=list.flatMap(g=>[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite));
- const earliestDeadline=deadlines.length?Math.min(...deadlines):now;
- // Keep overdue unfinished dishes visible: anchor the window to the earliest pending deadline.
- const anchorTime=Math.min(now-5*60000,earliestDeadline-2*60000);
- const windowStart=Math.floor(anchorTime/(5*60000))*5*60000,windowEnd=windowStart+dagRangeMinutes*60000,span=windowEnd-windowStart;
- const ticks=Array.from({length:7},(_,i)=>windowStart+span*i/6);
- const axis=ticks.map(t=>'<span>'+warsawClock(new Date(t).toISOString()).slice(0,5)+'</span>').join('');
- const nowPct=Math.max(0,Math.min(100,(now-windowStart)/span*100));
+ const now=Date.now(),data=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
+ const components=data?.production_components||[],dineInMinutes=Number(data?.dine_in_minutes)||20;
  const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
- const total=list.reduce((n,g)=>n+g.quantity,0);
- return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">One timeline per menu item · packaging options remain in ticket details</p></div><strong>'+total+' portions</strong></div>'+
- (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="kds-production-chip">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<div class="admin-inline-form" style="margin:10px 0"><strong>Production components not matched</strong><p class="muted small">'+(()=>{
-  const d=componentData?.production_diagnostics;
-  if(!d)return 'Production mapping diagnostics unavailable. Reload the kitchen page after deployment.';
-  if(!d.active_components)return 'No active production components are available for this restaurant. Check Backoffice → Production Components and the selected restaurant.';
-  if(!d.active_mappings)return 'Components exist, but no dish assignments are available for this restaurant. In Backoffice → Production Components, open a component and assign dishes or modifier options.';
-  if(!d.unfinished_items)return 'No unfinished order items currently need production.';
-  if(!d.mapped_items)return 'Mappings exist, but none of the unfinished dishes match an assigned dish. Check the dish assignments in Backoffice.';
-  return 'Mapped dishes exist, but no production conditions matched. Check modifier options, component status, and assigned quantities.';
- })()+'</p>'+(componentData?.production_diagnostics?'<p class="muted small">Diagnostics: '+componentData.production_diagnostics.active_components+' active components · '+componentData.production_diagnostics.active_mappings+' mappings · '+componentData.production_diagnostics.unfinished_items+' unfinished items · '+componentData.production_diagnostics.mapped_items+' mapped items · '+componentData.production_diagnostics.matched_components+' matched components</p>':'')+'</div>')+
- '<div class="kds-dag-controls"><span>Timeline range</span>'+[15,30,60].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+n+' min</button>').join('')+'</div>'+
- '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Menu item</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
- [...categories.entries()].map(([category,categoryGroups])=>{
- const categoryId=encodeURIComponent(category),collapsed=dagCollapsedCategories.has(category);
- const categoryQty=categoryGroups.reduce((n,g)=>n+g.quantity,0);
- const header='<button type="button" class="kds-dag-category" data-dag-category="'+esc(categoryId)+'" aria-expanded="'+(!collapsed)+'"><span>'+(collapsed?'▸':'▾')+' '+esc(category)+'</span><strong>'+categoryGroups.length+' items · '+categoryQty+' portions</strong></button>';
- return header+(collapsed?'':categoryGroups.map(g=>{
-  const slots=[...g.deadlines.values()].sort((a,b)=>(a.deadline??Infinity)-(b.deadline??Infinity));
-  const modifiers='';
-  const totals=new Map();
-  for(const {item} of g.items)for(const c of componentByItem.get(String(item.id))||[]){
-   const key=c.name+' / '+c.unit;totals.set(key,(totals.get(key)||0)+Number(c.quantity));
-  }
-  const summary=[...totals].map(([name,qty])=>esc(name)+' ×'+Number(qty.toFixed(2))).join(' · ');
-  const clusters=kitchenDagCluster(slots,windowStart,windowEnd);
-  const markers=clusters.map(cluster=>{
-   const pct=(cluster.deadline-windowStart)/span*100,late=cluster.deadline<now,urgent=!late&&cluster.deadline-now<=5*60000;
-   const bg=late?'#d96857':urgent?'#e8a648':'#559bdb';
-   const id=encodeURIComponent(JSON.stringify([g.key,cluster.slots.map(x=>x.deadline)]));
-   const selected=dagSelectedNode===id;
-   const details=cluster.slots.map(slot=>'<div class="kds-dag-node-slot"><strong>'+clock(slot.deadline)+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+(item.modifiers?.length?' · '+esc(item.modifiers.map(m=>m.name||m.option_name).filter(Boolean).join(', ')):'')+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</div>').join('');
-   const node='<button type="button" class="kds-dag-deadline-marker'+(selected?' is-selected':'')+'" data-dag-node="'+esc(id)+'" aria-expanded="'+selected+'" title="'+esc(cluster.slots.map(x=>clock(x.deadline)+' ×'+x.quantity).join(' / '))+'" style="left:'+pct+'%;background:'+bg+'">×'+cluster.quantity+'</button>';
-   return {node,details,id,selected,cluster};
-  });
-  const selectedMarker=markers.find(x=>x.selected);
-  const before=slots.filter(x=>x.deadline!==null&&x.deadline<windowStart).reduce((n,x)=>n+x.quantity,0);
-  const after=slots.filter(x=>x.deadline!==null&&x.deadline>windowEnd).reduce((n,x)=>n+x.quantity,0);
-  const markersHtml=markers.map(x=>x.node).join('');
-  const detailHtml=selectedMarker?'<div class="kds-dag-node-detail"><strong>Ready by · '+selectedMarker.cluster.quantity+' portions · '+selectedMarker.cluster.slots.length+' deadline'+(selectedMarker.cluster.slots.length===1?'':'s')+'</strong>'+selectedMarker.details+'</div>':'';
-  const unset=slots.filter(x=>x.deadline===null).reduce((n,x)=>n+x.quantity,0);
-  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+'</span>'+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div>'+(nowPct>=0&&nowPct<=100?'<div class="kds-dag-now" style="left:'+nowPct+'%"></div>':'')+markersHtml+'</div></div>'+(before||after?'<div class="kds-dag-outside">'+(before?'← '+before+' portions due earlier ':'')+(after?' · '+after+' portions due later →':'')+'</div>':'')+detailHtml+
- (unset?'<div class="kds-dag-outside">'+unset+' portions without a deadline</div>':'');
- }).join(''));
- }).join('')+
- (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Markers show portions due at each deadline, not preparation duration. Red = overdue · Amber = due within 5 minutes · Blue = upcoming. Dine-in: '+defaultDineInMinutes+' minutes from receipt; delivery: kitchen-selected deadline.</p></section>';
+ const orderById=new Map(active.map(o=>[String(o.id),o]));
+ const itemById=new Map(active.flatMap(o=>(o.items||[]).map(item=>[String(item.id),{item,order:o}])));
+ const cutoff=dagRangeMinutes===0?Infinity:now+dagRangeMinutes*60000;
+ const rows=components.map(component=>{
+  const sources=(component.sources||[]).map(source=>{
+   const matched=itemById.get(String(source.order_item_id));
+   if(!matched||matched.item.is_done)return null;
+   const {item,order}=matched;
+   const explicit=order.platform_deadline_at?Date.parse(order.platform_deadline_at):NaN;
+   const received=Date.parse(order.created_at);
+   const deadline=Number.isFinite(explicit)?explicit:order.platform?null:Number.isFinite(received)?received+dineInMinutes*60000:null;
+   return {item,order,quantity:Number(source.quantity)||0,deadline};
+  }).filter(Boolean);
+  const due=sources.filter(x=>x.deadline!==null&&x.deadline<=cutoff);
+  const unscheduled=sources.filter(x=>x.deadline===null);
+  const selected=dagRangeMinutes===0?sources:due;
+  const total=sources.reduce((n,x)=>n+x.quantity,0);
+  const qty=selected.reduce((n,x)=>n+x.quantity,0);
+  const late=sources.filter(x=>x.deadline!==null&&x.deadline<now).reduce((n,x)=>n+x.quantity,0);
+  const byDish=new Map();
+  for(const x of selected){const key=String(x.item.menu_id||x.item.name);const entry=byDish.get(key)||{name:x.item.name,quantity:0};entry.quantity+=x.quantity;byDish.set(key,entry)}
+  return {component,sources,due,unscheduled,selected,total,qty,late,byDish};
+ }).filter(x=>x.total>0);
+ const fmt=n=>Number(n.toFixed(2));
+ const visible=rows.filter(r=>r.qty>0||dagRangeMinutes===0);
+ const totalDue=visible.reduce((n,r)=>n+r.qty,0);
+ const summary=visible.map(r=>{
+  const id=encodeURIComponent(String(r.component.component_id)),open=dagSelectedNode===id;
+  const breakdown=[...r.byDish.values()].sort((a,b)=>b.quantity-a.quantity);
+  const sorted=r.selected.filter(x=>x.deadline!==null).sort((a,b)=>a.deadline-b.deadline);
+  const buckets=new Map();
+  for(const x of sorted){const key=x.deadline;const entry=buckets.get(key)||{quantity:0,items:[]};entry.quantity+=x.quantity;entry.items.push(x);buckets.set(key,entry)}
+  const detail= '<div class="kds-prod-detail"><strong>Required for dishes</strong>'+
+   (breakdown.length?breakdown.map(d=>'<div class="kds-prod-breakdown"><span>'+esc(d.name)+'</span><strong>×'+fmt(d.quantity)+'</strong></div>').join(''):'<p class="muted small">No scheduled requirements in this window.</p>')+
+   '<strong>Ready by</strong>'+
+   ([...buckets].map(([time,b])=>'<div class="kds-prod-deadline"><strong>'+clock(time)+(time<now?' · Overdue':'')+' · ×'+fmt(b.quantity)+'</strong>'+b.items.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>').join('')||'<p class="muted small">No timed deadlines</p>')+
+   (dagRangeMinutes===0&&r.unscheduled.length?'<div class="kds-prod-deadline"><strong>Deadline not set · ×'+fmt(r.unscheduled.reduce((n,x)=>n+x.quantity,0))+'</strong>'+r.unscheduled.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>':'')+'</div>';
+  return '<div class="kds-prod-card"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span><strong>'+esc(r.component.name)+'</strong><small>'+fmt(r.qty)+' '+esc(r.component.unit||'unit')+' required'+(dagRangeMinutes===0?'':' · '+fmt(r.total)+' all')+(r.late?' · '+fmt(r.late)+' overdue':'')+'</small></span><strong class="kds-prod-big">×'+fmt(r.qty)+'</strong></button>'+
+  (open?detail:'')+'</div>';
+ }).join('');
+ const schedule=rows.flatMap(r=>r.sources.filter(x=>x.deadline!==null&&(dagRangeMinutes===0||x.deadline<=cutoff)).map(x=>({name:r.component.name,unit:r.component.unit,quantity:x.quantity,deadline:x.deadline,item:x.item,order:x.order})));
+ const timeBuckets=new Map();
+ for(const x of schedule){
+  const time=Math.ceil(x.deadline/(5*60000))*5*60000;
+  const key=String(time)+'|'+x.name+'|'+x.unit;
+  const entry=timeBuckets.get(key)||{time,name:x.name,unit:x.unit,quantity:0,items:[]};
+  entry.quantity+=x.quantity;entry.items.push(x);timeBuckets.set(key,entry);
+ }
+ const scheduleRows=[...timeBuckets.values()].sort((a,b)=>a.time-b.time||a.name.localeCompare(b.name));
+ const unscheduledTotal=rows.reduce((n,r)=>n+r.unscheduled.reduce((n,x)=>n+x.quantity,0),0);
+ return '<section class="panel kds-dag-view kds-production-board"><div class="kds-dag-heading"><div><h2>Kitchen Production Board</h2><p class="muted small">Unfinished production requirements · grouped by Production Components</p></div><strong>'+fmt(totalDue)+' due</strong></div>'+
+ '<div class="kds-dag-controls"><span>Prepare by</span>'+[5,15,30,0].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+(n?'+'+n+'m':'All')+'</button>').join('')+'</div>'+
+ '<p class="muted small">Includes overdue requirements. Time windows are measured from now; All includes orders without a deadline.</p>'+
+ (visible.length?'<div class="kds-prod-grid">'+summary+'</div>':'<p class="muted">No production requirements in this time window.</p>')+
+ '<h3 class="kds-prod-section-title">Ready by · 5-minute buckets</h3>'+
+ (scheduleRows.length?'<div class="kds-prod-schedule">'+scheduleRows.map(b=>'<div class="kds-prod-schedule-row"><span class="kds-prod-time">'+clock(b.time)+(b.time<=now?' · Late':'')+'</span><span>'+esc(b.name)+'</span><strong>×'+fmt(b.quantity)+'</strong></div>').join('')+'</div>':'<p class="muted small">No timed production deadlines in this window.</p>')+
+ (unscheduledTotal?'<p class="muted small">'+fmt(unscheduledTotal)+' production units have no Ready by deadline'+(dagRangeMinutes===0?' (included above).':' (select All to include).')+'</p>':'')+
+ '<p class="muted small">Quantities are component units, not dish counts. Completing an order item removes its mapped component requirements.</p></section>';
 }
 function bindKitchenViewTabs(){
  document.querySelectorAll('[data-kds-view]').forEach(button=>button.onclick=()=>{
