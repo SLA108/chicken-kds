@@ -30,15 +30,28 @@ test('store-specific paid order detail scopes all lookups',()=>{
  assert.ok(api.includes('WHERE order_id=? AND store_id=?'));
 });
 
-test('order-item preparation uses effective store price without duplicate column names',()=>{
+test('order-item preparation uses platform, store, then master price without duplicate columns',()=>{
  const start=api.indexOf('async function prepareOrderItems(');
  const end=api.indexOf('export default',start);
  const section=api.slice(start,end);
  assert.ok(start>=0);
- assert.ok(section.includes('COALESCE(o.price_cents,m.price_cents) AS price_cents'));
+ assert.ok(section.includes('COALESCE(p.price_cents,o.price_cents,m.price_cents) AS price_cents'));
  assert.ok(section.includes('m.id,m.name,m.category,m.vat_rate,COALESCE'));
- assert.ok(!section.includes('SELECT m.*,COALESCE(o.price_cents,m.price_cents) AS price_cents'));
+ assert.ok(section.includes('LEFT JOIN platform_menu_overrides p ON p.menu_id=m.id AND p.store_id=? AND p.platform=?'));
+ assert.ok(section.includes('COALESCE(p.active,1)=1'));
+ assert.ok(!section.includes('SELECT m.*,COALESCE('));
  assert.ok(section.includes('m.price_cents+extra'));
+ assert.ok(section.includes('platform=null'));
+ assert.ok(section.includes("platform||''"));
+});
+
+test('device Quick Order and platform menu routes use scoped endpoints',()=>{
+ assert.ok(ui.includes("path==='/quick-orders'"));
+ assert.ok(ui.includes("path==='/kitchen/dag'"));
+ assert.ok(ui.includes("path.startsWith('/quick-order/menu?')"));
+ assert.ok(api.includes("path==='/api/store/quick-orders'"));
+ assert.ok(api.includes("path==='/api/store/quick-order/menu'"));
+ assert.ok(api.includes("path==='/api/store/kitchen/dag'"));
 });
 
 test('add-items checkout race returns recoverable conflict',()=>{
