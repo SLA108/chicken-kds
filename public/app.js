@@ -1098,7 +1098,15 @@ function kitchenDagView(active){
  const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
  const total=list.reduce((n,g)=>n+g.quantity,0);
  return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">One timeline per dish and modifier combination · each marker is a Ready by deadline</p></div><strong>'+total+' portions</strong></div>'+
- (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="badge" style="padding:6px 10px;border-radius:9px;background:var(--panel,#edf0f3)">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<p class="muted small">No mapped production components for active dishes.</p>')+
+ (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="badge" style="padding:6px 10px;border-radius:9px;background:var(--panel,#edf0f3)">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<div class="admin-inline-form" style="margin:10px 0"><strong>Production components not matched</strong><p class="muted small">'+(()=>{
+  const d=componentData?.production_diagnostics;
+  if(!d)return 'Production mapping diagnostics unavailable. Reload the kitchen page after deployment.';
+  if(!d.active_components)return 'No active production components are available for this restaurant. Check Backoffice → Production Components and the selected restaurant.';
+  if(!d.active_mappings)return 'Components exist, but no dish assignments are available for this restaurant. In Backoffice → Production Components, open a component and assign dishes or modifier options.';
+  if(!d.unfinished_items)return 'No unfinished order items currently need production.';
+  if(!d.mapped_items)return 'Mappings exist, but none of the unfinished dishes match an assigned dish. Check the dish assignments in Backoffice.';
+  return 'Mapped dishes exist, but no production conditions matched. Check modifier options, component status, and assigned quantities.';
+ })()+'</p>'+(componentData?.production_diagnostics?'<p class="muted small">Diagnostics: '+componentData.production_diagnostics.active_components+' active components · '+componentData.production_diagnostics.active_mappings+' mappings · '+componentData.production_diagnostics.unfinished_items+' unfinished items · '+componentData.production_diagnostics.mapped_items+' mapped items · '+componentData.production_diagnostics.matched_components+' matched components</p>':'')+'</div>')+
  '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Dish / Modifiers</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
  list.map(g=>{
   const slots=[...g.deadlines.values()].sort((a,b)=>(a.deadline??Infinity)-(b.deadline??Infinity));
