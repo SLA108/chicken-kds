@@ -61,8 +61,8 @@ test('completed platform dishes are locked while unfinished dishes remain editab
  assert.match(api,/existing.some\(i=>i.is_done&&b.items.find/);
 });
 
-test('kitchen owns platform entry and edits; POS handles courier handoff',()=>{
- assert.match(api,/if\(path==='\/api\/store\/quick-orders'&&req\.method==='POST'\)\{\s*if\(session\.role!=='kitchen'\)/);
- assert.match(api,/if\(platformEdit&&req\.method==='POST'\)\{\s*if\(session\.role!=='kitchen'\)/);
+test('kitchen and POS may enter and edit platform orders; courier handoff stays available',()=>{
+ assert.match(api,/if\(path==='\/api\/store\/quick-orders'&&req\.method==='POST'\)\{\s*if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)/);
+ assert.match(api,/if\(platformEdit&&req\.method==='POST'\)\{\s*if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)/);
  assert.match(api,/if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)return json\(\{error:'Forbidden'\},403\);\s*const id=courierCollect/);
 });
