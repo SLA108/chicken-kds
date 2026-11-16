@@ -1,6 +1,7 @@
 import {collectedHistoryQuery,collectedHistoryDetailSql} from './platform-history-query.js';
 import { validateQuickOrder, QUICK_ORDER_PLATFORMS } from './quick-order.js';
 import { buildKitchenDag } from './kitchen-dag.js';
+import {aggregateProductionComponents} from './production-components.js';
 import {attendanceQrToken,qrSlot,QR_PERIOD_MS} from './attendance-qr.js';
 import {isPairingCode,isDeviceRole,pairingExpired,approvalAttemptPolicy,parseDeviceCookie} from './device-pairing.js';
 import {issueStoreSession,verifyStoreSession,sha256Hex,activeDeviceStore,allowedDeviceStore,listAllowedDeviceStores} from './store-auth.js';
@@ -250,7 +251,14 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(path==='/api/store/kitchen/dag'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
-  return json({store_id:session.storeId,generated_at:new Date().toISOString(),groups:buildKitchenDag(orders,{storeId:session.storeId})});
+  const globalComponents=(await env.DB.prepare("SELECT c.id,c.name,c.unit,COALESCE(o.active,c.active) AS active FROM production_global_components c LEFT JOIN production_store_overrides o ON o.component_id=c.id AND o.store_id=?").bind(session.storeId).all()).results;
+  const localComponents=(await env.DB.prepare('SELECT id,name,unit,active FROM production_components WHERE store_id=?').bind(session.storeId).all()).results;
+  const components=[...globalComponents,...localComponents].filter(c=>c.active);
+  const globalMappings=(await env.DB.prepare('SELECT component_id,menu_id,modifier_option_id,quantity_per_dish FROM production_global_mappings').all()).results;
+  const localMappings=(await env.DB.prepare('SELECT component_id,menu_id,modifier_option_id,quantity_per_dish FROM production_component_mappings WHERE store_id=?').bind(session.storeId).all()).results;
+  const valid=new Map(components.map(c=>[c.id,c]));
+  const mappings=[...globalMappings,...localMappings].filter(m=>valid.has(m.component_id)).map(m=>({...m,component_name:valid.get(m.component_id).name,unit:valid.get(m.component_id).unit,store_id:session.storeId}));
+  return json({store_id:session.storeId,generated_at:new Date().toISOString(),groups:buildKitchenDag(orders,{storeId:session.storeId}),production_components:aggregateProductionComponents(orders,mappings,{storeId:session.storeId})});
  }
  if(path==='/api/store/platform-orders/history/search'&&req.method==='GET'){
   if(session.role!=='pos')return json({error:'Forbidden'},403);
