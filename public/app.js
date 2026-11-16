@@ -306,11 +306,24 @@ async function openCourierCollection(){
  await load();
 }
 function openPosPlatformOrders(){
- const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:1250;background:#0009;display:flex;align-items:center;justify-content:center;padding:14px';
- const panel=document.createElement('div');panel.style.cssText='width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:14px;padding:20px';
+ const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:1250;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px';
+ const panel=document.createElement('div');panel.style.cssText='width:min(680px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:16px;padding:clamp(12px,3vw,24px);display:grid;gap:14px';
  const editable=orders.filter(o=>o.platform&&!o.kitchen_completed_at&&!o.collected_at&&o.status!=='cancelled');
- panel.innerHTML='<div class="row" style="justify-content:space-between"><h2>Platform Orders</h2><button type="button" class="alt" id="pos-platform-close">Close</button></div><p class="muted">Assist the kitchen with unfinished platform orders. Completed dishes remain locked.</p>'+(editable.length?editable.map(o=>'<article class="panel" style="margin:8px 0;padding:12px"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+' · #'+esc(o.external_order_id||o.id.slice(0,8))+'</strong><p>'+o.items.map(i=>esc(i.quantity+' × '+i.name)+(i.is_done?' ✓':'')).join(' · ')+'</p><button type="button" data-pos-platform-edit="'+esc(o.id)+'">Edit Order</button></article>').join(''):'<p>No editable platform orders.</p>');
- overlay.append(panel);document.body.append(overlay);panel.querySelector('#pos-platform-close').onclick=()=>overlay.remove();overlay.onclick=e=>{if(e.target===overlay)overlay.remove()};panel.querySelectorAll('[data-pos-platform-edit]').forEach(button=>button.onclick=()=>{const id=button.dataset.posPlatformEdit;overlay.remove();editPlatformOrder(id)});
+ panel.innerHTML='<header style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><h2 style="margin:0">Platform Orders</h2><small class="muted">Assist kitchen · Edit unfinished orders</small></div><button type="button" class="alt" id="pos-platform-close">Close</button></header><label style="display:grid;gap:5px">Find order<input type="search" id="pos-platform-search" placeholder="Platform, order ID or dish"></label><div id="pos-platform-list" style="display:grid;gap:10px"></div>';
+ overlay.append(panel);document.body.append(overlay);
+ const close=()=>overlay.remove();panel.querySelector('#pos-platform-close').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
+ const list=panel.querySelector('#pos-platform-list');
+ const render=()=>{
+  const q=panel.querySelector('#pos-platform-search').value.trim().toLowerCase();
+  const filtered=editable.filter(o=>[o.platform,o.external_order_id,...o.items.map(i=>i.name)].join(' ').toLowerCase().includes(q));
+  list.innerHTML=filtered.length?filtered.map(o=>{
+   const total=o.items.reduce((sum,i)=>sum+Number(i.quantity||0),0);
+   const done=o.items.filter(i=>i.is_done).length;
+   return '<article style="border:1px solid var(--border,#ddd);border-radius:12px;padding:14px;display:grid;gap:9px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div style="min-width:0"><strong style="overflow-wrap:anywhere">'+esc(o.platform.replaceAll('_',' ').toUpperCase())+' · #'+esc(o.external_order_id||o.id.slice(0,8))+'</strong><div class="muted small">'+total+' portions · '+done+'/'+o.items.length+' dishes done</div></div><button type="button" data-pos-platform-edit="'+esc(o.id)+'">Edit</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">'+o.items.map(i=>'<span style="font-size:12px;padding:5px 8px;border:1px solid var(--border,#ddd);border-radius:8px;overflow-wrap:anywhere">'+esc(i.quantity+' × '+i.name)+(i.is_done?' ✓':'')+'</span>').join('')+'</div></article>';
+  }).join(''):'<p class="muted">No matching unfinished platform orders.</p>';
+  list.querySelectorAll('[data-pos-platform-edit]').forEach(button=>button.onclick=()=>{const id=button.dataset.posPlatformEdit;close();editPlatformOrder(id)});
+ };
+ panel.querySelector('#pos-platform-search').oninput=render;render();
 }
 async function editPlatformOrder(id){
  const order=orders.find(o=>o.id===id&&o.platform);
@@ -352,7 +365,15 @@ async function openQuickOrderDialog(){
  };
  const add=()=>{if(!platformMenu.length){notify('No dishes available for this platform');return}const row=document.createElement('div');row.className='platform-order-dish';row.innerHTML='<div class="platform-dish-top"><select aria-label="Dish">'+choices()+'</select><input aria-label="Quantity" type="number" min="1" max="99" value="1"><button type="button" class="alt" aria-label="Remove dish" title="Remove dish">×</button></div><div class="platform-modifiers"></div>';row.querySelector('button').onclick=()=>row.remove();row.querySelector('select').onchange=()=>renderModifiers(row);itemsNode.append(row);renderModifiers(row);};
  const load=async()=>{const current=++loading;const platform=form.elements.platform.value;form.querySelector('#quick-order-submit').disabled=true;try{const [result,modifiers]=await Promise.all([api('/quick-order/menu?platform='+encodeURIComponent(platform)),api('/menu/modifiers')]);if(current!==loading)return;platformMenu=result;platformModifiers=modifiers;itemsNode.innerHTML='';if(result.length)add();else notify('No available dishes for '+platform);form.querySelector('#quick-order-submit').disabled=!result.length;}catch(e){if(current===loading)notify('Platform menu failed: '+e.message);}};
- form.elements.platform.onchange=load;
+ let loadedPlatform=form.elements.platform.value;
+ form.elements.platform.onchange=async()=>{
+  const next=form.elements.platform.value;
+  if(next===loadedPlatform)return;
+  if(itemsNode.children.length&&!confirm('Changing the delivery platform will clear the selected dishes and modifiers. Continue?')){
+   form.elements.platform.value=loadedPlatform;return;
+  }
+  loadedPlatform=next;await load();
+ };
  form.querySelector('#quick-order-add').onclick=add;
  const deadlineInput=form.elements.ready_by;
  const localInputValue=date=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
