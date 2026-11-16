@@ -1494,22 +1494,22 @@ async function openPlatformMenuManager(){
  try{const result=await api('/admin/stores');store.innerHTML=(result.stores||[]).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('');await load();}catch(e){list.textContent='Could not load restaurants: '+e.message;}
 }
 document.addEventListener('click',e=>{if(e.target.closest('#open-platform-menu'))openPlatformMenuManager();});
-let productionStore='',productionData={components:[],mappings:[]};
+let productionStore='global',productionData={components:[],mappings:[]};
 async function loadProduction(){
  if(!v3Loaded)await loadV3Stores();
- if(!productionStore)productionStore=v3Stores.find(x=>x.active)?.id||'';
+ if(!productionStore)productionStore='global';
  if(productionStore)productionData=await api('/production-components?store_id='+encodeURIComponent(productionStore));
  else productionData={components:[],mappings:[]};
 }
 function productionPanel(){
- const options=v3Stores.filter(x=>x.active).map(x=>'<option value="'+esc(x.id)+'" '+(x.id===productionStore?'selected':'')+'>'+esc(x.name)+'</option>').join('');
+ const options='<option value="global" '+(productionStore==='global'?'selected':'')+'>Global — All Restaurants</option>'+v3Stores.filter(x=>x.active).map(x=>'<option value="'+esc(x.id)+'" '+(x.id===productionStore?'selected':'')+'>'+esc(x.name)+'</option>').join('');
  const menuOptions=adminMenu.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');
  return '<section class="admin-workspace"><div class="admin-section-head"><div><h2>Production Components</h2><p>Map menu dishes and modifier options to shared kitchen production tasks.</p></div></div>'+
  '<label>Restaurant <select id="pc-store">'+options+'</select></label>'+
  '<form id="pc-create" class="toolbar"><input name="name" placeholder="Component name" required maxlength="100"><input name="unit" placeholder="Unit (portion)" value="portion" required><input name="prep_minutes" type="number" min="0" max="1440" value="0" title="Preparation minutes"><button type="submit">+ Add component</button></form>'+
  productionData.components.map(c=>'<div class="panel" style="margin:12px 0;padding:16px"><div class="admin-section-head"><div><h3>'+esc(c.name)+'</h3><p>'+esc(c.unit)+' · '+c.prep_minutes+' min · '+(c.active?'Active':'Inactive')+'</p></div><button type="button" class="alt" data-pc-edit="'+esc(c.id)+'">Edit</button></div>'+
  '<div>'+productionData.mappings.filter(m=>m.component_id===c.id).map(m=>'<div class="toolbar"><span>'+esc(adminMenu.find(x=>x.id===m.menu_id)?.name||m.menu_id)+' · '+m.quantity_per_dish+' '+esc(c.unit)+(m.modifier_option_id?' · modifier '+esc(m.modifier_option_id):'')+'</span><button type="button" class="alt" data-pc-remove="'+esc(m.id)+'">Remove</button></div>').join('')+'</div>'+
- '<form class="toolbar" data-pc-map="'+esc(c.id)+'"><select name="menu_id" required><option value="">Select menu dish</option>'+menuOptions+'</select><input name="quantity_per_dish" type="number" step="0.01" min="0.01" value="1" required title="Quantity per dish"><input name="modifier_option_id" placeholder="Modifier option ID (optional)"><button type="submit">+ Link dish</button></form></div>').join('')+
+ (c.scope==='global'&&productionStore!=='global'?'<p>Inherited from Global. Manage dish links in Global.</p>':'<form class="toolbar" data-pc-map="'+esc(c.id)+'"><select name="menu_id" required><option value="">Select menu dish</option>'+menuOptions+'</select><input name="quantity_per_dish" type="number" step="0.01" min="0.01" value="1" required title="Quantity per dish"><input name="modifier_option_id" placeholder="Modifier option ID (optional)"><button type="submit">+ Link dish</button></form>')+'</div>').join('')+
  '</section>';
 }
 function bindProductionPanel(){
@@ -1518,7 +1518,7 @@ function bindProductionPanel(){
  document.querySelector('#pc-create').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await api('/production-components','POST',{store_id:productionStore,name:f.get('name'),unit:f.get('unit'),prep_minutes:Number(f.get('prep_minutes'))});await loadProduction();admin()}catch(e){notify(e.message)}};
  document.querySelectorAll('[data-pc-map]').forEach(el=>el.onsubmit=async e=>{e.preventDefault();const f=new FormData(el);try{await api('/production-mappings','POST',{store_id:productionStore,component_id:el.dataset.pcMap,menu_id:f.get('menu_id'),quantity_per_dish:Number(f.get('quantity_per_dish')),modifier_option_id:f.get('modifier_option_id')||null});await loadProduction();admin()}catch(e){notify(e.message)}});
  document.querySelectorAll('[data-pc-remove]').forEach(el=>el.onclick=async()=>{try{await api('/production-mappings/'+encodeURIComponent(el.dataset.pcRemove)+'?store_id='+encodeURIComponent(productionStore),'DELETE');await loadProduction();admin()}catch(e){notify(e.message)}});
- document.querySelectorAll('[data-pc-edit]').forEach(el=>el.onclick=async()=>{const c=productionData.components.find(x=>x.id===el.dataset.pcEdit);if(!c)return;const name=prompt('Component name',c.name);if(name===null)return;const unit=prompt('Unit',c.unit);if(unit===null)return;const mins=prompt('Preparation minutes',String(c.prep_minutes));if(mins===null)return;try{await api('/production-components/'+encodeURIComponent(c.id),'PATCH',{store_id:productionStore,name,unit,prep_minutes:Number(mins),active:c.active});await loadProduction();admin()}catch(e){notify(e.message)}});
+ document.querySelectorAll('[data-pc-edit]').forEach(el=>el.onclick=async()=>{const c=productionData.components.find(x=>x.id===el.dataset.pcEdit);if(!c)return;const name=prompt('Component name',c.name);if(name===null)return;if(c.scope==='global'&&productionStore!=='global'&&name!==c.name){notify('Rename in Global');return;}const unit=prompt('Unit',c.unit);if(unit===null)return;const mins=prompt('Preparation minutes',String(c.prep_minutes));if(mins===null)return;try{await api('/production-components/'+encodeURIComponent(c.id),'PATCH',{store_id:productionStore,name,unit,prep_minutes:Number(mins),active:c.active});await loadProduction();admin()}catch(e){notify(e.message)}});
 }
 function admin(){
  const filtered=adminMenu.filter(m=>!adminFilter||m.category===adminFilter);
