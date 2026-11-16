@@ -371,7 +371,14 @@ function platformWorkspaceHtml(){
  const buttons=[['active','Active',active.length],['preparing','Preparing',preparing.length],['ready','Ready',ready.length],['collected','Collected',platformCollectedHistory.length]];
  const all=platformWorkspaceFilter==='collected'?platformCollectedHistory:platformWorkspaceFilter==='ready'?ready:platformWorkspaceFilter==='preparing'?preparing:active;
  const q=platformWorkspaceSearch.toLowerCase();
- const filtered=all.filter(o=>(platformWorkspacePlatform==='all'||o.platform===platformWorkspacePlatform)&&[o.platform,o.external_order_id,...(o.items||[]).map(i=>i.name)].join(' ').toLowerCase().includes(q));
+ const filtered=all.filter(o=>(platformWorkspacePlatform==='all'||o.platform===platformWorkspacePlatform)&&[o.platform,o.external_order_id,...(o.items||[]).map(i=>i.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>{
+  if(platformWorkspaceFilter==='active'){
+   const aReady=!!a.kitchen_completed_at,bReady=!!b.kitchen_completed_at;
+   if(aReady!==bReady)return aReady?-1:1;
+  }
+  const aTime=Date.parse(a.created_at||'')||0,bTime=Date.parse(b.created_at||'')||0;
+  return aTime-bTime;
+ });
  const cards=filtered.map(o=>{
   const items=o.items||[],done=items.filter(i=>i.is_done).length,total=items.length;
   const portions=items.length?items.reduce((n,i)=>n+Number(i.quantity||0),0):Number(o.dish_count||0);
