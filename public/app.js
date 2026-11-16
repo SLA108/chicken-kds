@@ -652,6 +652,8 @@ function kitchen(){
     '<div class="kds-head-row"><h3>'+esc(o.table_no||sourceName[o.source])+'</h3><strong class="kds-age" data-kitchen-age="'+esc(o.created_at)+'">'+kitchenDuration(kitchenAge(o.created_at))+'</strong></div>'+
     '<div class="kds-head-row"><span>Received '+warsawClock(o.created_at)+'</span><span>'+done+'/'+o.items.length+' Done</span></div>'+
     '<div class="kds-head-id">#'+esc(o.id.slice(0,8))+(o.paid_at?' · Paid':'')+'</div>'+
+    (o.platform?'<div class="kds-head-row"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+'</strong><span>#'+esc(o.external_order_id||'')+'</span></div>':'')+
+    (o.platform_deadline_at?'<div class="kds-head-row"><span>Ready By '+warsawClock(o.platform_deadline_at)+'</span><strong data-kitchen-deadline="'+esc(o.platform_deadline_at)+'">'+esc(o.platform_deadline_at)+'</strong></div>':'')+
    '</div>'+
    '<button class="kds-complete" data-kitchen-complete="'+esc(o.id)+'" '+(ready?'':'disabled')+'>'+(ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+done+'/'+o.items.length)+'</button>'+
    items.map((i,index)=>{const dish=menu.find(m=>m.id===i.menu_id);
