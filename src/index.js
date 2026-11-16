@@ -251,6 +251,31 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const orders=await getStoreOrders(env,session.storeId);
   return json({store_id:session.storeId,generated_at:new Date().toISOString(),groups:buildKitchenDag(orders,{storeId:session.storeId})});
  }
+ if(path==='/api/store/platform-orders/history/search'&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const p=new URL(req.url).searchParams,page=Math.max(1,Math.min(10000,parseInt(p.get('page')||'1',10)||1)),size=15;
+  const from=p.get('from')||'',to=p.get('to')||'',platform=p.get('platform')||'',q=(p.get('q')||'').trim().slice(0,80);
+  if((from&&!/^\d{4}-\d{2}-\d{2}$/.test(from))||(to&&!/^\d{4}-\d{2}-\d{2}$/.test(to))||(from&&to&&from>to))return json({error:'Invalid date range'},400);
+  const where=["pm.store_id=?","o.store_id=?","pm.collected_at IS NOT NULL"],args=[session.storeId,session.storeId];
+  if(from){where.push("pm.collected_at>=?");args.push(from+'T00:00:00Z')}
+  if(to){where.push("pm.collected_at<?");args.push(new Date(Date.parse(to+'T00:00:00Z')+86400000).toISOString())}
+  if(platform){where.push("pm.platform=?");args.push(platform)}
+  if(q){where.push("(pm.external_order_id LIKE ? OR pm.order_id LIKE ?)");args.push('%'+q+'%','%'+q+'%')}
+  const clause=where.join(' AND ');
+  const total=(await env.DB.prepare('SELECT COUNT(*) AS n FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE '+clause).bind(...args).first()).n;
+  const orders=(await env.DB.prepare('SELECT pm.order_id,pm.platform,pm.external_order_id,pm.collected_at,pm.collected_by,o.created_at,o.kitchen_completed_at,o.note,(SELECT COALESCE(SUM(quantity),0) FROM order_items WHERE order_id=o.id) AS portions FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE '+clause+' ORDER BY pm.collected_at DESC,pm.order_id DESC LIMIT ? OFFSET ?').bind(...args,size,(page-1)*size).all()).results;
+  return json({orders,total,page,page_size:size});
+ }
+ const platformHistoryDetail=path.match(/^\/api\/store\/platform-orders\/history\/([^/]+)$/);
+ if(platformHistoryDetail&&req.method==='GET'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const id=decodeURIComponent(platformHistoryDetail[1]);
+  const order=await env.DB.prepare('SELECT o.id,o.note,o.created_at,o.kitchen_completed_at,pm.platform,pm.external_order_id,pm.collected_at,pm.collected_by FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=? AND pm.collected_at IS NOT NULL').bind(id,session.storeId).first();
+  if(!order)return json({error:'Collected order not found'},404);
+  const items=(await env.DB.prepare('SELECT id,name,quantity,note,is_done,created_at FROM order_items WHERE order_id=? ORDER BY created_at,id').bind(id).all()).results;
+  const mods=items.length?(await env.DB.prepare('SELECT order_item_id,name FROM order_item_modifiers WHERE order_item_id IN ('+items.map(()=>'?').join(',')+')').bind(...items.map(i=>i.id)).all()).results:[];
+  return json({order,items:items.map(i=>({...i,modifiers:mods.filter(m=>m.order_item_id===i.id)}))});
+ }
  if(path==='/api/store/platform-orders/history'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const params=new URL(req.url).searchParams;
