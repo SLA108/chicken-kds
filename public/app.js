@@ -1056,7 +1056,7 @@ function kitchenProductionView(){
 function kitchenViewTabs(){
  return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
 }
-let dagRangeMinutes=30,dagSelectedNode='';
+let dagRangeMinutes=30,dagSelectedNode='',dagCollapsedCategories=new Set();
 function kitchenDagCluster(slots,windowStart,windowEnd){
  const span=windowEnd-windowStart,threshold=42,trackWidth=Math.max(340,Math.min(1200,typeof window!=='undefined'?window.innerWidth*.52:600));
  const visible=slots.filter(x=>Number.isFinite(x.deadline)&&x.deadline>=windowStart&&x.deadline<=windowEnd).sort((a,b)=>a.deadline-b.deadline);
@@ -1079,12 +1079,13 @@ function kitchenDagView(active){
   return Number.isFinite(received)?received+defaultDineInMinutes*60000:null;
  };
  const modifierSignature=item=>(item.modifiers||[]).map(m=>[String(m.option_id||m.id||''),String(m.name||m.option_name||''),Number(m.quantity||1)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+ const menuById=new Map(menu.map(m=>[String(m.id),m]));
  const groups=new Map();
  for(const order of active)for(const item of order.items||[]){
   if(item.is_done)continue;
   const deadline=deadlineFor(order),signature=modifierSignature(item);
-  const key=JSON.stringify([item.menu_id||item.name,signature,item.note||'']);
-  if(!groups.has(key))groups.set(key,{name:item.name,signature,note:item.note||'',quantity:0,items:[],deadlines:new Map(),first:order.created_at});
+  const key=JSON.stringify([item.menu_id||item.name]);
+  if(!groups.has(key))groups.set(key,{key,name:item.name,category:String(menuById.get(String(item.menu_id))?.category||'Other Dishes'),quantity:0,items:[],deadlines:new Map(),first:order.created_at});
   const group=groups.get(key),qty=Number(item.quantity)||1,deadlineKey=deadline===null?'unset':String(deadline);
   group.quantity+=qty;group.items.push({order,item,deadline});
   if(!group.deadlines.has(deadlineKey))group.deadlines.set(deadlineKey,{deadline,quantity:0,items:[]});
@@ -1095,6 +1096,8 @@ function kitchenDagView(active){
   const earliest=g=>Math.min(...[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite),Infinity);
   return earliest(a)-earliest(b)||a.first.localeCompare(b.first);
  });
+ const categories=new Map();
+ for(const group of list){if(!categories.has(group.category))categories.set(group.category,[]);categories.get(group.category).push(group)}
  const components=componentData?.production_components||[];
  const componentByItem=new Map();
  for(const component of components)for(const source of component.sources||[]){
@@ -1111,7 +1114,7 @@ function kitchenDagView(active){
  const nowPct=Math.max(0,Math.min(100,(now-windowStart)/span*100));
  const clock=t=>warsawClock(new Date(t).toISOString()).slice(0,5);
  const total=list.reduce((n,g)=>n+g.quantity,0);
- return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">One timeline per dish and modifier combination · each marker is a Ready by deadline</p></div><strong>'+total+' portions</strong></div>'+
+ return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Dish Timeline Aggregated Graph</h2><p class="muted small">One timeline per menu item · packaging options remain in ticket details</p></div><strong>'+total+' portions</strong></div>'+
  (components.length?'<div class="toolbar" style="margin:8px 0;flex-wrap:wrap"><strong>Production needed:</strong>'+components.map(c=>'<span class="kds-production-chip">'+esc(c.name)+' ×'+Number(c.quantity.toFixed(2))+' '+esc(c.unit)+'</span>').join('')+'</div>':'<div class="admin-inline-form" style="margin:10px 0"><strong>Production components not matched</strong><p class="muted small">'+(()=>{
   const d=componentData?.production_diagnostics;
   if(!d)return 'Production mapping diagnostics unavailable. Reload the kitchen page after deployment.';
@@ -1122,10 +1125,14 @@ function kitchenDagView(active){
   return 'Mapped dishes exist, but no production conditions matched. Check modifier options, component status, and assigned quantities.';
  })()+'</p>'+(componentData?.production_diagnostics?'<p class="muted small">Diagnostics: '+componentData.production_diagnostics.active_components+' active components · '+componentData.production_diagnostics.active_mappings+' mappings · '+componentData.production_diagnostics.unfinished_items+' unfinished items · '+componentData.production_diagnostics.mapped_items+' mapped items · '+componentData.production_diagnostics.matched_components+' matched components</p>':'')+'</div>')+
  '<div class="kds-dag-controls"><span>Timeline range</span>'+[15,30,60].map(n=>'<button type="button" class="kds-dag-range '+(dagRangeMinutes===n?'selected':'')+'" data-dag-range="'+n+'" aria-pressed="'+(dagRangeMinutes===n)+'">'+n+' min</button>').join('')+'</div>'+
- '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Dish / Modifiers</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
- list.map(g=>{
+ '<div class="kds-dag-scroll"><div class="kds-dag-axis"><span>Menu item</span><div class="kds-dag-ticks">'+axis+'</div></div>'+
+ [...categories.entries()].map(([category,categoryGroups])=>{
+ const categoryId=encodeURIComponent(category),collapsed=dagCollapsedCategories.has(category);
+ const categoryQty=categoryGroups.reduce((n,g)=>n+g.quantity,0);
+ const header='<button type="button" class="kds-dag-category" data-dag-category="'+esc(categoryId)+'" aria-expanded="'+(!collapsed)+'"><span>'+(collapsed?'▸':'▾')+' '+esc(category)+'</span><strong>'+categoryGroups.length+' items · '+categoryQty+' portions</strong></button>';
+ return header+(collapsed?'':categoryGroups.map(g=>{
   const slots=[...g.deadlines.values()].sort((a,b)=>(a.deadline??Infinity)-(b.deadline??Infinity));
-  const modifiers=g.signature.map(m=>m[1]||m[0]).filter(Boolean).join(' · ');
+  const modifiers='';
   const totals=new Map();
   for(const {item} of g.items)for(const c of componentByItem.get(String(item.id))||[]){
    const key=c.name+' / '+c.unit;totals.set(key,(totals.get(key)||0)+Number(c.quantity));
@@ -1135,9 +1142,9 @@ function kitchenDagView(active){
   const markers=clusters.map(cluster=>{
    const pct=(cluster.deadline-windowStart)/span*100,late=cluster.deadline<now,urgent=!late&&cluster.deadline-now<=5*60000;
    const bg=late?'#d96857':urgent?'#e8a648':'#559bdb';
-   const id=encodeURIComponent(JSON.stringify([g.name,g.signature,g.note,cluster.slots.map(x=>x.deadline)]));
+   const id=encodeURIComponent(JSON.stringify([g.key,cluster.slots.map(x=>x.deadline)]));
    const selected=dagSelectedNode===id;
-   const details=cluster.slots.map(slot=>'<div class="kds-dag-node-slot"><strong>'+clock(slot.deadline)+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+'</div>').join('')+'</div>').join('');
+   const details=cluster.slots.map(slot=>'<div class="kds-dag-node-slot"><strong>'+clock(slot.deadline)+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+(item.modifiers?.length?' · '+esc(item.modifiers.map(m=>m.name||m.option_name).filter(Boolean).join(', ')):'')+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</div>').join('');
    const node='<button type="button" class="kds-dag-deadline-marker'+(selected?' is-selected':'')+'" data-dag-node="'+esc(id)+'" aria-expanded="'+selected+'" title="'+esc(cluster.slots.map(x=>clock(x.deadline)+' ×'+x.quantity).join(' / '))+'" style="left:'+pct+'%;background:'+bg+'">×'+cluster.quantity+'</button>';
    return {node,details,id,selected,cluster};
   });
@@ -1147,10 +1154,10 @@ function kitchenDagView(active){
   const markersHtml=markers.map(x=>x.node).join('');
   const detailHtml=selectedMarker?'<div class="kds-dag-node-detail"><strong>Ready by · '+selectedMarker.cluster.quantity+' portions · '+selectedMarker.cluster.slots.length+' deadline'+(selectedMarker.cluster.slots.length===1?'':'s')+'</strong>'+selectedMarker.details+'</div>':'';
   const unset=slots.filter(x=>x.deadline===null).reduce((n,x)=>n+x.quantity,0);
-  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+(modifiers?' · '+esc(modifiers):' · No modifiers')+'</span>'+(g.note?'<small>'+esc(g.note)+'</small>':'')+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div>'+(nowPct>=0&&nowPct<=100?'<div class="kds-dag-now" style="left:'+nowPct+'%"></div>':'')+markersHtml+'</div></div>'+(before||after?'<div class="kds-dag-outside">'+(before?'← '+before+' portions due earlier ':'')+(after?' · '+after+' portions due later →':'')+'</div>':'')+detailHtml+
- '<details class="kds-dag-detail"><summary>Ready by: '+slots.map(x=>(x.deadline===null?'Not set':clock(x.deadline))+' ×'+x.quantity).join(' · ')+(unset?'':'')+' · View '+g.items.length+' ticket items</summary>'+
- slots.map(slot=>'<div style="margin:8px 0"><strong>'+(slot.deadline===null?'Not set':clock(slot.deadline))+' · ×'+slot.quantity+'</strong>'+slot.items.map(({order,item})=>'<div>#'+esc(String(order.id).slice(0,8))+' · ×'+Number(item.quantity||1)+' '+esc(item.name)+(item.note?' · '+esc(item.note):'')+'</div>').join('')+'</div>').join('')+'</details>';
- }).join('')+
+  return '<div class="kds-dag-row"><div class="kds-dag-label"><strong>'+esc(g.name)+'</strong><span>×'+g.quantity+'</span>'+(summary?'<small>'+summary+'</small>':'')+'</div><div class="kds-dag-track" style="min-height:54px"><div style="position:absolute;top:50%;left:0;right:0;border-top:2px solid #8292a64d"></div>'+(nowPct>=0&&nowPct<=100?'<div class="kds-dag-now" style="left:'+nowPct+'%"></div>':'')+markersHtml+'</div></div>'+(before||after?'<div class="kds-dag-outside">'+(before?'← '+before+' portions due earlier ':'')+(after?' · '+after+' portions due later →':'')+'</div>':'')+detailHtml+
+ (unset?'<div class="kds-dag-outside">'+unset+' portions without a deadline</div>':'');
+ }).join(''));
++
  (list.length?'':'<p class="muted">No unfinished dishes</p>')+'</div><p class="muted small">Markers show portions due at each deadline, not preparation duration. Red = overdue · Amber = due within 5 minutes · Blue = upcoming. Dine-in: '+defaultDineInMinutes+' minutes from receipt; delivery: kitchen-selected deadline.</p></section>';
 }
 function bindKitchenViewTabs(){
@@ -1198,6 +1205,7 @@ function kitchen(){
  '<div class="toolbar"><button class="alt" id="kds-history-prev" '+(historyPage<=1?'disabled':'')+'>Previous</button><span>Page '+historyPage+'</span><button class="alt" id="kds-history-next" '+(!historyResult.has_more?'disabled':'')+'>Next</button></div>':'<p class="muted small">Completed orders are archived here. Open only when needed.</p>')+'</section>');
  if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);updateKitchenClock();
  bindKitchenViewTabs();
+ document.querySelectorAll('[data-dag-category]').forEach(btn=>btn.onclick=()=>{const category=decodeURIComponent(btn.dataset.dagCategory);if(dagCollapsedCategories.has(category))dagCollapsedCategories.delete(category);else dagCollapsedCategories.add(category);kitchen()});
  document.querySelectorAll('[data-dag-range]').forEach(btn=>btn.onclick=()=>{dagRangeMinutes=Number(btn.dataset.dagRange);dagSelectedNode='';kitchen()});
  document.querySelectorAll('[data-dag-node]').forEach(btn=>btn.onclick=()=>{dagSelectedNode=dagSelectedNode===btn.dataset.dagNode?'':btn.dataset.dagNode;kitchen()});
  const retry=document.querySelector('#dag-production-retry');if(retry)retry.onclick=()=>loadKitchenProduction();
