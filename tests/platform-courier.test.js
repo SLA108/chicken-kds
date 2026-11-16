@@ -56,9 +56,9 @@ test('platform editing uses optimistic revision and locks completed dishes',()=>
 });
 
 test('completed platform dishes are locked while unfinished dishes remain editable',()=>{
- assert.match(ui,/Done \(locked\)/);
- assert.match(ui,/i.is_done\?'disabled':''/);
- assert.match(api,/existing.some\(i=>i.is_done&&b.items.find/);
+ assert.match(ui,/Done · Locked/);
+ assert.match(ui,/item\.is_done\?'disabled':''/);
+ assert.match(api,/existing\.some\(i=>i\.is_done&&retained\.find/);
 });
 
 test('kitchen and POS may enter and edit platform orders; courier handoff stays available',()=>{
@@ -75,7 +75,7 @@ test('POS provides platform order entry and editing UI alongside courier handoff
 });
 
 test('platform edit preserves completed quantities and ISO order timestamps',()=>{
- assert.match(ui,/quantity:i\.is_done\?Number\(i\.quantity\):Number/);
+ assert.match(ui,/i\.is_done\?Number\(i\.quantity\):Number/);
  assert.match(api,/const now=new Date\(\)\.toISOString\(\),revision=now.slice/);
 });
 test('reopening collected platform order is prevented in SQL update',()=>{
