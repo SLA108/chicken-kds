@@ -251,15 +251,15 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(path==='/api/store/kitchen/dag'&&req.method==='GET'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const orders=await getStoreOrders(env,session.storeId);
-  const globalComponents=(await env.DB.prepare("SELECT c.id,c.name,c.unit,COALESCE(o.active,c.active) AS active FROM production_global_components c LEFT JOIN production_store_overrides o ON o.component_id=c.id AND o.store_id=?").bind(session.storeId).all()).results;
-  const localComponents=(await env.DB.prepare('SELECT id,name,unit,active FROM production_components WHERE store_id=?').bind(session.storeId).all()).results;
+  const globalComponents=(await env.DB.prepare("SELECT c.id,c.name,c.unit,COALESCE(o.emoji,c.emoji) AS emoji,COALESCE(o.active,c.active) AS active FROM production_global_components c LEFT JOIN production_store_overrides o ON o.component_id=c.id AND o.store_id=?").bind(session.storeId).all()).results;
+  const localComponents=(await env.DB.prepare('SELECT id,name,unit,emoji,active FROM production_components WHERE store_id=?').bind(session.storeId).all()).results;
   const components=[...globalComponents,...localComponents].filter(c=>c.active);
   const globalMappings=(await env.DB.prepare('SELECT component_id,menu_id,modifier_option_id,quantity_per_dish FROM production_global_mappings').all()).results;
   const localMappings=(await env.DB.prepare('SELECT component_id,menu_id,modifier_option_id,quantity_per_dish FROM production_component_mappings WHERE store_id=?').bind(session.storeId).all()).results;
   const valid=new Map(components.map(c=>[c.id,c]));
   const mappings=[...globalMappings,...localMappings].filter(m=>valid.has(m.component_id)).map(m=>({...m,component_name:valid.get(m.component_id).name,unit:valid.get(m.component_id).unit,store_id:session.storeId}));
   const timing=await env.DB.prepare('SELECT dine_in_minutes FROM production_timing WHERE store_id=?').bind(session.storeId).first();
-  const productionComponents=aggregateProductionComponents(orders,mappings,{storeId:session.storeId});
+  const productionComponents=aggregateProductionComponents(orders,mappings,{storeId:session.storeId}).map(c=>({...c,emoji:valid.get(c.component_id)?.emoji||''}));
   const unfinishedItems=orders.flatMap(o=>o.items||[]).filter(i=>!i.is_done&&Number(i.quantity)>0);
   const mappedMenuIds=new Set(mappings.map(m=>m.menu_id));
   const mappedItems=unfinishedItems.filter(i=>mappedMenuIds.has(i.menu_id));
@@ -1220,30 +1220,30 @@ if(path==='/api/production-components'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const storeId=url.searchParams.get('store_id')||'';
  if(!storeId)return json({error:'Store required'},400);
- const components=storeId==='global'?(await env.DB.prepare("SELECT *, 'global' AS scope FROM production_global_components ORDER BY name").all()).results:(await env.DB.prepare("SELECT c.id,c.name,c.unit,COALESCE(o.prep_minutes,c.prep_minutes) AS prep_minutes,COALESCE(o.active,c.active) AS active,'global' AS scope FROM production_global_components c LEFT JOIN production_store_overrides o ON o.component_id=c.id AND o.store_id=? UNION ALL SELECT id,name,unit,prep_minutes,active,'store' AS scope FROM production_components WHERE store_id=? ORDER BY name").bind(storeId,storeId).all()).results;
+ const components=storeId==='global'?(await env.DB.prepare("SELECT *, 'global' AS scope FROM production_global_components ORDER BY name").all()).results:(await env.DB.prepare("SELECT c.id,c.name,c.unit,COALESCE(o.prep_minutes,c.prep_minutes) AS prep_minutes,COALESCE(o.emoji,c.emoji) AS emoji,COALESCE(o.active,c.active) AS active,'global' AS scope FROM production_global_components c LEFT JOIN production_store_overrides o ON o.component_id=c.id AND o.store_id=? UNION ALL SELECT id,name,unit,prep_minutes,emoji,active,'store' AS scope FROM production_components WHERE store_id=? ORDER BY name").bind(storeId,storeId).all()).results;
  const mappings=storeId==='global'?(await env.DB.prepare("SELECT *, 'global' AS scope FROM production_global_mappings").all()).results:(await env.DB.prepare("SELECT id,component_id,menu_id,modifier_option_id,quantity_per_dish,'global' AS scope FROM production_global_mappings UNION ALL SELECT id,component_id,menu_id,modifier_option_id,quantity_per_dish,'store' AS scope FROM production_component_mappings WHERE store_id=?").bind(storeId).all()).results;
  return json({components,mappings});
 }
 if(path==='/api/production-components'&&req.method==='POST'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0);
- if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440)return json({error:'Invalid component'},400);
+ const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0),emoji=String(b?.emoji||'').trim();
+ if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440||[...emoji].length>12)return json({error:'Invalid component or emoji'},400);
  if(storeId!=='global'){const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first();if(!store)return json({error:'Store not found'},404);}
- const id=uid();if(storeId==='global')await env.DB.prepare('INSERT INTO production_global_components(id,name,unit,prep_minutes) VALUES(?,?,?,?)').bind(id,name,unit,minutes).run();
- else await env.DB.prepare('INSERT INTO production_components(id,store_id,name,unit,prep_minutes) VALUES(?,?,?,?,?)').bind(id,storeId,name,unit,minutes).run();
+ const id=uid();if(storeId==='global')await env.DB.prepare('INSERT INTO production_global_components(id,name,unit,prep_minutes,emoji) VALUES(?,?,?,?,?)').bind(id,name,unit,minutes,emoji).run();
+ else await env.DB.prepare('INSERT INTO production_components(id,store_id,name,unit,prep_minutes,emoji) VALUES(?,?,?,?,?,?)').bind(id,storeId,name,unit,minutes,emoji).run();
  return json({id},201);
 }
 const pcMatch=path.match(/^\/api\/production-components\/([^/]+)$/);
 if(pcMatch&&req.method==='PATCH'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0);
- if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440||![0,1].includes(Number(b?.active)))return json({error:'Invalid component'},400);
+ if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440||[...emoji].length>12||![0,1].includes(Number(b?.active)))return json({error:'Invalid component'},400);
  let result;
- if(storeId==='global')result=await env.DB.prepare('UPDATE production_global_components SET name=?,unit=?,prep_minutes=?,active=? WHERE id=?').bind(name,unit,minutes,Number(b.active),pcMatch[1]).run();
+ if(storeId==='global')result=await env.DB.prepare('UPDATE production_global_components SET name=?,unit=?,prep_minutes=?,active=?,emoji=? WHERE id=?').bind(name,unit,minutes,Number(b.active),emoji,pcMatch[1]).run();
  else if(await env.DB.prepare('SELECT id FROM production_global_components WHERE id=?').bind(pcMatch[1]).first()){
   if(!await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first())return json({error:'Store not found'},404);
-  await env.DB.prepare('INSERT INTO production_store_overrides(store_id,component_id,prep_minutes,active) VALUES(?,?,?,?) ON CONFLICT(store_id,component_id) DO UPDATE SET prep_minutes=excluded.prep_minutes,active=excluded.active').bind(storeId,pcMatch[1],minutes,Number(b.active)).run();return json({ok:true});
- }else result=await env.DB.prepare('UPDATE production_components SET name=?,unit=?,prep_minutes=?,active=? WHERE id=? AND store_id=?').bind(name,unit,minutes,Number(b.active),pcMatch[1],storeId).run();
+  await env.DB.prepare('INSERT INTO production_store_overrides(store_id,component_id,prep_minutes,active,emoji) VALUES(?,?,?,?,?) ON CONFLICT(store_id,component_id) DO UPDATE SET prep_minutes=excluded.prep_minutes,active=excluded.active,emoji=excluded.emoji').bind(storeId,pcMatch[1],minutes,Number(b.active),emoji).run();return json({ok:true});
+ }else result=await env.DB.prepare('UPDATE production_components SET name=?,unit=?,prep_minutes=?,active=?,emoji=? WHERE id=? AND store_id=?').bind(name,unit,minutes,Number(b.active),emoji,pcMatch[1],storeId).run();
  return result.meta.changes?json({ok:true}):json({error:'Not found'},404);
 }
 if(path==='/api/production-mappings'&&req.method==='POST'){
