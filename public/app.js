@@ -222,7 +222,7 @@ async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=
    if(kitchenPending.has(item.id))item.is_done=kitchenPending.get(item.id)?1:0;
   }
  }
- const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);orders=o;if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+ const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);orders=o;if(page==='kitchen'&&kitchenView==='dag'&&kitchenDagMode==='production')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let superPosAlertQueue=[],superPosAlertSeen=new Set(),superPosAlertActive=null,superPosPendingIds=new Set();
 function showSuperPosAlert(){
  if(page!=='pos'||superPosAlertActive||!superPosAlertQueue.length)return;
@@ -1030,10 +1030,35 @@ function updateKitchenClock(){
 }
 const kitchenViewKey='ck_kitchen_view_v1';
 let kitchenView=(()=>{try{return localStorage.getItem(kitchenViewKey)==='dag'?'dag':'tickets'}catch{return 'tickets'}})();
+let kitchenDagMode='production',kitchenProduction=null,kitchenProductionStore='',kitchenProductionLoading=false;
+async function loadKitchenProduction(){
+ if(page!=='kitchen'||kitchenView!=='dag'||kitchenDagMode!=='production'||!token)return;
+ const store=currentDeviceStore?.id||'',epoch=storeEpoch;
+ if(kitchenProductionLoading)return;
+ kitchenProductionLoading=true;
+ try{
+  const result=await api('/store/kitchen/dag');
+  if(page!=='kitchen'||kitchenView!=='dag'||kitchenDagMode!=='production'||epoch!==storeEpoch||store!==(currentDeviceStore?.id||''))return;
+  kitchenProduction=result;kitchenProductionStore=store;
+  kitchen();
+ }catch(e){console.warn('Production DAG unavailable',e);if(epoch===storeEpoch&&store===(currentDeviceStore?.id||'')){kitchenProduction=null;kitchenProductionStore=store;}}
+ finally{kitchenProductionLoading=false;}
+}
+function kitchenProductionView(){
+ const current=kitchenProductionStore===(currentDeviceStore?.id||'')?kitchenProduction:null;
+ if(!current)return '<div class="panel"><p class="muted">Loading production requirements. Finished Dishes remains available.</p><button type="button" id="dag-production-retry" class="alt">Retry</button></div>';
+ const groups=current.production_components||[];
+ return '<section class="panel kds-dag-view"><div class="kds-dag-heading"><div><h2>Production Requirements</h2><p class="muted small">Shared production components across active tickets. No scheduling estimates yet.</p></div><strong>'+groups.length+' components</strong></div>'+
+ (groups.length?groups.map(g=>'<details class="panel" style="margin:10px 0;padding:14px"><summary><strong>'+esc(g.name)+'</strong> · '+Number(g.quantity.toFixed(2))+' '+esc(g.unit)+' · '+g.sources.length+' ticket items</summary>'+
+ g.sources.map(src=>'<div style="padding:8px 0"><strong>#'+esc(String(src.order_id).slice(0,8))+'</strong> · '+Number(src.quantity.toFixed(2))+' '+esc(g.unit)+(src.deadline_at?' · Ready by '+esc(warsawClock(src.deadline_at)):'')+'</div>').join('')+'</details>').join(''):'<p class="muted">No mapped production requirements. Unmapped dishes are still visible in Finished Dishes.</p>')+
+ '<p class="muted small">Production quantities are estimates from menu mappings; they do not mark tickets complete.</p></section>';
+}
 function kitchenViewTabs(){
  return '<nav class="kds-view-tabs" aria-label="Kitchen display mode"><button type="button" data-kds-view="tickets" class="'+(kitchenView==='tickets'?'selected':'')+'" aria-pressed="'+(kitchenView==='tickets')+'">Tickets</button><button type="button" data-kds-view="dag" class="'+(kitchenView==='dag'?'selected':'')+'" aria-pressed="'+(kitchenView==='dag')+'">DAG Timeline</button></nav>';
 }
 function kitchenDagView(active){
+ if(kitchenDagMode==='production')return kitchenProductionView();
+
  const groups=new Map();
  for(const order of active)for(const item of order.items||[]){
   if(item.is_done)continue;
@@ -1053,7 +1078,7 @@ function bindKitchenViewTabs(){
  document.querySelectorAll('[data-kds-view]').forEach(button=>button.onclick=()=>{
   const next=button.dataset.kdsView;if(next===kitchenView)return;
   kitchenView=next;try{localStorage.setItem(kitchenViewKey,next)}catch{}
-  kitchen();
+  kitchen();if(next==='dag')loadKitchenProduction();
  });
 }
 function kitchen(){
@@ -1085,7 +1110,7 @@ function kitchen(){
    (o.note?'<p class="kds-order-note">Note: '+esc(o.note)+'</p>':'')+'</article>';
  };
  shell(kitchenViewTabs()+'<div class="panel toolbar"><button type="button" id="kds-quick-order">+ Platform Order</button><button type="button" id="kds-courier-queue" class="alt">Courier Collection</button><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div>'+
- (kitchenView==='dag'?kitchenDagView(active):'<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')) +
+ (kitchenView==='dag'?'<div class="toolbar" style="margin:10px 0"><button type="button" class="'+(kitchenDagMode==='production'?'selected':'alt')+'" data-dag-mode="production">Production</button><button type="button" class="'+(kitchenDagMode==='dishes'?'selected':'alt')+'" data-dag-mode="dishes">Finished Dishes</button></div>'+kitchenDagView(active):'<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')) +
  '<section class="panel completed-section kds-history"><div class="row"><h3>Completed Orders</h3><button class="alt" id="kds-history-toggle">'+(historyOpen?'Hide history':'View history')+'</button></div>'+
  (historyOpen?'<div class="toolbar"><select id="kds-history-range"><option value="today" '+(historyRange==='today'?'selected':'')+'>Today</option><option value="yesterday" '+(historyRange==='yesterday'?'selected':'')+'>Yesterday</option><option value="all" '+(historyRange==='all'?'selected':'')+'>All</option></select><input id="kds-history-search" placeholder="Table / order ID" value="'+esc(historyQuery)+'"><button class="alt" id="kds-history-search-button">Search</button></div>'+
  '<p class="muted small">'+historyResult.total+' completed'+(historyResult.limited?' (recent history limit)':'')+'</p>'+
@@ -1094,6 +1119,8 @@ function kitchen(){
  '<div class="toolbar"><button class="alt" id="kds-history-prev" '+(historyPage<=1?'disabled':'')+'>Previous</button><span>Page '+historyPage+'</span><button class="alt" id="kds-history-next" '+(!historyResult.has_more?'disabled':'')+'>Next</button></div>':'<p class="muted small">Completed orders are archived here. Open only when needed.</p>')+'</section>');
  if(kitchenClock)clearInterval(kitchenClock);kitchenClock=setInterval(updateKitchenClock,1000);updateKitchenClock();
  bindKitchenViewTabs();
+ document.querySelectorAll('[data-dag-mode]').forEach(btn=>btn.onclick=()=>{kitchenDagMode=btn.dataset.dagMode;kitchen();if(kitchenDagMode==='production')loadKitchenProduction();});
+ const retry=document.querySelector('#dag-production-retry');if(retry)retry.onclick=()=>loadKitchenProduction();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
  document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
  document.querySelector('#sync').onclick=()=>refresh();
