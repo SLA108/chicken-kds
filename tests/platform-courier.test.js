@@ -105,9 +105,10 @@ test('changing platform warns before clearing dish selections',()=>{
  assert.match(ui,/Changing the delivery platform will clear the selected dishes and modifiers/);
  assert.match(ui,/form\.elements\.platform\.value=loadedPlatform/);
 });
-test('POS platform order list supports filtering and compact cards',()=>{
- assert.match(ui,/pos-platform-search/);
- assert.match(ui,/No matching unfinished platform orders/);
+test('POS platform order workspace supports searching and status filters',()=>{
+ assert.match(ui,/platform-workspace-search/);
+ assert.match(ui,/No matching orders/);
+ assert.match(ui,/platformWorkspaceFilter==='ready'/);
 });
 test('platform edits broadcast a dedicated update notification',()=>{
  assert.match(api,/broadcastStore\(env,storeId,'platform_order_edited',\{id\}\)/);
@@ -145,7 +146,7 @@ test('quick entry has platform buttons, category browser and top submit',()=>{
 
 test('courier collection does not reference quick entry form or catalog state',()=>{
  const start=ui.indexOf('async function openCourierCollection()');
- const end=ui.indexOf('function openPosPlatformOrders()',start);
+ const end=ui.indexOf('let platformWorkspaceFilter=',start);
  assert.ok(start>=0&&end>start);
  const courier=ui.slice(start,end);
  assert.doesNotMatch(courier,/updateDishCount|renderCatalog|renderPlatforms|quick-dish-categories|form\.elements\.platform/);
