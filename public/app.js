@@ -339,14 +339,49 @@ function openPosPlatformOrders(){
  api('/orders').then(latest=>{if(!overlay.isConnected)return;editable=latest.filter(o=>o.platform&&!o.kitchen_completed_at&&!o.collected_at&&o.status!=='cancelled');render()}).catch(e=>notify('Could not refresh platform orders: '+e.message));
 }
 async function editPlatformOrder(id){
- const order=orders.find(o=>o.id===id&&o.platform);
+ let order=orders.find(o=>o.id===id&&o.platform);
+ if(!order){await refresh();order=orders.find(o=>o.id===id&&o.platform);}
  if(!order)return notify('Platform order not found; refresh');
  if(order.kitchen_completed_at||order.collected_at)return notify('Reopen the order in Kitchen before editing');
  const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:1300;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px';
- const form=document.createElement('form');form.style.cssText='width:min(540px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:12px;padding:20px;display:grid;gap:12px';
- form.innerHTML='<h2>Edit Platform Order · #'+esc(order.external_order_id||order.id.slice(0,8))+'</h2><p class="muted">Unfinished dishes can be changed. Completed dishes are locked. Dish selection and modifiers are not editable yet.</p>'+order.items.map(i=>'<label style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>'+esc(i.name)+(i.is_done?' · Done (locked)':' · Pending')+'</span><input type="number" min="1" max="99" required value="'+Number(i.quantity)+'" data-edit-item="'+esc(i.id)+'" '+(i.is_done?'disabled':'')+' style="width:85px"></label>').join('')+'<label>Kitchen note<textarea name="note" maxlength="500">'+esc(order.note||'')+'</textarea></label><div class="row"><button type="button" class="alt" id="platform-edit-cancel">Cancel</button><button type="submit">Save changes</button></div>';
- overlay.append(form);document.body.append(overlay);const close=()=>overlay.remove();form.querySelector('#platform-edit-cancel').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
- form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('[type="submit"]');button.disabled=true;try{await api('/platform-orders/'+encodeURIComponent(id)+'/edit','POST',{expected_updated_at:order.updated_at,note:form.elements.note.value,items:order.items.map(i=>({id:i.id,quantity:i.is_done?Number(i.quantity):Number(form.querySelector('[data-edit-item="'+CSS.escape(i.id)+'"]').value)}))});close();notify('Platform order updated');await refresh();}catch(err){notify('Edit failed: '+err.message);button.disabled=false;}};
+ const form=document.createElement('form');form.style.cssText='width:min(900px,100%);max-height:94vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:14px;padding:18px;display:grid;gap:12px';
+ form.innerHTML='<h2>Edit Platform Order · #'+esc(order.external_order_id||order.id.slice(0,8))+'</h2><p class="muted">Pending dishes can be changed or removed. Done dishes are locked. Replacing a dish resets its kitchen progress.</p><div id="platform-edit-existing" style="display:grid;gap:8px"></div><section style="border-top:1px solid #aaa;padding-top:12px;display:grid;gap:8px"><h3>Add dishes / replacements</h3><input type="search" id="platform-edit-search" placeholder="Search dishes"><div id="platform-edit-catalog" style="display:flex;flex-wrap:wrap;gap:6px;max-height:200px;overflow:auto"></div><div id="platform-edit-added" style="display:grid;gap:10px"></div></section><label>Kitchen note<textarea name="note" maxlength="500">'+esc(order.note||'')+'</textarea></label><div class="row"><button type="button" class="alt" id="platform-edit-cancel">Cancel</button><button type="submit">Save changes</button></div>';
+ overlay.append(form);document.body.append(overlay);
+ const close=()=>overlay.remove();form.querySelector('#platform-edit-cancel').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
+ const existingNode=form.querySelector('#platform-edit-existing'),addedNode=form.querySelector('#platform-edit-added'),catalog=form.querySelector('#platform-edit-catalog');
+ const removed=new Set();let menu=[],modifiers={groups:[],options:[],links:[]};
+ const groupFor=menuId=>modifiers.groups.filter(g=>modifiers.links.some(l=>l.menu_id===menuId&&l.group_id===g.id));
+ const drawExisting=()=>{
+  existingNode.innerHTML=order.items.map(item=>'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px;border:1px solid #aaa;border-radius:9px" data-edit-existing="'+esc(item.id)+'"><strong style="flex:1;min-width:150px">'+esc(item.name)+'</strong><span>'+ (item.is_done?'Done · Locked':'Pending')+'</span><input aria-label="Quantity" type="number" min="1" max="99" value="'+Number(item.quantity)+'" '+(item.is_done?'disabled':'')+' style="width:72px"><button type="button" class="alt" data-edit-replace '+(item.is_done?'disabled':'')+'>Replace</button><button type="button" class="alt" data-edit-remove '+(item.is_done?'disabled':'')+'>Remove</button></div>').join('');
+  for(const row of existingNode.children){
+   const id=row.dataset.editExisting,item=order.items.find(i=>i.id===id);
+   if(removed.has(id)){row.hidden=true;continue;}
+   row.querySelector('[data-edit-remove]').onclick=()=>{removed.add(id);row.hidden=true};
+   row.querySelector('[data-edit-replace]').onclick=()=>{if(!menu.length)return notify('Menu is still loading');removed.add(id);row.hidden=true;addDish(item.menu_id||menu[0].id,item.quantity,(item.modifiers||[]).map(m=>m.option_id));};
+  }
+ };
+ const addDish=(menuId,quantity=1,selected=[])=>{
+  const dish=menu.find(m=>m.id===menuId);if(!dish)return notify('Dish is not available on this platform');
+  const row=document.createElement('div');row.style.cssText='display:grid;gap:8px;padding:12px;border:1px solid #aaa;border-radius:10px';
+  row.innerHTML='<div style="display:flex;gap:8px;align-items:center"><strong style="flex:1">'+esc(dish.name)+'</strong><input aria-label="Quantity" type="number" min="1" max="99" value="'+Number(quantity)+'" style="width:75px"><button type="button" class="alt" data-remove-added>×</button></div>'+groupFor(menuId).map(g=>'<fieldset style="border:1px solid #aaa;border-radius:8px"><legend>'+esc(g.name)+' · '+Number(g.min_select)+'–'+Number(g.max_select)+'</legend>'+modifiers.options.filter(o=>o.group_id===g.id).map(o=>'<label style="display:inline-flex;align-items:center;gap:5px;margin:5px"><input type="checkbox" data-edit-option="'+esc(o.id)+'" data-edit-group="'+esc(g.id)+'" '+(selected.includes(o.id)?'checked':'')+'>'+esc(o.name)+'</label>').join('')+'</fieldset>').join('');
+  row.dataset.menuId=menuId;row.querySelector('[data-remove-added]').onclick=()=>row.remove();addedNode.append(row);
+  row.querySelectorAll('[data-edit-option]').forEach(input=>input.onchange=()=>{const g=groupFor(menuId).find(g=>g.id===input.dataset.editGroup);if(g&&row.querySelectorAll('[data-edit-group="'+CSS.escape(g.id)+'"]:checked').length>g.max_select){input.checked=false;notify('Maximum '+g.max_select+' selections for '+g.name)}});
+ };
+ const drawCatalog=()=>{const q=form.querySelector('#platform-edit-search').value.toLowerCase();catalog.innerHTML=menu.filter(m=>m.name.toLowerCase().includes(q)).map(m=>'<button type="button" class="alt" data-add-menu="'+esc(m.id)+'">'+esc(m.name)+'</button>').join('');catalog.querySelectorAll('[data-add-menu]').forEach(btn=>btn.onclick=()=>addDish(btn.dataset.addMenu));};
+ drawExisting();form.querySelector('#platform-edit-search').oninput=drawCatalog;
+ try{[menu,modifiers]=await Promise.all([api('/quick-order/menu?platform='+encodeURIComponent(order.platform)),api('/menu/modifiers')]);if(!overlay.isConnected)return;drawCatalog();}
+ catch(e){notify('Platform menu failed: '+e.message);}
+ form.onsubmit=async e=>{
+  e.preventDefault();const button=form.querySelector('[type="submit"]');button.disabled=true;
+  try{
+   const items=order.items.filter(i=>!removed.has(i.id)).map(i=>({id:i.id,quantity:i.is_done?Number(i.quantity):Number(existingNode.querySelector('[data-edit-existing="'+CSS.escape(i.id)+'"] input[aria-label="Quantity"]').value)}));
+   const added_items=[...addedNode.children].map(row=>{const menu_id=row.dataset.menuId,quantity=Number(row.querySelector('input[aria-label="Quantity"]').value),option_ids=[...row.querySelectorAll('[data-edit-option]:checked')].map(el=>el.dataset.editOption);for(const g of groupFor(menu_id)){const n=option_ids.filter(id=>modifiers.options.some(o=>o.id===id&&o.group_id===g.id)).length;if(n<g.min_select||n>g.max_select)throw Error('Select '+g.min_select+'–'+g.max_select+' options for '+g.name);}return {menu_id,quantity,option_ids};});
+   if(!items.length&&!added_items.length)throw Error('An order must contain at least one dish');
+   if([...items,...added_items].some(x=>!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99))throw Error('Quantity must be between 1 and 99');
+   await api('/platform-orders/'+encodeURIComponent(id)+'/edit','POST',{expected_updated_at:order.updated_at,note:form.elements.note.value,items,removed_ids:[...removed],added_items});
+   close();notify('Platform order updated');await refresh();
+  }catch(err){notify('Edit failed: '+err.message);button.disabled=false;}
+ };
 }
 async function openQuickOrderDialog(){
  const overlay=document.createElement('div');
