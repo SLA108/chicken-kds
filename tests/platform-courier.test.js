@@ -67,13 +67,24 @@ test('kitchen and POS may enter and edit platform orders; courier handoff stays 
  assert.match(api,/if\(!\['pos','kitchen'\]\.includes\(session\.role\)\)return json\(\{error:'Forbidden'\},403\);\s*const id=courierCollect/);
 });
 
-test('POS provides platform order entry, editing and courier handoff in the navigation tabs',()=>{
- assert.match(ui,/\['platform-new','\+ Platform Order'\]/);
- assert.match(ui,/\['platform-edit','Edit Platform Orders'\]/);
- assert.match(ui,/\['platform-courier','Courier Collection'\]/);
- assert.match(ui,/openPosPlatformOrders/);
+test('POS consolidates platform entry, editing and courier handoff into one workspace tab',()=>{
+ assert.match(ui,/\['platform','Platform Orders'\]/);
+ assert.match(ui,/function platformWorkspaceHtml\(/);
+ assert.match(ui,/function bindPlatformWorkspace\(/);
+ assert.match(ui,/data-platform-workspace-edit/);
+ assert.match(ui,/data-platform-workspace-collect/);
+ assert.match(ui,/platformWorkspaceFilter==='collected'/);
+ assert.doesNotMatch(ui,/\['platform-edit','Edit Platform Orders'\]/);
 });
-
+test('kitchen platform editor removes replace action and collapses modifier groups',()=>{
+ const start=ui.indexOf('async function editPlatformOrder(id)');
+ const end=ui.indexOf('async function openQuickOrderDialog()',start);
+ const edit=ui.slice(start,end);
+ assert.doesNotMatch(edit,/data-edit-replace/);
+ assert.match(edit,/data-edit-remove/);
+ assert.match(edit,/<details style=/);
+ assert.match(edit,/data-edit-option/);
+});
 test('platform edit preserves completed quantities and ISO order timestamps',()=>{
  assert.match(ui,/i\.is_done\?Number\(i\.quantity\):Number/);
  assert.match(api,/const now=new Date\(\)\.toISOString\(\),revision=now.slice/);
@@ -165,14 +176,4 @@ test('platform edit supports adding and removing pending dishes with server-side
  assert.match(edit,/DELETE FROM order_items/);
  assert.match(edit,/await env\.DB\.batch\(checked\)/);
 });
-test('platform editor allows replacing pending dishes and editing modifier options',()=>{
- const start=ui.indexOf('async function editPlatformOrder(id)');
- const end=ui.indexOf('async function openQuickOrderDialog()',start);
- const edit=ui.slice(start,end);
- assert.match(edit,/data-edit-replace/);
- assert.match(edit,/data-edit-remove/);
- assert.match(edit,/data-edit-option/);
- assert.match(edit,/removed_ids:/);
- assert.match(edit,/added_items/);
- assert.match(edit,/item.is_done\?'disabled'/);
-});
+
