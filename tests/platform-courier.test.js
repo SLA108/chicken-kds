@@ -81,3 +81,11 @@ test('platform edit preserves completed quantities and ISO order timestamps',()=
 test('reopening collected platform order is prevented in SQL update',()=>{
  assert.match(api,/AND NOT EXISTS\(SELECT 1 FROM order_platform_metadata pm WHERE pm\.order_id=orders\.id AND pm\.collected_at IS NOT NULL\)/);
 });
+
+test('platform modifiers use responsive compact option rows',()=>{
+ assert.match(ui,/platform-mod-options/);
+ assert.match(ui,/platform-mod-name/);
+ assert.match(ui,/platform-mod-price/);
+ assert.match(ui,/platform-dish-top/);
+ assert.match(ui,/quickOrderStyle\.remove\(\)/);
+});
