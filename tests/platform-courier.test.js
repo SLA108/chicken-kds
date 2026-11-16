@@ -178,3 +178,27 @@ test('platform edit supports adding and removing pending dishes with server-side
  assert.match(edit,/await env\.DB\.batch\(checked\)/);
 });
 
+
+test('kitchen quick entry broadcasts a dedicated same-store POS event only after successful creation',()=>{
+ const start=api.indexOf("if(path==='/api/store/quick-orders'&&req.method==='POST')");
+ const end=api.indexOf('const platformEdit=path.match',start);
+ const code=api.slice(start,end);
+ assert.match(code,/await env\.DB\.batch\(statements\)/);
+ assert.match(code,/if\(session\.role==='kitchen'\)await broadcastStore\(env,storeId,'platform_order_kitchen_created'/);
+ assert.match(code,/external_order_id:b\.external_order_id/);
+});
+test('POS platform alerts use deduplicated soft toast and pickup sound gate',()=>{
+ assert.match(ui,/function notifyKitchenPlatformOrder\(data\)/);
+ assert.match(ui,/kitchenPlatformAlertSeen\.has\(data\.id\)/);
+ assert.match(ui,/if\(page!=='pos'/);
+ assert.match(ui,/if\(pickupSoundReady\)pickupChime\(\)/);
+ assert.match(ui,/m\.type==='platform_order_kitchen_created'/);
+ assert.match(ui,/fohTab='platform';pos\(\);loadPlatformWorkspace\(\)/);
+});
+test('POS and Kitchen notifications share dark theme and accessible toast styles',()=>{
+ assert.match(ui,/function notify\(message,options=\{\}\)/);
+ assert.match(ui,/\.ck-toast-stack/);
+ assert.match(ui,/background:#1e293b!important/);
+ assert.match(ui,/aria-live','polite'/);
+ assert.match(ui,/prefers-reduced-motion:reduce/);
+});
