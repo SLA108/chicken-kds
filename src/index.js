@@ -205,29 +205,36 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
  if(platformEdit&&req.method==='POST'){
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const id=platformEdit[1],storeId=session.storeId,b=await parse(req);
-  if(!b||typeof b.expected_updated_at!=='string'||typeof b.note!=='string'||b.note.length>500||!Array.isArray(b.items)||b.items.length<1||b.items.length>100||b.items.some(i=>!i||typeof i.id!=='string'||!Number.isInteger(i.quantity)||i.quantity<1||i.quantity>99)||new Set(b.items.map(i=>i.id)).size!==b.items.length)return json({error:'Invalid platform edit'},400);
-  const order=await env.DB.prepare("SELECT o.updated_at,o.status,o.kitchen_completed_at,pm.collected_at FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=?").bind(id,storeId).first();
+  const retained=b?.items,removed=b?.removed_ids??[],added=b?.added_items??[];
+  if(!b||typeof b.expected_updated_at!=='string'||typeof b.note!=='string'||b.note.length>500||!Array.isArray(retained)||retained.length>100||retained.some(i=>!i||typeof i.id!=='string'||!Number.isInteger(i.quantity)||i.quantity<1||i.quantity>99)||new Set(retained.map(i=>i.id)).size!==retained.length||!Array.isArray(removed)||removed.length>100||removed.some(x=>typeof x!=='string')||new Set(removed).size!==removed.length||!Array.isArray(added)||added.length>100||added.some(x=>!x||typeof x.menu_id!=='string'||!Number.isInteger(x.quantity)||x.quantity<1||x.quantity>99)||retained.length+added.length<1||retained.length+added.length>100)return json({error:'Invalid platform edit'},400);
+  const order=await env.DB.prepare("SELECT o.updated_at,o.status,o.kitchen_completed_at,pm.collected_at,pm.platform FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=?").bind(id,storeId).first();
   if(!order)return json({error:'Platform order not found'},404);
   if(order.status==='cancelled'||order.kitchen_completed_at||order.collected_at)return json({error:'Platform order is no longer editable'},409);
   if(order.updated_at!==b.expected_updated_at)return json({error:'Order changed; refresh'},409);
   const existing=(await env.DB.prepare('SELECT id,quantity,is_done FROM order_items WHERE order_id=? ORDER BY id').bind(id).all()).results;
-  if(existing.length!==b.items.length||existing.some(i=>!b.items.some(x=>x.id===i.id))||existing.some(i=>i.is_done&&b.items.find(x=>x.id===i.id)?.quantity!==i.quantity))return json({error:'Completed dishes cannot be modified; refresh'},409);
+  if(existing.length!==retained.length+removed.length||existing.some(i=>!retained.some(x=>x.id===i.id)&&!removed.includes(i.id))||retained.some(x=>!existing.some(i=>i.id===x.id))||removed.some(x=>!existing.some(i=>i.id===x&&!i.is_done))||existing.some(i=>i.is_done&&retained.find(x=>x.id===i.id)?.quantity!==i.quantity))return json({error:'Completed dishes cannot be modified; refresh'},409);
+  let inserts=[];
   const now=new Date().toISOString(),revision=now.slice(0,-1)+String(Math.floor(Math.random()*1000)).padStart(3,'0')+'Z';
-  const changed=b.items.filter(i=>{const prev=existing.find(x=>x.id===i.id);return !prev.is_done&&prev.quantity!==i.quantity;});
-  // The first SQL write checks the current dish state inside the D1 transaction.
-  // If Kitchen marked a changed dish Done since our read, no writes may proceed.
-  const changeGuard=changed.length?' AND NOT EXISTS(SELECT 1 FROM order_items i WHERE i.order_id=orders.id AND i.is_done=1 AND i.id IN ('+changed.map(()=>'?').join(',')+'))':'';
+  try{if(added.length)inserts=await prepareOrderItems(env,added,id,now,storeId,order.platform);}catch(e){return json({error:e.message},400);}
+  const changed=retained.filter(i=>{const old=existing.find(x=>x.id===i.id);return !old.is_done&&old.quantity!==i.quantity;});
+  const touched=[...changed.map(x=>x.id),...removed];
+  const changeGuard=touched.length?' AND NOT EXISTS(SELECT 1 FROM order_items i WHERE i.order_id=orders.id AND i.is_done=1 AND i.id IN ('+touched.map(()=>'?').join(',')+'))':'';
   const guard="EXISTS(SELECT 1 FROM orders o JOIN order_platform_metadata pm ON pm.order_id=o.id AND pm.store_id=o.store_id WHERE o.id=? AND o.store_id=? AND o.updated_at=? AND o.kitchen_completed_at IS NULL AND pm.collected_at IS NULL AND o.status!='cancelled')";
-  const statements=[env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)"+changeGuard).bind(revision,b.note,id,storeId,b.expected_updated_at,...changed.map(i=>i.id))];
-  for(const item of changed)statements.push(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
-  statements.push(env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'platform_order_edited',?,?,? WHERE "+guard).bind(uid(),id,session.role,JSON.stringify({store_id:storeId,quantities:b.items.map(i=>({id:i.id,quantity:i.quantity}))}),now,id,storeId,revision));
-  // D1 batch is transactional, but a conditional UPDATE affecting zero rows does not throw.
-  // Assert each guarded write changed exactly one row *inside* the batch so a race
-  // causes SQL failure and rolls back all earlier writes, including the order revision.
+  const writes=[];
+  const addWrite=(stmt,check=true)=>writes.push({stmt,check});
+  addWrite(env.DB.prepare("UPDATE orders SET updated_at=?,note=? WHERE id=? AND store_id=? AND updated_at=? AND kitchen_completed_at IS NULL AND status!='cancelled' AND EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=orders.id AND pm.collected_at IS NULL)"+changeGuard).bind(revision,b.note,id,storeId,b.expected_updated_at,...touched));
+  for(const item of changed)addWrite(env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(item.quantity,item.id,id,id,storeId,revision));
+  for(const itemId of removed){
+   addWrite(env.DB.prepare("DELETE FROM order_item_modifiers WHERE order_item_id=? AND EXISTS(SELECT 1 FROM order_items i WHERE i.id=? AND i.order_id=? AND i.is_done=0 AND "+guard+")").bind(itemId,itemId,id,id,storeId,revision),false);
+   addWrite(env.DB.prepare("DELETE FROM order_items WHERE id=? AND order_id=? AND is_done=0 AND "+guard).bind(itemId,id,id,storeId,revision));
+  }
+  for(const stmt of inserts)addWrite(stmt);
+  addWrite(env.DB.prepare("INSERT INTO events(id,order_id,event,actor,detail,created_at) SELECT ?,?,'platform_order_edited',?,?,? WHERE "+guard).bind(uid(),id,session.role,JSON.stringify({store_id:storeId,quantities:retained.map(i=>({id:i.id,quantity:i.quantity})),removed,added:added.map(i=>({menu_id:i.menu_id,quantity:i.quantity}))}),now,id,storeId,revision));
+  // A zero-row guarded write must abort the D1 batch, not silently partially commit.
   const checked=[];
-  for(const statement of statements){
-   checked.push(statement);
-   checked.push(env.DB.prepare("SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract('INVALID_JSON', '$') END AS guard_ok"));
+  for(const write of writes){
+   checked.push(write.stmt);
+   if(write.check)checked.push(env.DB.prepare("SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract('INVALID_JSON','$') END AS guard_ok"));
   }
   try{await env.DB.batch(checked);}
   catch(e){
