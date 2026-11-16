@@ -1031,6 +1031,44 @@ function updateKitchenClock(){
 const kitchenViewKey='ck_kitchen_view_v1';
 let kitchenView=(()=>{try{return localStorage.getItem(kitchenViewKey)==='dag'?'dag':'tickets'}catch{return 'tickets'}})();
 let kitchenDagMode='dishes',kitchenProduction=null,kitchenProductionStore='',kitchenProductionLoading=false;
+let kitchenProductionSnapshot=null,kitchenProductionFlash=new Map(),kitchenProductionFlashTimer=null;
+function resetKitchenProductionChanges(){
+ kitchenProductionSnapshot=null;kitchenProductionFlash.clear();
+ if(kitchenProductionFlashTimer){clearTimeout(kitchenProductionFlashTimer);kitchenProductionFlashTimer=null}
+}
+function captureKitchenProductionChanges(result,store){
+ const next=new Map();
+ for(const c of result?.production_components||[]){
+  const id=String(c.component_id);
+  const sources=new Map();
+  for(const source of c.sources||[])sources.set(String(source.order_item_id),Number(source.quantity)||0);
+  next.set(id,sources);
+ }
+ const prior=kitchenProductionSnapshot;
+ if(prior?.store===store){
+  const now=Date.now();
+  for(const [id,sources] of next){
+   const before=prior.components.get(id)||new Map();
+   let added=0;
+   for(const [itemId,qty] of sources)if(!before.has(itemId))added+=qty;
+   if(added>0){
+    const existing=kitchenProductionFlash.get(id);
+    kitchenProductionFlash.set(id,{added:added+(existing?.expires>now?existing.added:0),expires:now+5000});
+   }
+  }
+ }
+ kitchenProductionSnapshot={store,components:next};
+ if(kitchenProductionFlash.size){
+  if(kitchenProductionFlashTimer)clearTimeout(kitchenProductionFlashTimer);
+  kitchenProductionFlashTimer=setTimeout(()=>{
+   kitchenProductionFlashTimer=null;
+   const now=Date.now();
+   for(const [id,v] of kitchenProductionFlash)if(v.expires<=now)kitchenProductionFlash.delete(id);
+   if(page==='kitchen'&&kitchenView==='dag')kitchen();
+  },5100);
+ }
+}
+
 async function loadKitchenProduction(){
  if(page!=='kitchen'||kitchenView!=='dag'||!token)return;
  const store=currentDeviceStore?.id||'',epoch=storeEpoch;
@@ -1039,6 +1077,7 @@ async function loadKitchenProduction(){
  try{
   const result=await api('/kitchen/dag');
   if(page!=='kitchen'||kitchenView!=='dag'||epoch!==storeEpoch||store!==(currentDeviceStore?.id||''))return;
+  captureKitchenProductionChanges(result,store);
   kitchenProduction=result;kitchenProductionStore=store;
   kitchen();
  }catch(e){console.warn('Production DAG unavailable',e);if(epoch===storeEpoch&&store===(currentDeviceStore?.id||'')){kitchenProduction=null;kitchenProductionStore=store;}}
@@ -1114,6 +1153,8 @@ function kitchenDagView(active){
   return '🍽️';
  };
  const summary=visible.map(r=>{
+  const flash=kitchenProductionFlash.get(String(r.component.component_id));
+  const fresh=flash&&flash.expires>Date.now()?flash:null;
   const id=encodeURIComponent(String(r.component.component_id)),open=dagSelectedNode===id;
   const breakdown=[...r.byDish.values()].sort((a,b)=>b.quantity-a.quantity);
   const sorted=r.selected.filter(x=>x.deadline!==null).sort((a,b)=>a.deadline-b.deadline);
@@ -1124,7 +1165,7 @@ function kitchenDagView(active){
    '<strong>Ready by</strong>'+
    ([...buckets].map(([time,b])=>'<div class="kds-prod-deadline"><strong>'+clock(time)+(time<now?' · Overdue':'')+' · ×'+fmt(b.quantity)+'</strong>'+b.items.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>').join('')||'<p class="muted small">No timed deadlines</p>')+
    (dagRangeMinutes===0&&r.unscheduled.length?'<div class="kds-prod-deadline"><strong>Deadline not set · ×'+fmt(r.unscheduled.reduce((n,x)=>n+x.quantity,0))+'</strong>'+r.unscheduled.map(x=>'<div class="muted small">#'+esc(String(x.order.id).slice(0,8))+' · '+esc(x.item.name)+' ×'+fmt(x.quantity)+'</div>').join('')+'</div>':'')+'</div>';
-  return '<div class="kds-prod-card'+(open?' is-expanded':'')+'"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span class="kds-prod-main"><span class="kds-prod-name"><span class="kds-prod-emoji" aria-hidden="true">'+esc(String(r.component.emoji||'').trim()||componentEmoji(r.component.name))+'</span><strong>'+esc(r.component.name)+'</strong></span><span class="kds-prod-quantity"><span class="kds-prod-math"><span class="kds-prod-math-overdue">'+fmt(Math.min(r.late,r.qty))+'</span><span class="kds-prod-math-plus">+</span><span class="kds-prod-math-upcoming">'+fmt(Math.max(0,r.qty-r.late))+'</span><span class="kds-prod-math-equals">=</span><strong class="kds-prod-math-total">'+fmt(r.qty)+'</strong></span><small>'+esc(r.component.unit||'unit')+'</small></span><span class="kds-prod-meta">All orders: '+fmt(r.total)+(r.late?' · '+fmt(r.late)+' overdue':'')+'</span></span><span class="kds-prod-chevron" aria-hidden="true">'+(open?'⌃':'⌄')+'</span></button>'+
+  return '<div class="kds-prod-card'+(open?' is-expanded':'')+'"><button type="button" class="kds-prod-card-head" data-dag-node="'+esc(id)+'" aria-expanded="'+open+'"><span class="kds-prod-main"><span class="kds-prod-name"><span class="kds-prod-emoji" aria-hidden="true">'+esc(String(r.component.emoji||'').trim()||componentEmoji(r.component.name))+'</span><strong>'+esc(r.component.name)+'</strong></span><span class="kds-prod-quantity"><span class="kds-prod-number">'+fmt(fresh?Math.max(0,r.qty-fresh.added):r.qty)+'</span>'+(fresh?'<span class="kds-prod-new-delta">+'+fmt(fresh.added)+' = '+fmt(r.qty)+'</span>':'')+'<small>'+esc(r.component.unit||'unit')+'</small></span><span class="kds-prod-meta">All orders: '+fmt(r.total)+(r.late?' · '+fmt(r.late)+' overdue':'')+'</span></span><span class="kds-prod-chevron" aria-hidden="true">'+(open?'⌃':'⌄')+'</span></button>'+
   (open?detail:'')+'</div>';
  }).join('');
  const schedule=rows.flatMap(r=>r.sources.filter(x=>x.deadline!==null&&(dagRangeMinutes===0||x.deadline<=cutoff)).map(x=>({name:r.component.name,unit:r.component.unit,quantity:x.quantity,deadline:x.deadline,item:x.item,order:x.order})));
