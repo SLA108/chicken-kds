@@ -217,6 +217,17 @@ function queueSuperPosAlerts(incoming,initial){
 }
 let reconnectTimer=null,wsGeneration=0;
 function disconnect(){storeEpoch++;kitchenRefreshSerial++;document.querySelector('#super-pos-alert')?.remove();superPosAlertQueue=[];superPosAlertActive=null;superPosAlertSeen.clear();superPosPendingIds.clear();pickupInitialized=false;pickupItems=[];pickupSerial++;posReservations=[];posReservationLoaded=false;posReservationReloadPending=false;posReservationAlerts.clear();reservationEventQueue.length=0;reservationEventSeen.clear();document.querySelectorAll('[id^="reservation-reminder-"]').forEach(el=>el.remove());document.querySelector('#pickup-toast')?.remove();wsGeneration++;clearTimeout(reconnectTimer);reconnectTimer=null;const old=ws;ws=null;connected=false;if(old){old.onclose=null;old.onerror=null;old.onopen=null;old.onmessage=null;try{old.close()}catch{}}}
+function platformOrderUpdateAlert(id){
+ if(!['pos','kitchen'].includes(page))return;
+ const order=orders.find(o=>o.id===id);
+ const el=document.createElement('div');el.id='platform-order-update-alert';el.setAttribute('role','alert');
+ el.style.cssText='position:fixed;top:16px;right:16px;z-index:3000;width:min(390px,calc(100vw - 32px));background:var(--surface,#fff);color:var(--text,#222);border:2px solid #f59e0b;border-radius:14px;box-shadow:0 12px 40px #0003;padding:16px;display:grid;gap:10px';
+ el.innerHTML='<strong style="font-size:17px">⚠ ORDER UPDATED</strong><span>'+esc(order?.platform?.replaceAll('_',' ').toUpperCase()||'Platform order')+' · #'+esc(order?.external_order_id||id.slice(0,8))+'</span><div style="display:flex;gap:8px"><button type="button" data-platform-alert-view>View order</button><button type="button" class="alt" data-platform-alert-dismiss>Dismiss</button></div>';
+ document.querySelector('#platform-order-update-alert')?.remove();document.body.append(el);
+ el.querySelector('[data-platform-alert-dismiss]').onclick=()=>el.remove();
+ el.querySelector('[data-platform-alert-view]').onclick=()=>{el.remove();if(page==='pos')openPosPlatformOrders();else document.querySelector('[data-kitchen-order="'+CSS.escape(id)+'"]')?.scrollIntoView({behavior:'smooth',block:'center'})};
+ if(page==='kitchen')sound();
+}
 function connect(){
  if(!token)return;
  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
@@ -227,7 +238,7 @@ function connect(){
  ws=socket;
  const current=()=>generation===wsGeneration&&ws===socket;
  socket.onopen=()=>{if(!current())return;connected=true;if(page==='pos'){catchUpReservationEvents();loadPosReservations();const status=document.querySelector('header .status');if(status){status.className='status online';status.textContent='● Live'}else render()}else render();refresh();};
- socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
+ socket.onmessage=e=>{if(!current())return;if(e.data==='pong')return;try{const m=JSON.parse(e.data);if(m.type==='platform_order_edited'){lastRealtimeMessage=Date.now();refresh().then(()=>platformOrderUpdateAlert(m.data?.id||''));}else if(m.type==='orders'||m.type==='menu'){lastRealtimeMessage=Date.now();if(page==='pos'&&m.type==='orders'&&m.data?.id)superPosPendingIds.add(m.data.id);refresh()}else if(m.type==='reservations'){lastRealtimeMessage=Date.now();if(page==='pos'){queueReservationEvent(m.data);loadPosReservations()}}else if(m.type==='pickup'){lastRealtimeMessage=Date.now();if(page==='pos')loadPickups(true)}else if(m.type==='connected'){lastRealtimeMessage=Date.now()}}catch(err){console.warn('WebSocket message error',err)}};
  socket.onclose=async event=>{if(!current())return;ws=null;connected=false;
  if(event.code===1008&&deviceMode()){
   const recovered=await renewDeviceSession();
