@@ -1185,6 +1185,54 @@ if(modifierLinkMatch&&req.method==='PUT'){
  await env.DB.batch([env.DB.prepare('DELETE FROM menu_modifier_groups WHERE menu_id=?').bind(dish.id),...b.group_ids.map(id=>env.DB.prepare('INSERT INTO menu_modifier_groups(menu_id,group_id) VALUES(?,?)').bind(dish.id,id))]);
  await broadcast(env,'menu',{});return json({ok:true});
 }
+// Production components are administrator-managed and scoped to a selected restaurant.
+if(path==='/api/production-components'&&req.method==='GET'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const storeId=url.searchParams.get('store_id')||'';
+ if(!storeId)return json({error:'Store required'},400);
+ const components=(await env.DB.prepare('SELECT * FROM production_components WHERE store_id=? ORDER BY name').bind(storeId).all()).results;
+ const mappings=(await env.DB.prepare('SELECT * FROM production_component_mappings WHERE store_id=? ORDER BY created_at').bind(storeId).all()).results;
+ return json({components,mappings});
+}
+if(path==='/api/production-components'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0);
+ if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440)return json({error:'Invalid component'},400);
+ const store=await env.DB.prepare('SELECT id FROM stores WHERE id=? AND active=1').bind(storeId).first();
+ if(!store)return json({error:'Store not found'},404);
+ const id=uid();await env.DB.prepare('INSERT INTO production_components(id,store_id,name,unit,prep_minutes) VALUES(?,?,?,?,?)').bind(id,storeId,name,unit,minutes).run();
+ return json({id},201);
+}
+const pcMatch=path.match(/^\/api\/production-components\/([^/]+)$/);
+if(pcMatch&&req.method==='PATCH'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),storeId=String(b?.store_id||''),name=String(b?.name||'').trim(),unit=String(b?.unit||'portion').trim(),minutes=Number(b?.prep_minutes||0);
+ if(!storeId||!name||name.length>100||!unit||unit.length>30||!Number.isInteger(minutes)||minutes<0||minutes>1440||![0,1].includes(Number(b?.active)))return json({error:'Invalid component'},400);
+ const result=await env.DB.prepare('UPDATE production_components SET name=?,unit=?,prep_minutes=?,active=? WHERE id=? AND store_id=?').bind(name,unit,minutes,Number(b.active),pcMatch[1],storeId).run();
+ return result.meta.changes?json({ok:true}):json({error:'Not found'},404);
+}
+if(path==='/api/production-mappings'&&req.method==='POST'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const b=await parse(req),storeId=String(b?.store_id||''),componentId=String(b?.component_id||''),menuId=String(b?.menu_id||''),modifierId=b?.modifier_option_id?String(b.modifier_option_id):null,qty=Number(b?.quantity_per_dish);
+ if(!storeId||!componentId||!menuId||!Number.isFinite(qty)||qty<=0||qty>100000)return json({error:'Invalid mapping'},400);
+ const component=await env.DB.prepare('SELECT id FROM production_components WHERE id=? AND store_id=?').bind(componentId,storeId).first();
+ const dish=await env.DB.prepare('SELECT id FROM menu WHERE id=?').bind(menuId).first();
+ if(!component||!dish)return json({error:'Component or menu item not found'},404);
+ if(modifierId){
+  const option=await env.DB.prepare('SELECT o.id FROM modifier_options o JOIN menu_modifier_groups g ON g.group_id=o.group_id WHERE o.id=? AND g.menu_id=?').bind(modifierId,menuId).first();
+  if(!option)return json({error:'Modifier not linked to dish'},400);
+ }
+ const id=uid();await env.DB.prepare('INSERT INTO production_component_mappings(id,store_id,component_id,menu_id,modifier_option_id,quantity_per_dish) VALUES(?,?,?,?,?,?)').bind(id,storeId,componentId,menuId,modifierId,qty).run();
+ return json({id},201);
+}
+const mappingMatch=path.match(/^\/api\/production-mappings\/([^/]+)$/);
+if(mappingMatch&&req.method==='DELETE'){
+ if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
+ const storeId=url.searchParams.get('store_id')||'';
+ if(!storeId)return json({error:'Store required'},400);
+ const result=await env.DB.prepare('DELETE FROM production_component_mappings WHERE id=? AND store_id=?').bind(mappingMatch[1],storeId).run();
+ return result.meta.changes?json({ok:true}):json({error:'Not found'},404);
+}
 if(path==='/api/categories'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  return json((await env.DB.prepare('SELECT c.*, (SELECT COUNT(*) FROM menu m WHERE m.category=c.name) item_count FROM menu_categories c ORDER BY c.sort_order,c.name').all()).results);
