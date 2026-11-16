@@ -1102,7 +1102,10 @@ function kitchenDagView(active){
   row.push({name:component.name,unit:component.unit,quantity:source.quantity});componentByItem.set(key,row);
  }
  const deadlines=list.flatMap(g=>[...g.deadlines.values()].map(x=>x.deadline).filter(Number.isFinite));
- const windowStart=Math.floor((now-5*60000)/(5*60000))*5*60000,windowEnd=windowStart+dagRangeMinutes*60000,span=windowEnd-windowStart;
+ const earliestDeadline=deadlines.length?Math.min(...deadlines):now;
+ // Keep overdue unfinished dishes visible: anchor the window to the earliest pending deadline.
+ const anchorTime=Math.min(now-5*60000,earliestDeadline-2*60000);
+ const windowStart=Math.floor(anchorTime/(5*60000))*5*60000,windowEnd=windowStart+dagRangeMinutes*60000,span=windowEnd-windowStart;
  const ticks=Array.from({length:7},(_,i)=>windowStart+span*i/6);
  const axis=ticks.map(t=>'<span>'+warsawClock(new Date(t).toISOString()).slice(0,5)+'</span>').join('');
  const nowPct=Math.max(0,Math.min(100,(now-windowStart)/span*100));
