@@ -311,23 +311,6 @@ async function openCourierCollection(){
  overlay.append(panel);document.body.append(overlay);const close=()=>overlay.remove();panel.querySelector('#courier-close').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};
  const list=panel.querySelector('#courier-list');let historyMode=false;
  panel.querySelector('#courier-pending').onclick=()=>{historyMode=false;load()};panel.querySelector('#courier-history').onclick=()=>{historyMode=true;load()};
- const updateDishCount=()=>{const n=[...itemsNode.children].reduce((sum,row)=>sum+(Number(row.querySelector('input[aria-label="Quantity"]')?.value)||0),0);form.querySelector('#quick-order-count').textContent=n+' '+(n===1?'dish':'dishes')};
- let selectedCategory='All';
- const categoriesNode=form.querySelector('#quick-dish-categories'),resultsNode=form.querySelector('#quick-dish-results'),searchNode=form.querySelector('#quick-dish-search');
- const renderCatalog=()=>{
-  const categories=['All',...new Set(platformMenu.map(m=>m.category||'Other'))];
-  if(!categories.includes(selectedCategory))selectedCategory='All';
-  categoriesNode.innerHTML=categories.map(cat=>'<button type="button" data-quick-category="'+esc(cat)+'" class="alt '+(cat===selectedCategory?'selected':'')+'">'+esc(cat)+'</button>').join('');
-  categoriesNode.querySelectorAll('[data-quick-category]').forEach(button=>button.onclick=()=>{selectedCategory=button.dataset.quickCategory;renderCatalog()});
-  const q=searchNode.value.trim().toLowerCase();
-  const visible=platformMenu.filter(m=>(selectedCategory==='All'||(m.category||'Other')===selectedCategory)&&m.name.toLowerCase().includes(q));
-  resultsNode.innerHTML=visible.map(m=>'<button type="button" class="alt" data-quick-dish="'+esc(m.id)+'"><strong>'+esc(m.name)+'</strong><small style="display:block;opacity:.7">'+money(m.price_cents)+'</small></button>').join('')||'<p class="muted">No matching dishes</p>';
-  resultsNode.querySelectorAll('[data-quick-dish]').forEach(button=>button.onclick=()=>add(button.dataset.quickDish));
- };
- searchNode.oninput=renderCatalog;
- const renderPlatforms=()=>form.querySelectorAll('[data-quick-platform]').forEach(button=>{button.classList.toggle('selected',button.dataset.quickPlatform===form.elements.platform.value);button.setAttribute('aria-pressed',String(button.dataset.quickPlatform===form.elements.platform.value))});
- form.querySelectorAll('[data-quick-platform]').forEach(button=>button.onclick=()=>{form.elements.platform.value=button.dataset.quickPlatform;form.elements.platform.onchange()});
- renderPlatforms();
  const load=async()=>{try{panel.querySelector('#courier-pending').className=historyMode?'alt':'';panel.querySelector('#courier-history').className=historyMode?'':'alt';const data=await api(historyMode?'/platform-orders/history':'/platform-orders/collection');if(!overlay.isConnected)return;list.innerHTML=data.orders.length?data.orders.map(o=>'<article class="panel" style="margin:10px 0;padding:12px"><div class="row" style="justify-content:space-between"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+' · #'+esc(o.external_order_id)+'</strong><span>'+Number(o.dish_count)+' dishes</span></div><p class="muted small">Ready '+warsawClock(o.kitchen_completed_at)+(o.collected_at?' · Collected '+warsawClock(o.collected_at):'')+'</p>'+(historyMode?'':'<button type="button" data-courier-collect="'+esc(o.order_id)+'">Collected by Courier</button>')+'</article>').join('') :'<p class="muted">'+(historyMode?'No collected platform orders yet.':'No orders awaiting courier collection.')+'</p>';
  list.querySelectorAll('[data-courier-collect]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await api('/platform-orders/'+encodeURIComponent(button.dataset.courierCollect)+'/collect','POST',{});notify('Courier collection recorded');await load();await refresh();}catch(e){notify('Collection failed: '+e.message);button.disabled=false;}});
  }catch(e){list.textContent='Collection queue unavailable: '+e.message;}};
