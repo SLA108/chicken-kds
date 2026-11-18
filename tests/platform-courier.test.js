@@ -30,7 +30,7 @@ test('platform UI is distinct from kitchen and POS pickup',()=>{
 
 test('platform collection history is store-scoped and read-only',()=>{
  assert.match(api,/path==='\/api\/store\/platform-orders\/history'/);
- assert.match(api,/pm\.collected_at IS NOT NULL ORDER BY pm\.collected_at DESC/);
+ assert.match(api,/pm\.collected_at IS NOT NULL AND o\.created_at>=\? AND o\.created_at<\? ORDER BY pm\.collected_at DESC/);
  assert.match(ui,/historyMode\?'\/platform-orders\/history':'\/platform-orders\/collection'/);
  assert.match(ui,/historyMode\?'':'<button type="button" data-courier-collect/);
 });
