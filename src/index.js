@@ -1061,7 +1061,10 @@ if(/^\/api\/admin\/devices\/[^/]+\/stores$/.test(path)&&['GET','PUT'].includes(r
   ...ids.map(id=>env.DB.prepare('INSERT INTO device_store_access(device_id,store_id,granted_at) VALUES(?,?,?)').bind(deviceId,id,now)),
   env.DB.prepare('UPDATE pos_devices SET store_id=? WHERE id=?').bind(ids.includes(device.store_id)?device.store_id:ids[0],deviceId)
  ]);
- await Promise.all(previous.filter(id=>!ids.includes(id)).map(id=>disconnectDeviceStore(env,id,deviceId)));
+ // Reconnect every existing device session, including stores whose grant remains.
+ // Otherwise newly granted stores never reach already-open POS/Kitchen selectors.
+ // Revoked stores are also disconnected; renew checks the current DB grants.
+ await Promise.all(previous.map(id=>disconnectDeviceStore(env,id,deviceId)));
  return json({ok:true,device_id:deviceId,store_ids:ids});
 }
 if(path==='/api/admin/device-pairings'&&req.method==='GET'){
