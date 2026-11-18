@@ -290,7 +290,28 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(!['pos','kitchen'].includes(session.role))return json({error:'Forbidden'},403);
   const params=new URL(req.url).searchParams;
   const limit=Math.min(40,Math.max(1,Number.parseInt(params.get('limit')||'40',10)||40));
-  const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,pm.collected_by,o.created_at,o.kitchen_completed_at,o.status,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND pm.collected_at IS NOT NULL ORDER BY pm.collected_at DESC LIMIT ?").bind(session.storeId,session.storeId,limit).all()).results;
+  // Collected workspace is scoped by order creation time, never courier pickup time.
+  // Warsaw business day: 10:00 to 03:00 next calendar day (03:00–10:00 is closed).
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const part=type=>parts.find(p=>p.type===type).value;
+  const localDay=new Date(Date.UTC(Number(part('year')),Number(part('month'))-1,Number(part('day'))));
+  if(Number(part('hour'))<10)localDay.setUTCDate(localDay.getUTCDate()-1);
+  const localDate=localDay.toISOString().slice(0,10);
+  const nextDay=new Date(localDay);nextDay.setUTCDate(nextDay.getUTCDate()+1);
+  const nextDate=nextDay.toISOString().slice(0,10);
+  const warsawUtc=(date,hour)=>{
+   const guess=Date.parse(date+'T'+String(hour).padStart(2,'0')+':00:00Z');
+   const formatter=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+   let utc=guess;
+   for(let i=0;i<3;i++){
+    const fields=Object.fromEntries(formatter.formatToParts(new Date(utc)).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+    const observed=Date.UTC(Number(fields.year),Number(fields.month)-1,Number(fields.day),Number(fields.hour),Number(fields.minute),Number(fields.second));
+    utc+=guess-observed;
+   }
+   return new Date(utc).toISOString();
+  };
+  const from=warsawUtc(localDate,10),to=warsawUtc(nextDate,3);
+  const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,pm.collected_by,o.created_at,o.kitchen_completed_at,o.status,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND pm.collected_at IS NOT NULL AND o.created_at>=? AND o.created_at<? ORDER BY pm.collected_at DESC LIMIT ?").bind(session.storeId,session.storeId,from,to,limit).all()).results;
   return json({orders:rows});
  }
  if(path==='/api/store/platform-orders/collection'&&req.method==='GET'){
