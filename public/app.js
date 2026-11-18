@@ -377,6 +377,7 @@ function acknowledgePlatformReady(){
  savePlatformReadyState();
 }
 let platformWorkspaceFilter='active',platformWorkspaceSearch='',platformWorkspacePlatform='all',platformCollectedHistory=[],platformWorkspaceLoading=false;
+const platformCollectPending=new Set();
 const platformBrandThemes={uber_eats:{name:'Uber Eats',color:'#000000',ink:'#FFFFFF'},wolt:{name:'Wolt',color:'#009DE0',ink:'#FFFFFF'},pyszne:{name:'Pyszne.pl',color:'#FF8000',ink:'#FFFFFF'},pyszne_pl:{name:'Pyszne.pl',color:'#FF8000',ink:'#FFFFFF'},bolt_food:{name:'Bolt Food',color:'#32BB78',ink:'#092C1B'},glovo:{name:'Glovo',color:'#FFBF42',ink:'#241B08'}};
 function platformBrand(platform){return platformBrandThemes[platform]||{name:String(platform||'Other').replaceAll('_',' ').toUpperCase(),color:'#64748B',ink:'#FFFFFF'};}
 let platformHistoryOpen=false,platformHistoryPage=1,platformHistoryFrom='',platformHistoryTo='',platformHistoryProvider='',platformHistoryQuery='',platformHistoryResult={orders:[],total:0,page_size:15},platformHistoryBusy=false;
@@ -413,7 +414,7 @@ async function showPlatformHistoryDetail(id){
 }
 const platformHistoryCss=document.createElement('style');platformHistoryCss.textContent='.platform-history-filters{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:16px 0}.platform-history-filters label{display:grid;gap:5px;flex:1 1 155px}.platform-history-filters input,.platform-history-filters select{width:100%;min-width:0}.platform-history-list{display:grid;gap:8px}.platform-history-row{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;gap:12px;padding:14px;border:1px solid var(--border,#ccc);border-radius:12px;background:var(--surface,#fff);color:var(--text,#222)}.platform-history-row span:first-child{display:grid;gap:5px}.platform-history-row small{opacity:.7}.platform-history-pagination{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:18px}.platform-history-detail{max-height:85vh;overflow:auto}';document.head.append(platformHistoryCss);
 function platformWorkspaceHtml(){
- const active=orders.filter(o=>o.platform&&!o.collected_at&&o.status!=='cancelled');
+ const active=orders.filter(o=>o.platform&&!o.collected_at&&o.status!=='cancelled'&&!platformCollectPending.has(o.id||o.order_id));
  const ready=active.filter(o=>!!o.kitchen_completed_at);
  const preparing=active.filter(o=>!o.kitchen_completed_at);
  const readyNew=ready.filter(o=>platformReadyNewIds.has(o.id||o.order_id)).length;
@@ -478,8 +479,18 @@ function confirmPlatformCollection(id){
   submit.disabled=true;submit.textContent='Recording pickup…';
   overlay.querySelector('.platform-collect-cancel').disabled=true;
   overlay.querySelector('.platform-collect-close').disabled=true;
-  try{await api('/platform-orders/'+encodeURIComponent(id)+'/collect','POST',{});cancel();notify('Courier collection recorded');await refresh();await loadPlatformWorkspace()}
-  catch(e){delete overlay.dataset.busy;const error=overlay.querySelector('.platform-collect-error');error.hidden=false;error.textContent='Collection failed: '+e.message;submit.disabled=false;submit.textContent='Try again';overlay.querySelector('.platform-collect-cancel').disabled=false;overlay.querySelector('.platform-collect-close').disabled=false;}
+  platformCollectPending.add(id);
+  renderPlatformWorkspace();
+  cancel();
+  try{
+   await api('/platform-orders/'+encodeURIComponent(id)+'/collect','POST',{});
+   notify('Courier collection recorded');
+  }catch(e){
+   notify('Collection failed: '+e.message);
+  }finally{
+   platformCollectPending.delete(id);
+   await loadPlatformWorkspace();
+  }
  };
  overlay.querySelector('.platform-collect-cancel').focus();
 }
