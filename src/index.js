@@ -807,7 +807,8 @@ if(path==='/api/admin/service-quality'&&req.method==='GET'){
 }
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
- const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'',period=params.get('period')||'current';
+ const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'',period=params.get('period')||'current',orderType=params.get('order_type')||'all',platform=params.get('platform')||'all',collection=params.get('collection')||'all';
+ if(!['all','regular','platform'].includes(orderType)||!['all','uber_eats','wolt','pyszne','bolt_food','glovo'].includes(platform)||!['all','awaiting','collected'].includes(collection))return json({error:'Invalid order filter'},400);
  if(status&&!['new','cooking','done','cancelled'].includes(status))return json({error:'Invalid status'},400);
  if(!['current','today','yesterday','7days','custom'].includes(period))return json({error:'Invalid period'},400);
  if(storeId){const found=await env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first();if(!found)return json({error:'Store not found'},404);}
@@ -827,6 +828,14 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
  const where=[],args=[];
  if(storeId){where.push('o.store_id=?');args.push(storeId);}
  if(status){where.push('o.status=?');args.push(status);}
+ if(orderType==='regular')where.push('NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=o.id AND pm.store_id=o.store_id)');
+ if(orderType==='platform'||platform!=='all'||collection!=='all'){
+  let condition='pm.order_id=o.id AND pm.store_id=o.store_id';
+  if(platform!=='all'){condition+=' AND pm.platform=?';args.push(platform);}
+  if(collection==='awaiting')condition+=' AND pm.collected_at IS NULL';
+  if(collection==='collected')condition+=' AND pm.collected_at IS NOT NULL';
+  where.push('EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE '+condition+')');
+ }
  if(period==='current'){where.push("(o.created_at>=? AND o.created_at<? OR (o.created_at<? AND o.status IN ('new','cooking')))");args.push(from,to,from);}
  else{where.push('o.created_at>=? AND o.created_at<?');args.push(from,to);}
  const clause='WHERE '+where.join(' AND ');
@@ -841,6 +850,8 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   const byOrder=new Map(),byItem=new Map();
   for(const m of modifiers){if(!byItem.has(m.order_item_id))byItem.set(m.order_item_id,[]);byItem.get(m.order_item_id).push(m);}
   for(const i of items){if(!byOrder.has(i.order_id))byOrder.set(i.order_id,[]);byOrder.get(i.order_id).push({...i,modifiers:byItem.get(i.id)||[]});}
+  const platformRows=(await env.DB.prepare('SELECT order_id,platform,external_order_id,collected_at FROM order_platform_metadata WHERE order_id IN ('+marks+')').bind(...ids).all()).results;
+  const platformByOrder=new Map(platformRows.map(p=>[p.order_id,p]));
   const ratings=(await env.DB.prepare('SELECT order_id,rating FROM order_service_ratings WHERE order_id IN ('+marks+')').bind(...ids).all()).results;
   const ratingByOrder=new Map(ratings.map(r=>[r.order_id,r.rating]));
   const payments=(await env.DB.prepare('SELECT order_id,COALESCE(SUM(amount_cents),0) AS paid_cents FROM payments WHERE order_id IN ('+marks+') GROUP BY order_id').bind(...ids).all()).results;
@@ -854,6 +865,7 @@ if(path==='/api/admin/orders'&&req.method==='GET'){
   }
   for(const o of visible){
    o.items=byOrder.get(o.id)||[];
+   o.platform_info=platformByOrder.get(o.id)||null;
    o.service_rating=ratingByOrder.get(o.id)||null;
    o.total_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.price_cents)||0),0);
    o.discount_cents=o.items.reduce((sum,i)=>sum+(Number(i.quantity)||0)*(Number(i.discount_cents)||0),0);
