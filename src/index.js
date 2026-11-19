@@ -312,6 +312,13 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   };
   const from=warsawUtc(localDate,10),to=warsawUtc(nextDate,3);
   const rows=(await env.DB.prepare("SELECT pm.order_id,pm.platform,pm.external_order_id,pm.platform_deadline_at,pm.collected_at,pm.collected_by,o.created_at,o.kitchen_completed_at,o.status,(SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) AS dish_count FROM order_platform_metadata pm JOIN orders o ON o.id=pm.order_id WHERE pm.store_id=? AND o.store_id=? AND pm.collected_at IS NOT NULL AND o.created_at>=? AND o.created_at<? ORDER BY pm.collected_at DESC LIMIT ?").bind(session.storeId,session.storeId,from,to,limit).all()).results;
+  if(rows.length){
+   const ids=rows.map(o=>o.order_id),marks=ids.map(()=>'?').join(',');
+   const items=(await env.DB.prepare('SELECT oi.order_id,oi.name,oi.quantity,oi.is_done FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND oi.order_id IN ('+marks+') ORDER BY oi.created_at ASC').bind(session.storeId,...ids).all()).results;
+   const byOrder=new Map();
+   for(const item of items){if(!byOrder.has(item.order_id))byOrder.set(item.order_id,[]);byOrder.get(item.order_id).push(item);}
+   for(const order of rows)order.items=byOrder.get(order.order_id)||[];
+  }
   return json({orders:rows});
  }
  if(path==='/api/store/platform-orders/collection'&&req.method==='GET'){
