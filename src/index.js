@@ -808,7 +808,7 @@ if(path==='/api/admin/service-quality'&&req.method==='GET'){
 if(path==='/api/admin/orders'&&req.method==='GET'){
  if(!allowed(role,'admin'))return json({error:'Forbidden'},403);
  const params=new URL(req.url).searchParams,storeId=params.get('store_id')||'',status=params.get('status')||'',period=params.get('period')||'current',orderType=params.get('order_type')||'all',platform=params.get('platform')||'all',collection=params.get('collection')||'all';
- if(!['all','regular','platform'].includes(orderType)||!['all','uber_eats','wolt','pyszne','bolt_food','glovo'].includes(platform)||!['all','awaiting','collected'].includes(collection))return json({error:'Invalid order filter'},400);
+ if(!['all','regular','platform'].includes(orderType)||!['all','uber_eats','wolt','pyszne','bolt_food','glovo','other'].includes(platform)||!['all','awaiting','collected'].includes(collection))return json({error:'Invalid order filter'},400);
  if(status&&!['new','cooking','done','cancelled'].includes(status))return json({error:'Invalid status'},400);
  if(!['current','today','yesterday','7days','custom'].includes(period))return json({error:'Invalid period'},400);
  if(storeId){const found=await env.DB.prepare('SELECT id FROM stores WHERE id=?').bind(storeId).first();if(!found)return json({error:'Store not found'},404);}
