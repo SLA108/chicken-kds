@@ -505,7 +505,7 @@ async function loadPlatformWorkspace(){
  try{
   const [latest,history]=await Promise.all([api('/orders'),api('/platform-orders/history?limit=40')]);
   if(fohTab!=='platform')return;
-  syncPlatformReadyIndicators(latest);orders=latest;platformCollectedHistory=(history.orders||[]).map(o=>({...o,id:o.order_id,items:[]}));
+  syncPlatformReadyIndicators(latest);orders=latest;platformCollectedHistory=(history.orders||[]).map(o=>({...o,id:o.order_id,items:o.items||[]}));
   renderPlatformWorkspace();
  }catch(e){notify('Platform orders refresh failed: '+e.message)}
  finally{platformWorkspaceLoading=false}
