@@ -1136,3 +1136,17 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-production-board .kds-dish-assembly-item strong{color:#86efac;white-space:nowrap}
 .kds-production-board .kds-dish-assembly-row:focus-visible,.kds-production-board .kds-dish-assembly-item:focus-visible{outline:2px solid #93c5fd;outline-offset:-3px}
 .kds-production-board .kds-dish-assembly-row:disabled,.kds-production-board .kds-dish-assembly-item:disabled{opacity:.5;cursor:wait}
+
+/* iPad POS/KDS: prevent accidental double-tap zoom while keeping scroll gestures. */
+body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,body:has(.foh-head) main,body:has(.foh-head) button{touch-action:manipulation}
+.kitchen .kds-order-head[role="button"]{cursor:pointer;user-select:none;-webkit-user-select:none;outline-offset:3px}
+.kitchen .kds-order-head[aria-busy="true"]{opacity:.65;pointer-events:none}
+.kitchen .kds-platform-order-number{font-size:clamp(1.4rem,2.6vw,2.15rem);font-weight:900;line-height:1.15;overflow-wrap:anywhere;text-align:right}
+.foh-ticket-editor-overlay{position:fixed;inset:0;z-index:1300;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px}
+.foh-ticket-editor-panel{background:#fff;color:#172033;border-radius:16px;padding:22px;width:min(540px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 18px 55px #0004}
+.foh-ticket-edit-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #e2e8f0}
+.foh-ticket-edit-row label{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.foh-ticket-edit-row input{width:78px;text-align:center}
+.foh-ticket-editor-panel .row{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.foh-ticket-editor-error{color:#b91c1c}
+@media(max-width:780px){.kitchen .kds-platform-order-number{font-size:1.55rem}.foh-ticket-editor-panel{padding:16px}}
