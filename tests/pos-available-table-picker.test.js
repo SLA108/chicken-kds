@@ -13,3 +13,11 @@ test('existing ticket locks its own table when adding items',()=>{
  assert.match(app,/selected\|\|!availableTables\.length\?'disabled'/);
  assert.match(app,/selected\?'': '<div id="foh-table-grid"/);
 });
+
+test('ticket edits apply optimistic changes while protecting pending data from refresh',()=>{
+ assert.match(app,/const pendingPosItemEdits=new Map\(\)/);
+ assert.match(app,/if\(page==='pos'\)applyPendingPosItemEdits\(o\)/);
+ assert.match(app,/pendingPosItemEdits\.set\(id,\{removed:new Set\(\[itemId\]\),quantities:new Map\(\)\}\)/);
+ assert.match(app,/pendingPosItemEdits\.set\(id,\{removed:new Set\(\),quantities:new Map\(changes\.map/);
+ assert.match(app,/finally\{pendingPosItemEdits\.delete\(id\)/);
+});
