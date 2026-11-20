@@ -13,6 +13,9 @@ function scopedApiPath(path){
 }
 let deviceStores=[],currentDeviceStore=null,renewalPending=null,storeSelectionPending=false,storeEpoch=0;
 const pendingCheckoutIds=new Set();
+const pendingPosItemEdits=new Map();
+function applyPendingPosItemEdits(snapshot){for(const order of snapshot){const pending=pendingPosItemEdits.get(order.id);if(!pending)continue;order.items=(order.items||[]).filter(item=>!pending.removed.has(item.id));for(const item of order.items)if(pending.quantities.has(item.id))item.quantity=pending.quantities.get(item.id);}}
+
 const lastStoreKey='ck_last_store_'+page;
 async function renewDeviceSession(){
  if(!['pos','kitchen'].includes(page))return false;
@@ -223,7 +226,7 @@ async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=
    if(kitchenPending.has(item.id))item.is_done=kitchenPending.get(item.id)?1:0;
   }
  }
- const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);if(page==='pos')for(const order of o){if(posVoidedTicketIds.has(order.id))order.status='cancelled';}orders=o;if(page==='kitchen'&&kitchenView==='dag')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+ const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);if(page==='pos')for(const order of o){if(posVoidedTicketIds.has(order.id))order.status='cancelled';}if(page==='pos')applyPendingPosItemEdits(o);orders=o;if(page==='kitchen'&&kitchenView==='dag')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let superPosAlertQueue=[],superPosAlertSeen=new Set(),superPosAlertActive=null,superPosPendingIds=new Set();
 function showSuperPosAlert(){
  if(page!=='pos'||superPosAlertActive||!superPosAlertQueue.length)return;
@@ -874,11 +877,16 @@ function openTicketEditor(id){
  overlay.onclick=e=>{if(e.target===overlay)close()};
  overlay.querySelectorAll('[data-edit-remove]').forEach(button=>button.onclick=async()=>{
   if(!confirm('Remove this unfinished dish from the ticket?'))return;
-  button.disabled=true;
-  try{await api('/orders/'+encodeURIComponent(id)+'/items/'+encodeURIComponent(button.dataset.editRemove),'DELETE');close();notify('Dish removed');await refresh()}
-  catch(e){const error=overlay.querySelector('.foh-ticket-editor-error');error.hidden=false;error.textContent='Remove failed: '+e.message;button.disabled=false;await refresh()}
+  if(pendingPosItemEdits.has(id))return notify('Ticket update already in progress');
+  const itemId=button.dataset.editRemove,previousItems=order.items.slice(),epoch=storeEpoch,store=currentDeviceStore?.id;
+  pendingPosItemEdits.set(id,{removed:new Set([itemId]),quantities:new Map()});
+  order.items=order.items.filter(item=>item.id!==itemId);close();pos();
+  try{await api('/orders/'+encodeURIComponent(id)+'/items/'+encodeURIComponent(itemId),'DELETE');if(epoch===storeEpoch&&store===currentDeviceStore?.id)notify('Dish removed')}
+  catch(e){if(epoch===storeEpoch&&store===currentDeviceStore?.id){order.items=previousItems;notify('Remove failed: '+e.message)}}
+  finally{pendingPosItemEdits.delete(id);if(epoch===storeEpoch&&store===currentDeviceStore?.id){pos();refresh().catch(console.warn)}}
  });
  overlay.querySelector('[data-edit-save]').onclick=async()=>{
+  if(pendingPosItemEdits.has(id))return notify('Ticket update already in progress');
   const changes=[];
   for(const input of overlay.querySelectorAll('[data-edit-quantity]')){
    const item=order.items.find(i=>i.id===input.dataset.editQuantity),quantity=Number(input.value);
@@ -886,9 +894,14 @@ function openTicketEditor(id){
    if(item&&quantity!==Number(item.quantity))changes.push({id:item.id,quantity});
   }
   if(!changes.length){close();return;}
-  const save=overlay.querySelector('[data-edit-save]');save.disabled=true;
-  try{for(const item of changes)await api('/orders/'+encodeURIComponent(id)+'/items/'+encodeURIComponent(item.id)+'/quantity','PATCH',{quantity:item.quantity});close();notify('Ticket updated');await refresh()}
-  catch(e){const error=overlay.querySelector('.foh-ticket-editor-error');error.hidden=false;error.textContent='Update failed: '+e.message;save.disabled=false;await refresh()}
+  const previous=new Map(changes.map(change=>[change.id,order.items.find(item=>item.id===change.id)?.quantity]));
+  const epoch=storeEpoch,store=currentDeviceStore?.id;
+  pendingPosItemEdits.set(id,{removed:new Set(),quantities:new Map(changes.map(change=>[change.id,change.quantity]))});
+  for(const change of changes){const item=order.items.find(item=>item.id===change.id);if(item)item.quantity=change.quantity;}
+  close();pos();
+  try{for(const change of changes)await api('/orders/'+encodeURIComponent(id)+'/items/'+encodeURIComponent(change.id)+'/quantity','PATCH',{quantity:change.quantity});if(epoch===storeEpoch&&store===currentDeviceStore?.id)notify('Ticket updated')}
+  catch(e){if(epoch===storeEpoch&&store===currentDeviceStore?.id){for(const [itemId,quantity] of previous){const item=order.items.find(item=>item.id===itemId);if(item)item.quantity=quantity;}notify('Update failed: '+e.message)}}
+  finally{pendingPosItemEdits.delete(id);if(epoch===storeEpoch&&store===currentDeviceStore?.id){pos();refresh().catch(console.warn)}}
  };
 }
 function showReleaseTable(id){
