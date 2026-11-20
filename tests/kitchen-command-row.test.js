@@ -57,3 +57,17 @@ test('POS compact workspace retains pickup actions and ordered scrolling categor
  assert.match(css,/\.foh-category-strip\{flex-wrap:nowrap;overflow-x:auto/);
  assert.match(css,/\.ck-compact-logo\{width:36px;height:36px/);
 });
+
+test('POS order type and table selection use accessible buttons instead of native selects',()=>{
+ assert.match(ui,/class="foh-order-types" role="group"/);
+ assert.match(ui,/data-order-type/);
+ assert.match(ui,/id="foh-table-trigger"/);
+ assert.match(ui,/id="foh-table-grid"/);
+ assert.match(ui,/data-select-table/);
+ assert.match(ui,/availableTables\.map\(no=>/);
+ assert.match(ui,/if\(selected\)return;type=b\.dataset\.orderType/);
+ assert.doesNotMatch(ui,/<select id="type"/);
+ assert.doesNotMatch(ui,/<select id="table"/);
+ assert.match(css,/\.foh-table-grid-items\{display:grid/);
+ assert.match(css,/min-height:44px/);
+});
