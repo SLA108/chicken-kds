@@ -1020,7 +1020,7 @@ async function submit(){
  pos();notify(additional?'Sending additional items…':'Sending to kitchen…');
  let confirmed=false;
  try{
-  if(additional)await api('/orders/'+orderId+'/items','POST',{items:request.items,request_key:request.request_key});
+  if(additional)await api('/orders/'+orderId+'/items','POST',{items:additionalRequest.items,request_key:additionalRequest.request_key});
   else await api('/orders','POST',{source:draft.type,table_no:draft.type==='dinein'?draft.table:'',note:draft.note,items,client_key:key,followup_paid_order_id:draft.followupPaidOrderId||undefined});
   confirmed=true;
   if(!sameStore())return;
@@ -1040,9 +1040,9 @@ async function submit(){
     configuredCart=draft.cart;note=draft.note;editingOrder=draft.editingOrder;
     followupPaidOrderId=draft.followupPaidOrderId;type=draft.type;table=draft.table;
     pendingKey=key;fohTab='order';pos();
-    notify('Sending not confirmed. Draft restored; retry uses the same request key.');
+    notify('Draft preserved: sending not confirmed. Retry uses the same request key.');
    }else{
-    notify('Sending not confirmed. Current draft kept; check tickets before retrying.');
+    notify('Draft preserved: sending not confirmed. Current draft kept; check tickets before retrying.');
    }
   }
  }finally{
