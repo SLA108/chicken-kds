@@ -485,6 +485,8 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   if(existing)return existing.store_id===storeId?json({id:existing.id,duplicate:true}):json({error:'Client key already used'},409);
   if(b.source==='dinein'){
    if(!/^(0[1-9]|1[0-9]|20)$/.test(String(b.table_no||'')))return json({error:'Choose a table from 01 to 20'},400);
+   // Heal stale occupancy from tickets voided before table release was implemented.
+   await env.DB.prepare("DELETE FROM table_occupancy WHERE store_id=? AND table_no=? AND order_id IN (SELECT id FROM orders WHERE store_id=? AND status='cancelled')").bind(storeId,b.table_no,storeId).run();
    const occupied=await env.DB.prepare('SELECT order_id FROM table_occupancy WHERE store_id=? AND table_no=?').bind(storeId,b.table_no).first();
    if(occupied){
     if(typeof b.followup_paid_order_id!=='string'||b.followup_paid_order_id!==occupied.order_id)return json({error:'Table occupied'},409);
