@@ -1338,12 +1338,14 @@ function kitchen(){
  const card=o=>{
   const done=o.items.filter(i=>i.is_done).length,ready=done===o.items.length;
   const items=kitchenSortItems(o.items);
+  const brand=o.platform?platformBrand(o.platform):null;
+  const platformStyle=brand?' style="--kds-platform-color:'+esc(brand.color)+';--kds-platform-ink:'+esc(brand.ink)+'"':'';
   return '<article class="ticket kds-order" data-order-id="'+esc(o.id)+'">'+
-   '<div class="kds-order-head" role="button" tabindex="0" aria-label="Mark all dishes done" data-kitchen-mark-all="'+esc(o.id)+'" data-age-band="'+kitchenAgeBand(kitchenAge(o.created_at))+'">'+
-    '<div class="kds-head-row"><h3>'+esc(o.table_no||sourceName[o.source])+'</h3><strong class="kds-age" data-kitchen-age="'+esc(o.created_at)+'">'+kitchenDuration(kitchenAge(o.created_at))+'</strong></div>'+
+   '<div class="kds-order-head'+(brand?' kds-platform-head':'')+'"'+platformStyle+' role="button" tabindex="0" aria-label="Mark all dishes done" data-kitchen-mark-all="'+esc(o.id)+'" data-age-band="'+kitchenAgeBand(kitchenAge(o.created_at))+'">'+
+    '<div class="kds-head-row"><h3>'+(brand?esc(brand.name):esc(o.table_no||sourceName[o.source]))+'</h3><strong class="kds-age" data-kitchen-age="'+esc(o.created_at)+'">'+kitchenDuration(kitchenAge(o.created_at))+'</strong></div>'+
+    (brand?'<div class="kds-platform-order-number">#'+esc(o.external_order_id||o.id.slice(0,8))+'</div>':'')+
     '<div class="kds-head-row"><span>Received '+warsawClock(o.created_at)+'</span><span>'+done+'/'+o.items.length+' Done</span></div>'+
-    '<div class="kds-head-id">#'+esc(o.id.slice(0,8))+(o.paid_at?' · Paid':'')+'</div>'+
-    (o.platform?'<div class="kds-head-row"><strong>'+esc(o.platform.replaceAll('_',' ').toUpperCase())+'</strong><span class="kds-platform-order-number">#'+esc(o.external_order_id||'')+'</span></div>':'')+
+    (!brand?'<div class="kds-head-id">#'+esc(o.id.slice(0,8))+(o.paid_at?' · Paid':'')+'</div>':'')+
     (o.platform_deadline_at?'<div class="kds-deadline" style="margin-top:8px;padding:8px;border:2px solid #fbbf24;border-radius:10px"><div style="font-size:0.8rem;font-weight:800">READY BY · '+warsawClock(o.platform_deadline_at)+'</div><strong data-kitchen-deadline="'+esc(o.platform_deadline_at)+'" style="display:block;font-size:1.25rem;font-weight:900">Calculating…</strong></div>':'')+
    '</div>'+
    (o.platform?'<button type="button" class="alt" data-platform-edit="'+esc(o.id)+'">Edit Platform Order</button>':'')+
