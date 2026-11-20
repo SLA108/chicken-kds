@@ -337,7 +337,7 @@ function storeBanner(){
  };
  if(page==='kitchen'){
   const title=document.querySelector('#kds-store-name');if(title)title.textContent=currentDeviceStore.name;
-  const slot=document.querySelector('#kds-switch-slot');if(slot){const button=banner.querySelector('#v3-switch-store');if(button){slot.append(button);button.textContent='Switch store';}banner.remove();}
+  const slot=document.querySelector('#kds-switch-slot');if(slot){slot.replaceChildren();const button=banner.querySelector('#v3-switch-store');if(button){slot.append(button);button.textContent='Switch store';}banner.remove();}
  }
 }
 async function openCourierCollection(){
