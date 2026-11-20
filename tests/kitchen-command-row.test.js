@@ -46,7 +46,7 @@ test('POS uses compact header without changing Back Office navigation',()=>{
  assert.match(css,/body:not\(\.kitchen\) #app>header\.kds-minimal-header/);
 });
 
-test('POS compact workspace retains pickup actions and ordered scrolling categories',()=>{
+test('POS compact workspace retains pickup actions and ordered wrapping categories',()=>{
  assert.match(ui,/class="foh-compact-nav"/);
  assert.match(ui,/id="pickup-sound" class="foh-icon-action"/);
  assert.match(ui,/id="pickup-nav" class="foh-icon-action"/);
@@ -54,7 +54,7 @@ test('POS compact workspace retains pickup actions and ordered scrolling categor
  assert.match(ui,/kitchenCategories\.map\(c=>\[String\(c\.name\)/);
  assert.match(ui,/page==='kitchen'\|\|page==='pos'/);
  assert.match(ui,/class="ck-compact-logo"/);
- assert.match(css,/\.foh-category-strip\{flex-wrap:nowrap;overflow-x:auto/);
+ assert.match(css,/\.foh-category-strip\{display:flex;flex-wrap:wrap/);
  assert.match(css,/\.ck-compact-logo\{width:36px;height:36px/);
 });
 
@@ -87,4 +87,12 @@ test('POS order types use monochrome utensils and shopping bag icons, not colorf
  assert.match(ui,/stroke="currentColor"/);
  assert.doesNotMatch(ui,/🍽️ Dine-in|🛍️ Takeaway/);
  assert.match(css,/\.foh-order-type-icon\{display:inline-block/);
+});
+
+test('POS categories remain visible on multiple rows with no horizontal scrolling',()=>{
+ assert.match(css,/\.foh-category-strip\{display:flex;flex-wrap:wrap/);
+ assert.match(css,/overflow:visible;padding:2px 0 8px/);
+ assert.match(css,/\.foh-category-strip button\{flex:0 0 auto;white-space:normal/);
+ assert.doesNotMatch(css,/\.foh-category-strip\{flex-wrap:nowrap;overflow-x:auto/);
+ assert.match(ui,/\['All',\.\.\.cats\]/);
 });
