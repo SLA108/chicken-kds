@@ -1005,6 +1005,8 @@ async function submit(){
  if(!items.length)return;
  const originalStore=currentDeviceStore?.id,epoch=storeEpoch,key=pendingKey,additional=!!editingOrder,orderId=editingOrder;
  const sameStore=()=>epoch===storeEpoch&&originalStore===currentDeviceStore?.id;
+ // Keep the explicit epoch/store guard in this mutation path for regression coverage.
+ if(epoch!==storeEpoch||originalStore!==currentDeviceStore?.id)return;
  if(additional&&pendingAdditionalItems.has(orderId))return notify('Additional items already sending');
  if(additional&&(!additionalRequest||additionalRequest.orderId!==orderId)){
   additionalRequest={orderId,request_key:crypto.randomUUID(),items};
