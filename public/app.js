@@ -123,7 +123,7 @@ function enablePickupSound(){
   pickupChime();
   const resumePromise=audio.resume();
   const button=document.querySelector('#pickup-sound');
-  if(button)button.textContent='🔊 Alerts enabled · Tap to test';
+  if(button){button.textContent='🔊';button.setAttribute('aria-label','Test pickup sound');button.title='Test pickup sound';}
   Promise.resolve(resumePromise).then(()=>{
    if(audio.state!=='running'){pickupSoundReady=false;notify('Sound is blocked. Check device volume and browser audio settings.')}
   }).catch(e=>{pickupSoundReady=false;notify('Audio unavailable: '+e.message)});
