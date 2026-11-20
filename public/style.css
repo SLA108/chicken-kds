@@ -1150,3 +1150,10 @@ body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,
 .foh-ticket-editor-panel .row{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 .foh-ticket-editor-error{color:#b91c1c}
 @media(max-width:780px){.kitchen .kds-platform-order-number{font-size:1.55rem}.foh-ticket-editor-panel{padding:16px}}
+
+/* Platform orders: platform identity and courier-facing number take visual priority. */
+.kitchen .kds-order-head.kds-platform-head{background:var(--kds-platform-color);color:var(--kds-platform-ink);border:1px solid #ffffff25}
+.kitchen .kds-platform-head .kds-platform-order-number{font-size:clamp(1.9rem,3.2vw,2.65rem);font-weight:950;line-height:1.08;letter-spacing:.015em;text-align:left;overflow-wrap:anywhere;margin:8px 0 13px}
+.kitchen .kds-platform-head .kds-head-row h3{font-size:1.65rem;font-weight:900}
+.kitchen .kds-platform-head .kds-head-row:last-of-type{opacity:.95}
+@media(max-width:780px){.kitchen .kds-platform-head .kds-platform-order-number{font-size:2.1rem}}
