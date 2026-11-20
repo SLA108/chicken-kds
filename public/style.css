@@ -1249,3 +1249,7 @@ body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 .foh-table-popover .foh-table-grid-label{display:block;white-space:normal;line-height:1.35}
 .foh-table-popover .foh-table-grid-items{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .foh-table-popover .foh-table-grid-items button{display:flex;align-items:center;justify-content:center;min-width:0;min-height:46px;padding:8px;border-radius:8px}
+
+/* Monochrome POS order-type icons, consistent on iPad Safari. */
+.foh-order-types button{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.foh-order-type-icon{display:inline-block;width:19px;height:19px;flex:0 0 19px;vertical-align:middle;color:inherit}
