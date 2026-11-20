@@ -1267,3 +1267,34 @@ body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 .foh-order-header .foh-title p{margin:3px 0 0}
 .foh-order-header .foh-order-controls{flex:0 1 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0;min-width:0}
 @media(max-width:740px){.foh-order-header{align-items:stretch;gap:10px}.foh-order-header .foh-title{flex:1 1 100%}.foh-order-header .foh-order-controls{flex:1 1 100%;justify-content:flex-start}}
+
+/* POS Edit Ticket: consistent with the slate POS theme, iPad-friendly. */
+.foh-ticket-editor-overlay{background:rgba(4,10,20,.78);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.foh-ticket-editor-panel{box-sizing:border-box;width:min(660px,100%);max-height:min(88vh,820px);padding:0;background:#202e40;color:#edf3fb;border:1px solid #4a5d75;border-radius:17px;box-shadow:0 24px 80px #0009;display:flex;flex-direction:column;overflow:hidden}
+.foh-ticket-editor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px 24px 18px;border-bottom:1px solid #3c4c60}
+.foh-ticket-editor-eyebrow{display:block;color:#91b5ec;font-size:11px;font-weight:800;letter-spacing:.11em;margin-bottom:6px}
+.foh-ticket-editor-head h2{color:#fff;font-size:23px;line-height:1.2;margin:0 0 7px}
+.foh-ticket-editor-head p{color:#b5c3d4;font-size:13px;line-height:1.5;margin:0}
+.foh-ticket-editor-x{width:38px;height:38px;min-width:38px;padding:0;display:grid;place-items:center;background:#35465c;color:#e9f0f9;border:1px solid #52647a;border-radius:10px;font-size:26px;line-height:1}
+.foh-ticket-editor-list{overflow-y:auto;min-height:0;padding:6px 24px;overscroll-behavior:contain}
+.foh-ticket-edit-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid #3a4b60}
+.foh-ticket-edit-row:last-child{border-bottom:0}
+.foh-ticket-edit-dish{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:5px}
+.foh-ticket-edit-dish strong{font-size:14px;font-weight:750;color:#f2f6fd;line-height:1.4;overflow-wrap:anywhere}
+.foh-ticket-edit-pending,.foh-ticket-edit-done{font-size:11px;font-weight:750;color:#9fbedf}
+.foh-ticket-edit-done{color:#8bc7a6}
+.foh-ticket-edit-row.is-done .foh-ticket-edit-dish strong{color:#9eacbd}
+.foh-ticket-edit-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:0 0 auto}
+.foh-ticket-edit-actions label{display:flex;align-items:center;gap:8px;color:#aabbd0;font-size:12px;font-weight:700}
+.foh-ticket-edit-actions input{box-sizing:border-box;width:68px;min-height:44px;text-align:center;background:#33465e;border:1px solid #60748f;border-radius:9px;color:#fff;font-size:16px;font-weight:800}
+.foh-ticket-edit-actions input:disabled{background:#293647;color:#8796a9;opacity:.75}
+.foh-ticket-edit-remove{min-height:42px;padding:9px 12px;border:1px solid #a34d54;border-radius:9px;background:#663139;color:#ffdfe0;font-size:12px;font-weight:750}
+.foh-ticket-editor-hint{margin:8px 24px 0;padding:11px 13px;background:#293d55;border:1px solid #3f5975;border-radius:9px;color:#b9cce2;font-size:12px;line-height:1.45}
+.foh-ticket-editor-hint strong{color:#e4f0ff}
+.foh-ticket-editor-error{margin:10px 24px 0;padding:10px 12px;border-radius:8px;background:#542a32;color:#ffd4d8;font-size:13px}
+.foh-ticket-editor-error[hidden]{display:none}
+.foh-ticket-editor-footer{display:flex;justify-content:flex-end;gap:10px;padding:18px 24px 22px}
+.foh-ticket-editor-footer button{min-height:44px;padding:10px 18px;border-radius:9px;font-weight:750}
+.foh-ticket-editor-footer [data-edit-save]{background:#3479de;color:#fff}
+.foh-ticket-editor-footer [data-edit-close]{background:#3a4d64;color:#e9f0f9;border:1px solid #60738a}
+@media(max-width:560px){.foh-ticket-editor-head{padding:18px 16px 14px}.foh-ticket-editor-list{padding:4px 16px}.foh-ticket-edit-row{align-items:flex-start;flex-direction:column;gap:10px}.foh-ticket-edit-actions{width:100%;justify-content:space-between}.foh-ticket-editor-hint{margin:8px 16px 0}.foh-ticket-editor-footer{padding:16px}.foh-ticket-editor-footer button{flex:1}}
