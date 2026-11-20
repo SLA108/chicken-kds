@@ -223,7 +223,7 @@ async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=
    if(kitchenPending.has(item.id))item.is_done=kitchenPending.get(item.id)?1:0;
   }
  }
- const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);orders=o;if(page==='kitchen'&&kitchenView==='dag')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+ const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);if(page==='pos')for(const order of o){if(posVoidedTicketIds.has(order.id))order.status='cancelled';}orders=o;if(page==='kitchen'&&kitchenView==='dag')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let superPosAlertQueue=[],superPosAlertSeen=new Set(),superPosAlertActive=null,superPosPendingIds=new Set();
 function showSuperPosAlert(){
  if(page!=='pos'||superPosAlertActive||!superPosAlertQueue.length)return;
@@ -837,12 +837,23 @@ document.querySelector('#submit').onclick=submit;
 document.querySelector('#checkout-selected')?.addEventListener('click',()=>showCheckout(editingOrder));
 updateCartView();if(itemDialog)showItemDialog();
 }
+// Keep successful voids hidden even if an overlapping refresh returns an older snapshot.
+const posVoidedTicketIds=new Set();
 async function voidTicket(id){
  const order=orders.find(o=>o.id===id);
  if(!order||order.paid_at||order.platform)return notify('Only unpaid regular tickets can be voided');
  if(!confirm('Void the entire ticket? The order will be marked Cancelled and kept in history. This cannot be undone.'))return;
- try{await api('/orders/'+encodeURIComponent(id)+'/void','POST',{});notify('Ticket voided');if(editingOrder===id)editingOrder='';await refresh()}
- catch(e){notify('Void ticket failed: '+e.message)}
+ try{
+  await api('/orders/'+encodeURIComponent(id)+'/void','POST',{});
+  posVoidedTicketIds.add(id);
+  // Update the current snapshot before any asynchronous refresh: the card must disappear now.
+  const current=orders.find(o=>o.id===id);
+  if(current)current.status='cancelled';
+  if(editingOrder===id){editingOrder='';configuredCart=[];itemDialog=null;}
+  notify('Ticket voided');
+  pos();
+  await refresh();
+ }catch(e){notify('Void ticket failed: '+e.message)}
 }
 function openTicketEditor(id){
  const order=orders.find(o=>o.id===id);
