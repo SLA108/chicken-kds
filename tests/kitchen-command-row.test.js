@@ -19,3 +19,15 @@ test('kitchen command row wraps on narrow iPads and preserves touch targets',()=
  assert.match(css,/@media\(max-width:760px\)/);
  assert.match(css,/\.kitchen \.kds-view-tabs\{flex:1 1 100%\}/);
 });
+
+test('kitchen header is minimal and keeps store switching and navigation accessible',()=>{
+ assert.match(ui,/page==='kitchen'\?\x60<header class="kds-minimal-header"/);
+ assert.match(ui,/id="kds-store-name"/);
+ assert.match(ui,/class="kds-header-menu"/);
+ assert.match(ui,/id="kds-switch-slot"/);
+ assert.match(ui,/slot\.append\(button\)/);
+ assert.match(ui,/href="\/pos">Front of House/);
+ assert.match(ui,/href="\/admin">Back Office/);
+ assert.match(ui,/id="logout">Log out/);
+ assert.match(css,/\.kitchen #app>header\.kds-minimal-header/);
+});
