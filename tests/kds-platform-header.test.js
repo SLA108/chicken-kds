@@ -11,7 +11,7 @@ test('KDS platform header prioritizes external number and compact badge',()=>{
  assert.match(head,/kds-platform-order-number/);
  assert.match(head,/kds-platform-badge/);
  assert.match(head,/o.external_order_id\|\|o.id.slice\(0,8\)/);
- assert.match(head,/kds-platform-timing/);
+ assert.match(head,/kds-platform-title/);
  assert.match(head,/data-kitchen-age/);
  assert.match(head,/!brand\?'<div class="kds-head-id"/);
 });
