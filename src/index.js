@@ -531,6 +531,55 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   await broadcastStore(env,session.storeId,'assembly_checks',{});
   return json({ok:true});
  }
+ // Kitchen header shortcut: atomically mark every dish complete, but do not close the ticket.
+ const scopedMarkAll=path.match(/^\/api\/store\/kitchen\/orders\/([^/]+)\/mark-all-done$/);
+ if(scopedMarkAll&&req.method==='POST'){
+  if(session.role!=='kitchen')return json({error:'Forbidden'},403);
+  const id=scopedMarkAll[1],now=new Date().toISOString();
+  const order=await env.DB.prepare('SELECT status,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,session.storeId).first();
+  if(!order)return json({error:'Order not found'},404);
+  if(order.status==='cancelled'||order.kitchen_completed_at)return json({error:'Order closed; refresh'},409);
+  const result=await env.DB.prepare("UPDATE order_items SET is_done=1,done_at=COALESCE(done_at,?),picked_up_at=NULL WHERE order_id=? AND is_done=0 AND EXISTS(SELECT 1 FROM orders WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL)").bind(now,id,id,session.storeId).run();
+  const count=await env.DB.prepare('SELECT COUNT(*) AS total,SUM(CASE WHEN is_done=1 THEN 1 ELSE 0 END) AS done FROM order_items WHERE order_id=?').bind(id).first();
+  if(!count?.total)return json({error:'No dishes in ticket'},409);
+  const updated=await env.DB.prepare("UPDATE orders SET status='done',updated_at=? WHERE id=? AND store_id=? AND status!='cancelled' AND kitchen_completed_at IS NULL").bind(now,id,session.storeId).run();
+  if(updated.meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  await event(env,id,'all_items_done',session.role,{store_id:session.storeId,changed:result.meta.changes||0});
+  await broadcastStore(env,session.storeId,'orders',{id});
+  await broadcastStore(env,session.storeId,'pickup',{order_id:id});
+  return json({ok:true,changed:result.meta.changes||0});
+ }
+ // POS void preserves the ticket and its history. Paid and platform orders require their own workflows.
+ const scopedVoid=path.match(/^\/api\/store\/orders\/([^/]+)\/void$/);
+ if(scopedVoid&&req.method==='POST'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const id=scopedVoid[1],storeId=session.storeId;
+  const order=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
+  if(!order)return json({error:'Order not found'},404);
+  if(order.status==='cancelled')return json({ok:true,already_voided:true});
+  if(order.paid_at||order.kitchen_completed_at)return json({error:'Paid or completed orders cannot be voided here'},409);
+  if(await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE order_id=? AND store_id=?').bind(id,storeId).first())return json({error:'Use Platform Orders for platform tickets'},409);
+  const now=new Date().toISOString();
+  const updated=await env.DB.prepare("UPDATE orders SET status='cancelled',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(now,id,storeId).run();
+  if(updated.meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  await event(env,id,'ticket_voided',session.role,{store_id:storeId});
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true});
+ }
+ // Edit the quantity of an unfinished dish on an unpaid, non-platform ticket.
+ const scopedEditDish=path.match(/^\/api\/store\/orders\/([^/]+)\/items\/([^/]+)\/quantity$/);
+ if(scopedEditDish&&req.method==='PATCH'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const body=await parse(req),quantity=Number(body?.quantity);
+  if(!Number.isInteger(quantity)||quantity<1||quantity>99)return json({error:'Quantity must be between 1 and 99'},400);
+  const [id,itemId]=scopedEditDish.slice(1),storeId=session.storeId,now=new Date().toISOString();
+  const updated=await env.DB.prepare("UPDATE order_items SET quantity=? WHERE id=? AND order_id=? AND is_done=0 AND EXISTS(SELECT 1 FROM orders o WHERE o.id=? AND o.store_id=? AND o.paid_at IS NULL AND o.kitchen_completed_at IS NULL AND o.status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=o.id))").bind(quantity,itemId,id,id,storeId).run();
+  if(updated.meta.changes!==1)return json({error:'Dish cannot be edited; refresh'},409);
+  await env.DB.prepare('UPDATE orders SET updated_at=? WHERE id=? AND store_id=?').bind(now,id,storeId).run();
+  await event(env,id,'ticket_item_quantity_edited',session.role,{store_id:storeId,item_id:itemId,quantity});
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true});
+ }
  const scopedItemDone=path.match(/^\/api\/store\/order-items\/([^/]+)\/done$/);
  if(scopedItemDone&&req.method==='PATCH'){
   if(session.role!=='kitchen')return json({error:'Forbidden'},403);
