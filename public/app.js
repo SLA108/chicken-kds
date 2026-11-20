@@ -1346,11 +1346,22 @@ function updateKitchenDishUI(id,next){
 async function syncKitchenDish(id){
  const state=kitchenDishSync.get(id);if(!state||state.running)return;state.running=true;
  try{
-  while(state.saved!==state.desired){const target=state.desired;await api('/order-items/'+id+'/done','PATCH',{});state.saved=target;}
-  const confirmed=await api('/orders');const item=confirmed.flatMap(o=>o.items||[]).find(i=>String(i.id)===id);
-  if(!item||!!item.is_done!==state.desired)throw Error('Dish state not confirmed');
-  if(state.desired)acknowledgeKitchenProductionItem(id);
-  kitchenPending.delete(id);kitchenDishSync.delete(id);await refresh();
+  // Continue until the last tap is confirmed; taps during the confirmation fetch are not lost.
+  for(;;){
+   while(state.saved!==state.desired){
+    const target=state.desired;
+    await api('/order-items/'+id+'/done','PATCH',{});
+    state.saved=target;
+   }
+   const expected=state.desired;
+   const confirmed=await api('/orders');
+   const item=confirmed.flatMap(o=>o.items||[]).find(i=>String(i.id)===id);
+   if(state.desired!==expected)continue;
+   if(!item||!!item.is_done!==expected)throw Error('Dish state not confirmed');
+   if(expected)acknowledgeKitchenProductionItem(id);
+   kitchenPending.delete(id);kitchenDishSync.delete(id);
+   await refresh();break;
+  }
  }catch(e){kitchenPending.delete(id);kitchenDishSync.delete(id);notify('Dish sync failed: '+e.message);await refresh();}
  finally{state.running=false;}
 }
