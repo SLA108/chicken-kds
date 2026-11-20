@@ -849,11 +849,17 @@ function openTicketEditor(id){
  if(!order||order.paid_at||order.kitchen_completed_at||order.platform)return notify('This ticket cannot be edited');
  document.querySelector('#foh-ticket-editor')?.remove();
  const overlay=document.createElement('div');overlay.id='foh-ticket-editor';overlay.className='foh-ticket-editor-overlay';
- const rows=(order.items||[]).map(item=>'<div class="foh-ticket-edit-row"><span>'+esc(item.name)+(item.is_done?' · Done':'')+'</span><label>Qty <input type="number" min="1" max="99" step="1" data-edit-quantity="'+esc(item.id)+'" value="'+Number(item.quantity)+'" '+(item.is_done?'disabled':'')+'></label></div>').join('');
+ const rows=(order.items||[]).map(item=>'<div class="foh-ticket-edit-row"><span>'+esc(item.name)+(item.is_done?' · Done':'')+'</span><label>Qty <input type="number" min="1" max="99" step="1" data-edit-quantity="'+esc(item.id)+'" value="'+Number(item.quantity)+'" '+(item.is_done?'disabled':'')+'></label>'+(!item.is_done&&order.items.length>1?'<button type="button" class="danger" data-edit-remove="'+esc(item.id)+'">Remove</button>':'')+'</div>').join('');
  overlay.innerHTML='<section class="foh-ticket-editor-panel" role="dialog" aria-modal="true" aria-label="Edit Ticket"><h2>Edit Ticket</h2><p>Update quantities of unfinished dishes. Use Add items to add new dishes.</p>'+rows+'<p class="foh-ticket-editor-error" role="alert" hidden></p><div class="row"><button type="button" class="alt" data-edit-close>Cancel</button><button type="button" data-edit-save>Save changes</button></div></section>';
  document.body.append(overlay);
  const close=()=>overlay.remove();overlay.querySelector('[data-edit-close]').onclick=close;
  overlay.onclick=e=>{if(e.target===overlay)close()};
+ overlay.querySelectorAll('[data-edit-remove]').forEach(button=>button.onclick=async()=>{
+  if(!confirm('Remove this unfinished dish from the ticket?'))return;
+  button.disabled=true;
+  try{await api('/orders/'+encodeURIComponent(id)+'/items/'+encodeURIComponent(button.dataset.editRemove),'DELETE');close();notify('Dish removed');await refresh()}
+  catch(e){const error=overlay.querySelector('.foh-ticket-editor-error');error.hidden=false;error.textContent='Remove failed: '+e.message;button.disabled=false;await refresh()}
+ });
  overlay.querySelector('[data-edit-save]').onclick=async()=>{
   const changes=[];
   for(const input of overlay.querySelectorAll('[data-edit-quantity]')){
