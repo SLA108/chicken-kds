@@ -13,7 +13,8 @@ test('KDS platform header prioritizes external number and compact badge',()=>{
  assert.match(head,/o.external_order_id\|\|o.id.slice\(0,8\)/);
  assert.match(head,/kds-platform-title/);
  assert.match(head,/data-kitchen-age/);
- assert.match(head,/!brand\?'<div class="kds-head-id"/);
+ assert.doesNotMatch(head,/kds-head-id/);
+ assert.match(head,/Received '\+warsawClock\(o.created_at\)/);
 });
 test('KDS keeps age severity background and platform color only in badge',()=>{
  for(const band of ['blue','green','yellow','red'])assert.match(css,new RegExp('\\.kds-order-head\\.kds-platform-head\\[data-age-band='+band+'\\]'));
