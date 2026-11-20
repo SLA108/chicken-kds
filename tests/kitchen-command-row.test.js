@@ -77,7 +77,14 @@ test('POS keeps dark slate theme and table picker independent from Tables page g
  assert.match(css,/\.foh-table-popover\{position:absolute/);
  assert.match(css,/\.foh-table-popover\[hidden\]\{display:none\}/);
  assert.match(ui,/id="foh-table-grid" class="foh-table-popover"/);
- assert.match(ui,/\['dinein','🍽️ Dine-in'\]/);
- assert.match(ui,/\['takeaway','🛍️ Takeaway'\]/);
+ assert.match(ui,/\['dinein','Dine-in'\]/);
+ assert.match(ui,/\['takeaway','Takeaway'\]/);
  assert.doesNotMatch(ui,/\['delivery','Delivery'\]/);
+});
+
+test('POS order types use monochrome utensils and shopping bag icons, not colorful emoji',()=>{
+ assert.match(ui,/class="foh-order-type-icon"/);
+ assert.match(ui,/stroke="currentColor"/);
+ assert.doesNotMatch(ui,/🍽️ Dine-in|🛍️ Takeaway/);
+ assert.match(css,/\.foh-order-type-icon\{display:inline-block/);
 });
