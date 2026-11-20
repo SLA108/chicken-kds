@@ -1005,40 +1005,51 @@ async function submit(){
  if(!items.length)return;
  const originalStore=currentDeviceStore?.id,epoch=storeEpoch,key=pendingKey,additional=!!editingOrder,orderId=editingOrder;
  const sameStore=()=>epoch===storeEpoch&&originalStore===currentDeviceStore?.id;
- // Keep the explicit epoch/store guard in this mutation path for regression coverage.
  if(epoch!==storeEpoch||originalStore!==currentDeviceStore?.id)return;
  if(additional&&pendingAdditionalItems.has(orderId))return notify('Additional items already sending');
  if(additional&&(!additionalRequest||additionalRequest.orderId!==orderId)){
   additionalRequest={orderId,request_key:crypto.randomUUID(),items};
  }
+ const draft={cart:configuredCart.map(x=>({...x,option_ids:[...x.option_ids]})),note,editingOrder,followupPaidOrderId,type,table,key};
+ const request=additional?additionalRequest:null;
  busy=true;
- if(additional){pendingAdditionalItems.set(orderId,additionalRequest);fohTab='tickets';pos();}
+ if(additional)pendingAdditionalItems.set(orderId,request);
+ // Clear the submitted draft and stay on New Order immediately; never wait for refresh().
+ configuredCart=[];note='';editingOrder='';followupPaidOrderId='';itemDialog=null;
+ pendingKey=crypto.randomUUID();fohTab='order';
+ pos();notify(additional?'Sending additional items…':'Sending to kitchen…');
+ let confirmed=false;
  try{
-  if(additional)await api('/orders/'+orderId+'/items','POST',{items:additionalRequest.items,request_key:additionalRequest.request_key});
-  else await api('/orders','POST',{source:type,table_no:type==='dinein'?table:'',note,items,client_key:key,followup_paid_order_id:followupPaidOrderId||undefined});
+  if(additional)await api('/orders/'+orderId+'/items','POST',{items:request.items,request_key:request.request_key});
+  else await api('/orders','POST',{source:draft.type,table_no:draft.type==='dinein'?draft.table:'',note:draft.note,items,client_key:key,followup_paid_order_id:draft.followupPaidOrderId||undefined});
+  confirmed=true;
   if(!sameStore())return;
-  notify(additional?'Additional items confirmed':followupPaidOrderId?'Additional order sent · payment remains separate':'Order sent to kitchen');
-  configuredCart=[];note='';editingOrder='';followupPaidOrderId='';pendingKey=crypto.randomUUID();additionalRequest=null;fohTab='tickets';await refresh();
+  notify(additional?'Additional items confirmed':draft.followupPaidOrderId?'Additional order sent · payment remains separate':'Order sent to kitchen');
  }catch(e){
   if(!sameStore())return;
   if(!additional){
    try{
     const check=await api('/orders/by-client-key/'+encodeURIComponent(key));
     if(!sameStore())return;
-    if(check.found){
-     notify('Order confirmed in this store · #'+check.order.id.slice(0,8));
-     configuredCart=[];note='';editingOrder='';pendingKey=crypto.randomUUID();fohTab='tickets';await refresh();return;
-    }
-    notify('Order not found. Draft preserved; retry uses the same order key.');
-   }catch(checkError){notify('Order status unknown. Draft preserved; check tickets before retrying.')}
-  }else{
-   fohTab='order';pos();
-   notify('Additional items not confirmed: '+e.message+'. Draft preserved; retry uses the same request key.');
+    if(check.found){confirmed=true;notify('Order confirmed in this store · #'+check.order.id.slice(0,8));}
+   }catch(checkError){console.warn('Order reconciliation unavailable',checkError)}
+  }
+  if(!confirmed){
+   // Restore only when the employee has not started a new draft.
+   if(!configuredCart.length&&!editingOrder){
+    configuredCart=draft.cart;note=draft.note;editingOrder=draft.editingOrder;
+    followupPaidOrderId=draft.followupPaidOrderId;type=draft.type;table=draft.table;
+    pendingKey=key;fohTab='order';pos();
+    notify('Sending not confirmed. Draft restored; retry uses the same request key.');
+   }else{
+    notify('Sending not confirmed. Current draft kept; check tickets before retrying.');
+   }
   }
  }finally{
   if(additional)pendingAdditionalItems.delete(orderId);
+  if(confirmed&&additional&&additionalRequest===request)additionalRequest=null;
   busy=false;
-  if(sameStore()&&additional)pos();
+  if(sameStore())refresh().catch(err=>console.warn('Post-send sync failed',err));
  }
 }
 
