@@ -557,10 +557,10 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const order=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
   if(!order)return json({error:'Order not found'},404);
   if(order.status==='cancelled')return json({ok:true,already_voided:true});
-  if(order.paid_at||order.kitchen_completed_at)return json({error:'Paid or completed orders cannot be voided here'},409);
+  if(order.paid_at)return json({error:'Paid orders cannot be voided here'},409);
   if(await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE order_id=? AND store_id=?').bind(id,storeId).first())return json({error:'Use Platform Orders for platform tickets'},409);
   const now=new Date().toISOString();
-  const updated=await env.DB.prepare("UPDATE orders SET status='cancelled',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(now,id,storeId).run();
+  const updated=await env.DB.prepare("UPDATE orders SET status='cancelled',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND status!='cancelled'").bind(now,id,storeId).run();
   if(updated.meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await event(env,id,'ticket_voided',session.role,{store_id:storeId});
   await broadcastStore(env,storeId,'orders',{id});
