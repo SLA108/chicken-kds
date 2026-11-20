@@ -14,6 +14,9 @@ function scopedApiPath(path){
 let deviceStores=[],currentDeviceStore=null,renewalPending=null,storeSelectionPending=false,storeEpoch=0;
 const pendingCheckoutIds=new Set();
 const pendingPosItemEdits=new Map();
+const pendingTableReleases=new Map();
+function applyPendingTableReleases(snapshot,tables){for(const [id,pending] of pendingTableReleases){const order=snapshot.find(o=>o.id===id);if(order)order.table_occupied=true;const table=tables?.find(t=>t.number===pending.tableNo);if(table){table.occupied=true;table.order_id=id;}}}
+
 function applyPendingPosItemEdits(snapshot){for(const order of snapshot){const pending=pendingPosItemEdits.get(order.id);if(!pending)continue;order.items=(order.items||[]).filter(item=>!pending.removed.has(item.id));for(const item of order.items)if(pending.quantities.has(item.id))item.quantity=pending.quantities.get(item.id);}}
 
 const lastStoreKey='ck_last_store_'+page;
@@ -226,7 +229,7 @@ async function refresh(initial=false){const serial=++kitchenRefreshSerial,epoch=
    if(kitchenPending.has(item.id))item.is_done=kitchenPending.get(item.id)?1:0;
   }
  }
- const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);if(page==='pos')for(const order of o){if(posVoidedTicketIds.has(order.id))order.status='cancelled';}if(page==='pos')applyPendingPosItemEdits(o);orders=o;if(page==='kitchen'&&kitchenView==='dag')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
+ const current=new Set(o.filter(x=>x.status==='new').map(x=>x.id));const currentItemIds=new Set(o.flatMap(order=>(order.items||[]).map(item=>item.id)));if(page==='kitchen'&&!initial&&o.some(order=>order.status!=='cancelled'&&(order.items||[]).some(item=>!item.is_done&&!lastItemIds.has(item.id))))sound();const incomingSuperPos=page==='pos'&&!initial?o.filter(order=>order.status!=='cancelled'&&(superPosPendingIds.has(order.id)||!orders.some(previous=>previous.id===order.id))):[];lastIds=current;lastItemIds=currentItemIds;syncPlatformReadyIndicators(o);if(page==='pos')for(const order of o){if(posVoidedTicketIds.has(order.id))order.status='cancelled';}if(page==='pos')applyPendingPosItemEdits(o);orders=o;if(page==='kitchen'&&kitchenView==='dag')loadKitchenProduction();if(page==='pos')for(const order of orders){if(pendingCheckoutIds.has(order.id))order.paid_at=order.paid_at||new Date().toISOString()}queueSuperPosAlerts(incomingSuperPos,initial);if(page==='pos'){try{const nextTables=await api('/tables');if(stale())return;tableState=nextTables;applyPendingTableReleases(orders,tableState)}catch(e){console.warn('Table sync failed',e)}await loadPickups(!initial);if(stale())return}if(page==='pos'&&itemDialog)return;if(page==='pos'&&!initial&&previousPosSnapshot===JSON.stringify([menu,orders,modifierCatalog,tableState]))return;if(page==='admin'&&(document.querySelector('#menu-editor-backdrop:not([hidden])')||document.querySelector('#category-form:not([hidden])')||document.querySelector('#mod-group-form:not([hidden])')||document.querySelector('#mod-option-form:not([hidden])')))return;render()}catch(e){if(stale())return;if(['Unauthorized','Invalid or expired device session','Device revoked or store inactive','Legacy role sessions disabled'].includes(e.message)){token='';disconnect();sessionStorage.removeItem('ck_token_'+page);login()}else notify('Sync failed: '+e.message)}}
 let superPosAlertQueue=[],superPosAlertSeen=new Set(),superPosAlertActive=null,superPosPendingIds=new Set();
 function showSuperPosAlert(){
  if(page!=='pos'||superPosAlertActive||!superPosAlertQueue.length)return;
@@ -938,10 +941,13 @@ function showReleaseTable(id){
  confirmButton.onclick=async()=>{
   if(confirmButton.disabled)return;
   confirmButton.disabled=true;cancel.disabled=true;confirmButton.textContent='Releasing…';error.hidden=true;
+  if(pendingTableReleases.has(id))return;
+  pendingTableReleases.set(id,{tableNo:o.table_no});
   try{
    const releaseStore=currentDeviceStore?.id,releaseEpoch=storeEpoch;
    const tipCents=getReleaseTipCents();if(!Number.isInteger(tipCents)||tipCents<0||tipCents>10000000)throw Error('Enter a valid tip amount');if(tipCents>0&&!paid)throw Error('Checkout the order before adding a tip');
    await api('/orders/'+id+'/release-table','POST',{tip_amount_cents:tipCents,tip_method:modal.querySelector('#release-tip-method').value,tip_request_key:releaseTipKey,service_rating:paid?releaseRating:undefined});
+   pendingTableReleases.delete(id);
    close();
    // Server has confirmed the release. Update the visible POS state immediately,
    // without blocking on the next full menu/orders/tables network refresh.
@@ -955,6 +961,7 @@ function showReleaseTable(id){
    notify('Table '+o.table_no+' released · Now available');
    refresh().catch(e=>console.warn('Post-release sync failed',e));
   }catch(e){
+   pendingTableReleases.delete(id);
    error.textContent='Unable to release table: '+e.message;error.hidden=false;
    confirmButton.disabled=false;cancel.disabled=false;confirmButton.textContent='✓ Release Table';
   }
