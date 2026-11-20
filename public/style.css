@@ -1203,3 +1203,18 @@ body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,
 .kitchen .kds-header-menu-content a:hover{background:#40516c}
 .kitchen .kds-header-menu-content #v3-switch-store:disabled{opacity:.5}
 @media(max-width:540px){.kitchen .kds-header-role{display:none}.kitchen #app>header.kds-minimal-header{padding:6px 8px}.kitchen .kds-store-title strong{max-width:45vw}}
+
+/* Share compact header between POS and Kitchen, without affecting Back Office. */
+body:not(.kitchen) #app>header.kds-minimal-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;min-height:48px}
+body:not(.kitchen) .kds-store-title,body:not(.kitchen) .kds-header-right{display:flex;align-items:center;gap:8px;min-width:0}
+body:not(.kitchen) .kds-store-title strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:min(45vw,340px)}
+body:not(.kitchen) .kds-header-role{font-size:.85rem;opacity:.7;white-space:nowrap}
+body:not(.kitchen) .kds-header-right{margin-left:auto;flex-shrink:0}
+body:not(.kitchen) .kds-header-menu{position:relative}
+body:not(.kitchen) .kds-header-menu>summary{display:flex;align-items:center;justify-content:center;list-style:none;cursor:pointer;min-width:44px;min-height:44px;border-radius:9px;background:#273347;color:#fff;font-size:1.3rem}
+body:not(.kitchen) .kds-header-menu>summary::-webkit-details-marker{display:none}
+body:not(.kitchen) .kds-header-menu-content{position:absolute;z-index:90;right:0;top:calc(100% + 6px);display:flex;flex-direction:column;gap:6px;min-width:205px;padding:10px;border-radius:12px;background:#263449;border:1px solid #526174;box-shadow:0 12px 30px #0008}
+body:not(.kitchen) .kds-header-menu-content a,body:not(.kitchen) .kds-header-menu-content button{display:block;box-sizing:border-box;width:100%;text-align:left;padding:10px 12px;border-radius:8px;color:#fff;white-space:nowrap;font-size:.92rem}
+body:not(.kitchen) .kds-header-menu-content a{text-decoration:none}
+body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
+@media(max-width:540px){body:not(.kitchen) .kds-header-role{display:none}body:not(.kitchen) #app>header.kds-minimal-header{padding:6px 8px}body:not(.kitchen) .kds-store-title strong{max-width:45vw}}
