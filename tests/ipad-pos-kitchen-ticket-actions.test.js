@@ -4,12 +4,14 @@ import {readFileSync} from 'node:fs';
 const server=readFileSync(new URL('../src/index.js',import.meta.url),'utf8');
 const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
-test('POS void preserves ticket and blocks paid, completed and platform orders',()=>{
+test('POS void preserves ticket, allows kitchen completion, and blocks paid and platform orders',()=>{
  const begin=server.indexOf('const scopedVoid=path.match('),end=server.indexOf('const scopedEditDish=path.match(',begin);
  assert.ok(begin>0&&end>begin);
  const handler=server.slice(begin,end);
  assert.match(handler,/session.role!=='pos'/);
- assert.match(handler,/order.paid_at\|\|order.kitchen_completed_at/);
+ assert.match(handler,/if\(order.paid_at\)/);
+ assert.doesNotMatch(handler,/if\(order.paid_at\|\|order.kitchen_completed_at\)/);
+ assert.match(handler,/AND paid_at IS NULL AND status!='cancelled'/);
  assert.match(handler,/SELECT order_id FROM order_platform_metadata/);
  assert.match(handler,/UPDATE orders SET status='cancelled'/);
  assert.match(handler,/ticket_voided/);
