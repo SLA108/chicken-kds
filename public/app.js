@@ -1383,7 +1383,7 @@ function kitchen(){
    }).join('')+
    (o.note?'<p class="kds-order-note">Note: '+esc(o.note)+'</p>':'')+'</article>';
  };
- shell('<div class="kds-command-row">'+kitchenViewTabs()+'<div class="panel toolbar kds-command-actions"><button type="button" id="kds-quick-order">+ Platform Order</button><button type="button" id="kds-courier-queue" class="alt">Courier Collection</button><button id="sound">'+(beepEnabled?'🔊 Sound enabled':'🔇 Enable new-order sound')+'</button><button class="alt" id="sync">Refresh</button><span class="muted small">Tap anywhere on a dish to toggle Done.</span></div></div>'+
+ shell('<div class="kds-command-row">'+kitchenViewTabs()+'<div class="kds-command-actions"><button type="button" id="kds-quick-order">+ Platform Order</button><button type="button" id="sound" class="kds-icon-action" aria-label="'+(beepEnabled?'Mute new-order sound':'Enable new-order sound')+'" title="'+(beepEnabled?'Mute new-order sound':'Enable new-order sound')+'" aria-pressed="'+beepEnabled+'">'+(beepEnabled?'🔊':'🔇')+'</button><button type="button" class="alt kds-icon-action" id="sync" aria-label="Refresh orders" title="Refresh orders">↻</button><details class="kds-more"><summary class="kds-icon-action" aria-label="More kitchen actions" title="More kitchen actions">⋯</summary><div class="kds-more-menu"><button type="button" id="kds-courier-queue" class="alt">Courier Collection</button></div></details></div></div>'+
  (kitchenView==='dag'?kitchenDagView(active):'<h2>Active Orders · <span class="kds-active-count">'+active.length+'</span></h2><div class="grid kds-active-grid">'+active.map(card).join('')+'</div>'+(active.length?'':'<div class="empty">No active kitchen orders</div>')) +
  '<section class="panel completed-section kds-history"><div class="row"><h3>Completed Orders</h3><button class="alt" id="kds-history-toggle">'+(historyOpen?'Hide history':'View history')+'</button></div>'+
  (historyOpen?'<div class="toolbar"><select id="kds-history-range"><option value="today" '+(historyRange==='today'?'selected':'')+'>Today</option><option value="yesterday" '+(historyRange==='yesterday'?'selected':'')+'>Yesterday</option><option value="all" '+(historyRange==='all'?'selected':'')+'>All</option></select><input id="kds-history-search" placeholder="Table / order ID" value="'+esc(historyQuery)+'"><button class="alt" id="kds-history-search-button">Search</button></div>'+
@@ -1425,7 +1425,7 @@ function kitchen(){
  });
  const retry=document.querySelector('#dag-production-retry');if(retry)retry.onclick=()=>loadKitchenProduction();
  document.querySelector('#kds-quick-order').onclick=openQuickOrderDialog;document.querySelector('#kds-courier-queue').onclick=openCourierCollection;
- document.querySelector('#sound').onclick=async()=>{audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound();kitchen()};
+ document.querySelector('#sound').onclick=async()=>{if(!beepEnabled){audio=audio||new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beepEnabled=true;sound()}else beepEnabled=false;kitchen()};
  document.querySelector('#sync').onclick=()=>refresh();
  document.querySelectorAll('[data-kitchen-mark-all]').forEach(head=>{
  const mark=async()=>{
