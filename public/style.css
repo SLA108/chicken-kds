@@ -117,7 +117,7 @@ body:has(.admin-head){background:#f5f6f8}
 
 
 /* Front of House V2.1 */
-body:has(.foh-head){background:#f6f7f9}
+body:has(.foh-compact-nav){background:#f6f7f9}
 .foh-head,.foh-title{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .foh-head{margin:8px 0 20px}.foh-head small{font-size:11px;letter-spacing:1.8px;color:#b86138;font-weight:800}.foh-head h1{font-size:clamp(25px,3vw,34px);margin:5px 0}.foh-head p,.foh-title p{margin:5px 0;color:#77808d;font-size:13px}.foh-title{margin-bottom:22px}.foh-title h2{margin:0;font-size:21px}.foh-count{background:#fff;border:1px solid #e4e8ee;padding:10px 14px;border-radius:30px;font-size:12px;font-weight:700;color:#566170;white-space:nowrap}
 .foh-tabs{display:flex;gap:5px;border-bottom:1px solid #e0e4e9;margin-bottom:20px;overflow-x:auto}.foh-tabs button{border-radius:0;background:transparent;color:#6b7280;padding:14px 18px;white-space:nowrap}.foh-tabs button.active{border-bottom:3px solid #d36c3a;color:#1f2937}
@@ -128,29 +128,29 @@ body:has(.foh-head){background:#f6f7f9}
 @media(max-width:560px){.foh-head{align-items:flex-start}.foh-count{font-size:10px;padding:8px}.foh-workspace{padding:14px}.foh-table-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.foh-table{min-height:94px;padding:11px}.foh-table strong{font-size:23px}.foh-tabs button{padding:12px 10px;font-size:12px}.foh-ticket-grid{grid-template-columns:1fr}}
 
 /* POS V2.2: low-glare, staff-friendly slate palette; isolated from Kitchen/Admin */
-body:has(.foh-head){background:#17212d;color:#e6edf4}
-body:has(.foh-head) .panel{background:#243141;border-color:#394a5d;color:#e6edf4}
-body:has(.foh-head) .foh-head p,body:has(.foh-head) .foh-title p,body:has(.foh-head) .muted{color:#b5c2d0}
-body:has(.foh-head) .foh-head small{color:#e3a77c}
-body:has(.foh-head) .foh-count{background:#29394a;color:#e0e8f1;border-color:#44576a}
-body:has(.foh-head) .foh-tabs{border-color:#405164}
-body:has(.foh-head) .foh-tabs button{color:#b9c7d6}
-body:has(.foh-head) .foh-tabs button.active{color:#fff;border-color:#e5a26e;background:#2d3b4c}
-body:has(.foh-head) .foh-table{background:#2e3e50;color:#eef3f8;border-color:#506275}
-body:has(.foh-head) .foh-table small{color:#b6c4d2}
-body:has(.foh-head) .foh-table span{color:#9ed4b2}
-body:has(.foh-head) .foh-table.occupied{background:#514133;border-color:#a7774f}
-body:has(.foh-head) .foh-table.occupied span{color:#f4c18e}
-body:has(.foh-head) .foh-ticket{background:#2c3a4b;border-color:#495c6e;color:#eaf1f8}
-body:has(.foh-head) .foh-ticket>small,body:has(.foh-head) .foh-ticket-item small{color:#b9c6d3}
-body:has(.foh-head) .menu button{background:#304154;border-color:#526478;color:#f1f5f9}
-body:has(.foh-head) .chips button{background:#3a4b5e;color:#e6edf4}
-body:has(.foh-head) .chips button.selected{background:#3864b3;color:#fff}
-body:has(.foh-head) input,body:has(.foh-head) select,body:has(.foh-head) textarea{background:#334558;color:#f4f7fb;border-color:#586b80}
-body:has(.foh-head) .foh-cart-line{border-color:#405265}
-body:has(.foh-head) .foh-cart-line small{color:#b8c5d2}
-body:has(.foh-head) button.alt{background:#42556a;color:#f3f7fa}
-body:has(.foh-head) .foh-ticket h3{margin:14px 0}
+body:has(.foh-compact-nav){background:#17212d;color:#e6edf4}
+body:has(.foh-compact-nav) .panel{background:#243141;border-color:#394a5d;color:#e6edf4}
+body:has(.foh-compact-nav) .foh-head p,body:has(.foh-compact-nav) .foh-title p,body:has(.foh-compact-nav) .muted{color:#b5c2d0}
+body:has(.foh-compact-nav) .foh-head small{color:#e3a77c}
+body:has(.foh-compact-nav) .foh-count{background:#29394a;color:#e0e8f1;border-color:#44576a}
+body:has(.foh-compact-nav) .foh-tabs{border-color:#405164}
+body:has(.foh-compact-nav) .foh-tabs button{color:#b9c7d6}
+body:has(.foh-compact-nav) .foh-tabs button.active{color:#fff;border-color:#e5a26e;background:#2d3b4c}
+body:has(.foh-compact-nav) .foh-table{background:#2e3e50;color:#eef3f8;border-color:#506275}
+body:has(.foh-compact-nav) .foh-table small{color:#b6c4d2}
+body:has(.foh-compact-nav) .foh-table span{color:#9ed4b2}
+body:has(.foh-compact-nav) .foh-table.occupied{background:#514133;border-color:#a7774f}
+body:has(.foh-compact-nav) .foh-table.occupied span{color:#f4c18e}
+body:has(.foh-compact-nav) .foh-ticket{background:#2c3a4b;border-color:#495c6e;color:#eaf1f8}
+body:has(.foh-compact-nav) .foh-ticket>small,body:has(.foh-compact-nav) .foh-ticket-item small{color:#b9c6d3}
+body:has(.foh-compact-nav) .menu button{background:#304154;border-color:#526478;color:#f1f5f9}
+body:has(.foh-compact-nav) .chips button{background:#3a4b5e;color:#e6edf4}
+body:has(.foh-compact-nav) .chips button.selected{background:#3864b3;color:#fff}
+body:has(.foh-compact-nav) input,body:has(.foh-compact-nav) select,body:has(.foh-compact-nav) textarea{background:#334558;color:#f4f7fb;border-color:#586b80}
+body:has(.foh-compact-nav) .foh-cart-line{border-color:#405265}
+body:has(.foh-compact-nav) .foh-cart-line small{color:#b8c5d2}
+body:has(.foh-compact-nav) button.alt{background:#42556a;color:#f3f7fa}
+body:has(.foh-compact-nav) .foh-ticket h3{margin:14px 0}
 .foh-ticket-items{margin:15px 0 4px;border-top:1px solid #4a5b6e}
 .foh-ticket-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #46576a;font-size:13px}
 .foh-ticket-item strong{font-weight:650}
@@ -161,19 +161,19 @@ body:has(.foh-head) .foh-ticket h3{margin:14px 0}
 @media(max-width:650px){.foh-title{align-items:flex-start;flex-wrap:wrap}.foh-back-top{width:100%}}
 
 /* POS dish configuration dialog: match low-glare POS palette */
-body:has(.foh-head) .item-dialog{background:#29394b;color:#ecf2f8;border:1px solid #52677c;box-shadow:0 22px 70px #0008}
-body:has(.foh-head) .item-dialog .muted{color:#bdc9d6}
-body:has(.foh-head) .modifier-fieldset{background:#304255;border-color:#62768b}
-body:has(.foh-head) .modifier-fieldset legend{color:#ecf2f8}
-body:has(.foh-head) .modifier-choice{border-color:#52657a}
-body:has(.foh-head) .modifier-choice:hover{background:#394d62}
-body:has(.foh-head) .item-dialog input,body:has(.foh-head) .item-dialog textarea,body:has(.foh-head) .item-dialog select{background:#35495d;color:#f1f5f9;border-color:#6a7e92}
-body:has(.foh-head) .item-dialog-backdrop{background:#07101cc9}
+body:has(.foh-compact-nav) .item-dialog{background:#29394b;color:#ecf2f8;border:1px solid #52677c;box-shadow:0 22px 70px #0008}
+body:has(.foh-compact-nav) .item-dialog .muted{color:#bdc9d6}
+body:has(.foh-compact-nav) .modifier-fieldset{background:#304255;border-color:#62768b}
+body:has(.foh-compact-nav) .modifier-fieldset legend{color:#ecf2f8}
+body:has(.foh-compact-nav) .modifier-choice{border-color:#52657a}
+body:has(.foh-compact-nav) .modifier-choice:hover{background:#394d62}
+body:has(.foh-compact-nav) .item-dialog input,body:has(.foh-compact-nav) .item-dialog textarea,body:has(.foh-compact-nav) .item-dialog select{background:#35495d;color:#f1f5f9;border-color:#6a7e92}
+body:has(.foh-compact-nav) .item-dialog-backdrop{background:#07101cc9}
 .foh-modal-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:15px 0}
 .foh-modal-tabs button{font-size:12px;padding:10px 5px}
 
 /* POS notifications: low-glare readable toast (appended to body outside POS root) */
-body:has(.foh-head)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6b839b;box-shadow:0 12px 34px #0007;border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;line-height:1.5;max-width:min(380px,calc(100vw - 30px));overflow-wrap:anywhere}
+body:has(.foh-compact-nav)>.notice{background:#34475b;color:#f1f6fb;border:1px solid #6b839b;box-shadow:0 12px 34px #0007;border-radius:12px;padding:14px 18px;font-size:14px;font-weight:600;line-height:1.5;max-width:min(380px,calc(100vw - 30px));overflow-wrap:anywhere}
 
 /* Kitchen V2.2: high-contrast low-glare header, wet-hand touch targets */
 .kitchen .kds-order{background:#202b3a;border:1px solid #405064;padding:10px;color:#f1f5f9}
@@ -505,12 +505,12 @@ body.kitchen #app>header + #v3-current-store{border-top:0}
 .foh-ticket.foh-ticket-unpaid{border-left:4px solid #f59e0b}
 .foh-ticket.foh-ticket-unpaid .foh-payment{color:#b45309}
 
-/* POS dark-theme ticket states: override the generic body:has(.foh-head) card background. */
-body:has(.foh-head) .foh-ticket.foh-ticket-unpaid{background:#473725;border:2px solid #d99639;color:#fff3df;box-shadow:inset 0 0 0 1px #d9963922}
-body:has(.foh-head) .foh-ticket.foh-ticket-paid{background:#1b493d;border:2px solid #2fb77b;color:#e5fff1;box-shadow:inset 0 0 0 1px #2fb77b22}
-body:has(.foh-head) .foh-ticket.foh-ticket-unpaid .foh-payment{color:#ffd18b}
-body:has(.foh-head) .foh-ticket.foh-ticket-paid .foh-payment{color:#8df0b9}
-body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:#168451;color:#fff;border:1px solid #3cce8a}
+/* POS dark-theme ticket states: override the generic body:has(.foh-compact-nav) card background. */
+body:has(.foh-compact-nav) .foh-ticket.foh-ticket-unpaid{background:#473725;border:2px solid #d99639;color:#fff3df;box-shadow:inset 0 0 0 1px #d9963922}
+body:has(.foh-compact-nav) .foh-ticket.foh-ticket-paid{background:#1b493d;border:2px solid #2fb77b;color:#e5fff1;box-shadow:inset 0 0 0 1px #2fb77b22}
+body:has(.foh-compact-nav) .foh-ticket.foh-ticket-unpaid .foh-payment{color:#ffd18b}
+body:has(.foh-compact-nav) .foh-ticket.foh-ticket-paid .foh-payment{color:#8df0b9}
+body:has(.foh-compact-nav) .foh-ticket.foh-ticket-paid [data-release-table]{background:#168451;color:#fff;border:1px solid #3cce8a}
 
 /* Reservation alerts and history */
 .reservation-alert-overlay{position:fixed;inset:0;z-index:1200;background:rgba(9,17,30,.72);backdrop-filter:blur(5px);display:grid;place-items:center;padding:18px}
@@ -1138,7 +1138,7 @@ body:has(.foh-head) .foh-ticket.foh-ticket-paid [data-release-table]{background:
 .kds-production-board .kds-dish-assembly-row:disabled,.kds-production-board .kds-dish-assembly-item:disabled{opacity:.5;cursor:wait}
 
 /* iPad POS/KDS: prevent accidental double-tap zoom while keeping scroll gestures. */
-body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,body:has(.foh-head) main,body:has(.foh-head) button{touch-action:manipulation}
+body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,body:has(.foh-compact-nav) main,body:has(.foh-compact-nav) button{touch-action:manipulation}
 .kitchen .kds-order-head[role="button"]{cursor:pointer;user-select:none;-webkit-user-select:none;outline-offset:3px}
 .kitchen .kds-order-head[aria-busy="true"]{opacity:.65;pointer-events:none}
 .kitchen .kds-platform-order-number{font-size:clamp(1.4rem,2.6vw,2.15rem);font-weight:900;line-height:1.15;overflow-wrap:anywhere;text-align:right}
@@ -1237,9 +1237,15 @@ body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 .foh-order-types button:disabled,.foh-table-picker>button:disabled{opacity:.7;cursor:default}
 .foh-table-picker{position:relative}
 .foh-table-picker>button{background:#304764;border-color:#7b9cc8;color:#fff}
-.foh-table-grid{position:absolute;top:calc(100% + 7px);left:0;z-index:45;width:min(350px,calc(100vw - 42px));padding:12px;background:#1e2d42;border:1px solid #60758f;border-radius:12px;box-shadow:0 12px 32px #0009}
-.foh-table-grid[hidden]{display:none}
+.foh-table-popover{position:absolute;top:calc(100% + 7px);left:0;z-index:45;width:min(350px,calc(100vw - 42px));padding:12px;background:#1e2d42;border:1px solid #60758f;border-radius:12px;box-shadow:0 12px 32px #0009}
+.foh-table-popover[hidden]{display:none}
 .foh-table-grid-label{font-size:12px;font-weight:700;color:#bdcbe0;margin-bottom:9px}
 .foh-table-grid-items{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
 .foh-table-grid-items button{min-width:0;min-height:46px;border:1px solid #60758f;border-radius:8px;background:#33465d;color:white;font-weight:700}
 @media(max-width:560px){.foh-order-types{width:100%}.foh-order-types button{flex:1 1 auto}.foh-table-picker>button{min-width:150px}}
+
+/* Table picker popover must never inherit the full-page Tables grid styles. */
+.foh-table-popover{display:block;box-sizing:border-box;max-height:min(55vh,380px);overflow-y:auto}
+.foh-table-popover .foh-table-grid-label{display:block;white-space:normal;line-height:1.35}
+.foh-table-popover .foh-table-grid-items{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.foh-table-popover .foh-table-grid-items button{display:flex;align-items:center;justify-content:center;min-width:0;min-height:46px;padding:8px;border-radius:8px}
