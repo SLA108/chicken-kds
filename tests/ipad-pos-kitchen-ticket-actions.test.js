@@ -43,3 +43,16 @@ test('iPad touch protection is scoped to POS and Kitchen',()=>{
  assert.match(app,/gesturestart/);
  assert.match(css,/touch-action:manipulation/);
 });
+
+test('POS removal preserves the ticket and disallows removing finished or final dish',()=>{
+ const begin=server.indexOf('const scopedRemoveDish=path.match('),end=server.indexOf('const scopedItemDone=path.match(',begin);
+ assert.ok(begin>0&&end>begin);
+ const handler=server.slice(begin,end);
+ assert.match(handler,/req.method==='DELETE'/);
+ assert.match(handler,/items.length<2/);
+ assert.match(handler,/!i.is_done/);
+ assert.match(handler,/DELETE FROM order_item_modifiers/);
+ assert.match(handler,/DELETE FROM order_items/);
+ assert.match(handler,/NOT EXISTS\(SELECT 1 FROM order_platform_metadata/);
+ assert.match(app,/data-edit-remove/);
+});
