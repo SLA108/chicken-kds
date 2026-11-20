@@ -108,7 +108,7 @@ test('POS receives immediate booking notifications and reconnect catch-up',()=>{
 
 test('restaurant device approval has no POS Kitchen role selection',()=>{
  assert.doesNotMatch(app,/Device role<select name="role">/);
- assert.match(app,/Access: Front of House \+ Kitchen Display/);
+ assert.match(app,/Access: POS \+ Kitchen Display/);
  assert.match(api,/b\.role==='scanner'\?'scanner':'pos'/);
  assert.match(api,/b\.role!==undefined/);
 });
