@@ -556,12 +556,19 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const id=scopedVoid[1],storeId=session.storeId;
   const order=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
   if(!order)return json({error:'Order not found'},404);
-  if(order.status==='cancelled')return json({ok:true,already_voided:true});
+  if(order.status==='cancelled'){
+   // Repair any occupancy left behind by older void implementations.
+   await env.DB.prepare('DELETE FROM table_occupancy WHERE store_id=? AND order_id=?').bind(storeId,id).run();
+   await broadcastStore(env,storeId,'orders',{id});
+   return json({ok:true,already_voided:true});
+  }
   if(order.paid_at)return json({error:'Paid orders cannot be voided here'},409);
   if(await env.DB.prepare('SELECT order_id FROM order_platform_metadata WHERE order_id=? AND store_id=?').bind(id,storeId).first())return json({error:'Use Platform Orders for platform tickets'},409);
   const now=new Date().toISOString();
   const updated=await env.DB.prepare("UPDATE orders SET status='cancelled',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND status!='cancelled'").bind(now,id,storeId).run();
   if(updated.meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  // Release the table immediately so it can accept another ticket.
+  await env.DB.prepare('DELETE FROM table_occupancy WHERE store_id=? AND order_id=?').bind(storeId,id).run();
   await event(env,id,'ticket_voided',session.role,{store_id:storeId});
   await broadcastStore(env,storeId,'orders',{id});
   return json({ok:true});
