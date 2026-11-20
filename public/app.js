@@ -837,6 +837,36 @@ document.querySelector('#submit').onclick=submit;
 document.querySelector('#checkout-selected')?.addEventListener('click',()=>showCheckout(editingOrder));
 updateCartView();if(itemDialog)showItemDialog();
 }
+async function voidTicket(id){
+ const order=orders.find(o=>o.id===id);
+ if(!order||order.paid_at||order.kitchen_completed_at||order.platform)return notify('Only unpaid, unfinished regular tickets can be voided');
+ if(!confirm('Void the entire ticket? The order will be marked Cancelled and kept in history. This cannot be undone.'))return;
+ try{await api('/orders/'+encodeURIComponent(id)+'/void','POST',{});notify('Ticket voided');if(editingOrder===id)editingOrder='';await refresh()}
+ catch(e){notify('Void ticket failed: '+e.message)}
+}
+function openTicketEditor(id){
+ const order=orders.find(o=>o.id===id);
+ if(!order||order.paid_at||order.kitchen_completed_at||order.platform)return notify('This ticket cannot be edited');
+ document.querySelector('#foh-ticket-editor')?.remove();
+ const overlay=document.createElement('div');overlay.id='foh-ticket-editor';overlay.className='foh-ticket-editor-overlay';
+ const rows=(order.items||[]).map(item=>'<div class="foh-ticket-edit-row"><span>'+esc(item.name)+(item.is_done?' · Done':'')+'</span><label>Qty <input type="number" min="1" max="99" step="1" data-edit-quantity="'+esc(item.id)+'" value="'+Number(item.quantity)+'" '+(item.is_done?'disabled':'')+'></label></div>').join('');
+ overlay.innerHTML='<section class="foh-ticket-editor-panel" role="dialog" aria-modal="true" aria-label="Edit Ticket"><h2>Edit Ticket</h2><p>Update quantities of unfinished dishes. Use Add items to add new dishes.</p>'+rows+'<p class="foh-ticket-editor-error" role="alert" hidden></p><div class="row"><button type="button" class="alt" data-edit-close>Cancel</button><button type="button" data-edit-save>Save changes</button></div></section>';
+ document.body.append(overlay);
+ const close=()=>overlay.remove();overlay.querySelector('[data-edit-close]').onclick=close;
+ overlay.onclick=e=>{if(e.target===overlay)close()};
+ overlay.querySelector('[data-edit-save]').onclick=async()=>{
+  const changes=[];
+  for(const input of overlay.querySelectorAll('[data-edit-quantity]')){
+   const item=order.items.find(i=>i.id===input.dataset.editQuantity),quantity=Number(input.value);
+   if(!Number.isInteger(quantity)||quantity<1||quantity>99){const error=overlay.querySelector('.foh-ticket-editor-error');error.hidden=false;error.textContent='Quantity must be 1–99';return;}
+   if(item&&quantity!==Number(item.quantity))changes.push({id:item.id,quantity});
+  }
+  if(!changes.length){close();return;}
+  const save=overlay.querySelector('[data-edit-save]');save.disabled=true;
+  try{for(const item of changes)await api('/orders/'+encodeURIComponent(id)+'/items/'+encodeURIComponent(item.id)+'/quantity','PATCH',{quantity:item.quantity});close();notify('Ticket updated');await refresh()}
+  catch(e){const error=overlay.querySelector('.foh-ticket-editor-error');error.hidden=false;error.textContent='Update failed: '+e.message;save.disabled=false;await refresh()}
+ };
+}
 function showReleaseTable(id){
  const o=activeTickets().find(x=>x.id===id&&x.source==='dinein'&&x.table_occupied);
  if(!o)return notify('Table is no longer occupied. Refresh the page.');
