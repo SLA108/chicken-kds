@@ -71,3 +71,13 @@ test('POS order type and table selection use accessible buttons instead of nativ
  assert.match(css,/\.foh-table-grid-items\{display:grid/);
  assert.match(css,/min-height:44px/);
 });
+
+test('POS keeps dark slate theme and table picker independent from Tables page grid',()=>{
+ assert.match(css,/body:has\(\.foh-compact-nav\)\{background:#17212d;color:#e6edf4\}/);
+ assert.match(css,/\.foh-table-popover\{position:absolute/);
+ assert.match(css,/\.foh-table-popover\[hidden\]\{display:none\}/);
+ assert.match(ui,/id="foh-table-grid" class="foh-table-popover"/);
+ assert.match(ui,/\['dinein','🍽️ Dine-in'\]/);
+ assert.match(ui,/\['takeaway','🛍️ Takeaway'\]/);
+ assert.doesNotMatch(ui,/\['delivery','Delivery'\]/);
+});
