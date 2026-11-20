@@ -1218,3 +1218,13 @@ body:not(.kitchen) .kds-header-menu-content a,body:not(.kitchen) .kds-header-men
 body:not(.kitchen) .kds-header-menu-content a{text-decoration:none}
 body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 @media(max-width:540px){body:not(.kitchen) .kds-header-role{display:none}body:not(.kitchen) #app>header.kds-minimal-header{padding:6px 8px}body:not(.kitchen) .kds-store-title strong{max-width:45vw}}
+
+/* Compact brand mark and POS navigation; no extra hero/banner row. */
+.ck-compact-logo{width:36px;height:36px;object-fit:contain;flex:0 0 36px;border-radius:6px}
+.foh-compact-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;margin:4px 0 12px}
+.foh-compact-nav .foh-tabs{flex:1 1 auto;min-width:0;margin:0;overflow-x:auto;scrollbar-width:thin}
+.foh-compact-nav .pickup-top-actions{flex:0 0 auto;flex-wrap:nowrap}
+.foh-compact-nav .foh-icon-action{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:8px 10px;font-size:1.15rem;white-space:nowrap}
+.foh-category-strip{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.foh-category-strip button{flex:0 0 auto;white-space:nowrap}
+@media(max-width:760px){.ck-compact-logo{width:30px;height:30px;flex-basis:30px}.foh-compact-nav{flex-wrap:wrap}.foh-compact-nav .foh-tabs{flex:1 1 100%;order:1}.foh-compact-nav .pickup-top-actions{margin-left:auto;order:0}}
