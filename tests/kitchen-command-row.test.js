@@ -26,7 +26,7 @@ test('kitchen header is minimal and keeps store switching and navigation accessi
  assert.match(ui,/class="kds-header-menu"/);
  assert.match(ui,/id="kds-switch-slot"/);
  assert.match(ui,/slot\.append\(button\)/);
- assert.match(ui,/href="\$\{page===\x27pos\x27\?\x27\/kitchen\x27:\x27\/pos\x27\}">\$\{page===\x27pos\x27\?\x27Kitchen Display\x27:\x27Front of House\x27\}/);
+ assert.match(ui,/href="\$\{page===\x27pos\x27\?\x27\/kitchen\x27:\x27\/pos\x27\}">\$\{page===\x27pos\x27\?\x27Kitchen Display\x27:\x27POS\x27\}/);
  assert.match(ui,/href="\/admin">Back Office/);
  assert.match(ui,/id="logout">Log out/);
  assert.match(css,/\.kitchen #app>header\.kds-minimal-header/);
@@ -40,7 +40,7 @@ test('kitchen store switch menu replaces the previous button on each refresh',()
 
 test('POS uses compact header without changing Back Office navigation',()=>{
  assert.match(ui,/page==='kitchen'\|\|page==='pos'/);
- assert.match(ui,/page==='pos'\?'Front of House':'Kitchen'/);
+ assert.match(ui,/page==='pos'\?'POS':'Kitchen'/);
  assert.match(ui,/page==='pos'\?'\/kitchen':'\/pos'/);
  assert.match(ui,/if\(page==='kitchen'\|\|page==='pos'\)\{/);
  assert.match(css,/body:not\(\.kitchen\) #app>header\.kds-minimal-header/);
