@@ -1256,3 +1256,6 @@ body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 /* Monochrome POS order-type icons, consistent on iPad Safari. */
 .foh-order-types button{display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .foh-order-type-icon{display:inline-block;width:19px;height:19px;flex:0 0 19px;vertical-align:middle;color:inherit}
+
+/* Pickup Queue uses the same crisp monochrome icon language as POS order types. */
+.pickup-queue-icon{width:20px;height:20px;display:inline-block;flex:0 0 20px;vertical-align:middle}
