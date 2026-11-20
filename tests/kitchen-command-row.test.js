@@ -45,3 +45,15 @@ test('POS uses compact header without changing Back Office navigation',()=>{
  assert.match(ui,/if\(page==='kitchen'\|\|page==='pos'\)\{/);
  assert.match(css,/body:not\(\.kitchen\) #app>header\.kds-minimal-header/);
 });
+
+test('POS compact workspace retains pickup actions and ordered scrolling categories',()=>{
+ assert.match(ui,/class="foh-compact-nav"/);
+ assert.match(ui,/id="pickup-sound" class="foh-icon-action"/);
+ assert.match(ui,/id="pickup-nav" class="foh-icon-action"/);
+ assert.match(ui,/class="chips foh-category-strip"/);
+ assert.match(ui,/kitchenCategories\.map\(c=>\[String\(c\.name\)/);
+ assert.match(ui,/page==='kitchen'\|\|page==='pos'/);
+ assert.match(ui,/class="ck-compact-logo"/);
+ assert.match(css,/\.foh-category-strip\{flex-wrap:nowrap;overflow-x:auto/);
+ assert.match(css,/\.ck-compact-logo\{width:36px;height:36px/);
+});
