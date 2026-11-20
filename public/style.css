@@ -1228,3 +1228,18 @@ body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 .foh-category-strip{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:4px}
 .foh-category-strip button{flex:0 0 auto;white-space:nowrap}
 @media(max-width:760px){.ck-compact-logo{width:30px;height:30px;flex-basis:30px}.foh-compact-nav{flex-wrap:wrap}.foh-compact-nav .foh-tabs{flex:1 1 100%;order:1}.foh-compact-nav .pickup-top-actions{margin-left:auto;order:0}}
+
+/* POS order type and table selection: iPad-friendly touch controls. */
+.foh-order-controls{display:flex;align-items:flex-start;flex-wrap:wrap;gap:10px;margin:12px 0;position:relative}
+.foh-order-types{display:inline-flex;gap:4px;background:#18283a;padding:4px;border:1px solid #526174;border-radius:11px;max-width:100%;flex-wrap:wrap}
+.foh-order-types button,.foh-table-picker>button{min-height:44px;padding:9px 14px;border-radius:8px;background:#34465d;color:#e8eef8;font-weight:700;border:1px solid #526174;white-space:nowrap}
+.foh-order-types button.selected,.foh-table-grid-items button.selected{background:#3479de;border-color:#72a8ff;color:white}
+.foh-order-types button:disabled,.foh-table-picker>button:disabled{opacity:.7;cursor:default}
+.foh-table-picker{position:relative}
+.foh-table-picker>button{background:#304764;border-color:#7b9cc8;color:#fff}
+.foh-table-grid{position:absolute;top:calc(100% + 7px);left:0;z-index:45;width:min(350px,calc(100vw - 42px));padding:12px;background:#1e2d42;border:1px solid #60758f;border-radius:12px;box-shadow:0 12px 32px #0009}
+.foh-table-grid[hidden]{display:none}
+.foh-table-grid-label{font-size:12px;font-weight:700;color:#bdcbe0;margin-bottom:9px}
+.foh-table-grid-items{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
+.foh-table-grid-items button{min-width:0;min-height:46px;border:1px solid #60758f;border-radius:8px;background:#33465d;color:white;font-weight:700}
+@media(max-width:560px){.foh-order-types{width:100%}.foh-order-types button{flex:1 1 auto}.foh-table-picker>button{min-width:150px}}
