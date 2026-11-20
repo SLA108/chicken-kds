@@ -21,3 +21,14 @@ test('ticket edits apply optimistic changes while protecting pending data from r
  assert.match(app,/pendingPosItemEdits\.set\(id,\{removed:new Set\(\),quantities:new Map\(changes\.map/);
  assert.match(app,/finally\{pendingPosItemEdits\.delete\(id\)/);
 });
+
+test('additional items use a stable request key and show pending UI',()=>{
+ assert.match(app,/const pendingAdditionalItems=new Map\(\)/);
+ assert.match(app,/request_key:crypto\.randomUUID\(\)/);
+ assert.match(app,/items:additionalRequest\.items,request_key:additionalRequest\.request_key/);
+ assert.match(app,/Sending additional items/);
+});
+test('table release protects pending occupancy against refresh',()=>{
+ assert.match(app,/const pendingTableReleases=new Map\(\)/);
+ assert.match(app,/applyPendingTableReleases\(orders,tableState\)/);
+});
