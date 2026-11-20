@@ -31,3 +31,9 @@ test('kitchen header is minimal and keeps store switching and navigation accessi
  assert.match(ui,/id="logout">Log out/);
  assert.match(css,/\.kitchen #app>header\.kds-minimal-header/);
 });
+
+test('kitchen store switch menu replaces the previous button on each refresh',()=>{
+ assert.match(ui,/const slot=document\.querySelector\('#kds-switch-slot'\);if\(slot\)\{slot\.replaceChildren\(\)/);
+ assert.match(ui,/slot\.append\(button\)/);
+ assert.match(ui,/banner\.remove\(\)/);
+});
