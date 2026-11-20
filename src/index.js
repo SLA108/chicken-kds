@@ -580,6 +580,29 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   await broadcastStore(env,storeId,'orders',{id});
   return json({ok:true});
  }
+ // Remove an unfinished item from an unpaid regular ticket, retaining at least one dish.
+ const scopedRemoveDish=path.match(/^\/api\/store\/orders\/([^/]+)\/items\/([^/]+)$/);
+ if(scopedRemoveDish&&req.method==='DELETE'){
+  if(session.role!=='pos')return json({error:'Forbidden'},403);
+  const [id,itemId]=scopedRemoveDish.slice(1),storeId=session.storeId;
+  const order=await env.DB.prepare("SELECT o.id FROM orders o WHERE o.id=? AND o.store_id=? AND o.paid_at IS NULL AND o.kitchen_completed_at IS NULL AND o.status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=o.id)").bind(id,storeId).first();
+  if(!order)return json({error:'Ticket cannot be edited'},409);
+  const items=(await env.DB.prepare('SELECT id,is_done FROM order_items WHERE order_id=?').bind(id).all()).results;
+  if(items.length<2)return json({error:'Use Void Ticket to cancel the final dish'},409);
+  if(!items.some(i=>i.id===itemId&&!i.is_done))return json({error:'Only unfinished dishes can be removed'},409);
+  const now=new Date().toISOString();
+  // D1 batch ensures modifiers and item deletion happen together.
+  const guard="EXISTS(SELECT 1 FROM orders o WHERE o.id=? AND o.store_id=? AND o.paid_at IS NULL AND o.kitchen_completed_at IS NULL AND o.status!='cancelled' AND NOT EXISTS(SELECT 1 FROM order_platform_metadata pm WHERE pm.order_id=o.id))";
+  const result=await env.DB.batch([
+   env.DB.prepare('DELETE FROM order_item_modifiers WHERE order_item_id=? AND EXISTS(SELECT 1 FROM order_items i WHERE i.id=? AND i.order_id=? AND i.is_done=0) AND '+guard).bind(itemId,itemId,id,id,storeId),
+   env.DB.prepare('DELETE FROM order_items WHERE id=? AND order_id=? AND is_done=0 AND '+guard+' AND (SELECT COUNT(*) FROM order_items WHERE order_id=?)>1').bind(itemId,id,id,storeId,id),
+  ]);
+  if(result[1].meta.changes!==1)return json({error:'Dish changed; refresh'},409);
+  await env.DB.prepare('UPDATE orders SET updated_at=? WHERE id=? AND store_id=?').bind(now,id,storeId).run();
+  await event(env,id,'ticket_item_removed',session.role,{store_id:storeId,item_id:itemId});
+  await broadcastStore(env,storeId,'orders',{id});
+  return json({ok:true});
+ }
  const scopedItemDone=path.match(/^\/api\/store\/order-items\/([^/]+)\/done$/);
  if(scopedItemDone&&req.method==='PATCH'){
   if(session.role!=='kitchen')return json({error:'Forbidden'},403);
