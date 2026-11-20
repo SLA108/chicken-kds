@@ -21,7 +21,7 @@ test('kitchen command row wraps on narrow iPads and preserves touch targets',()=
 });
 
 test('kitchen header is minimal and keeps store switching and navigation accessible',()=>{
- assert.match(ui,/page==='kitchen'\?\x60<header class="kds-minimal-header"/);
+ assert.match(ui,/\(page==='kitchen'\|\|page==='pos'\)\?\x60<header class="kds-minimal-header"/);
  assert.match(ui,/id="kds-store-name"/);
  assert.match(ui,/class="kds-header-menu"/);
  assert.match(ui,/id="kds-switch-slot"/);
@@ -36,4 +36,12 @@ test('kitchen store switch menu replaces the previous button on each refresh',()
  assert.match(ui,/const slot=document\.querySelector\('#kds-switch-slot'\);if\(slot\)\{slot\.replaceChildren\(\)/);
  assert.match(ui,/slot\.append\(button\)/);
  assert.match(ui,/banner\.remove\(\)/);
+});
+
+test('POS uses compact header without changing Back Office navigation',()=>{
+ assert.match(ui,/page==='kitchen'\|\|page==='pos'/);
+ assert.match(ui,/page==='pos'\?'Front of House':'Kitchen'/);
+ assert.match(ui,/page==='pos'\?'\/kitchen':'\/pos'/);
+ assert.match(ui,/if\(page==='kitchen'\|\|page==='pos'\)\{/);
+ assert.match(css,/body:not\(\.kitchen\) #app>header\.kds-minimal-header/);
 });
