@@ -676,6 +676,10 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   const b=await parse(req);
   if(!b||!Array.isArray(b.items)||b.items.length<1||b.items.length>30)return json({error:'Invalid items'},400);
   const id=scopedAddItems[1],storeId=session.storeId;
+  const requestKey=b.request_key;
+  if(typeof requestKey!=='string'||!/^[-a-zA-Z0-9_]{16,128}$/.test(requestKey))return json({error:'Invalid request key'},400);
+  const existingRequest=await env.DB.prepare("SELECT order_id,detail FROM events WHERE id=? AND event='items_added'").bind(requestKey).first();
+  if(existingRequest){let detail={};try{detail=JSON.parse(existingRequest.detail||'{}')}catch{}return existingRequest.order_id===id&&detail.store_id===storeId?json({ok:true,duplicate:true}):json({error:'Request key already used'},409);}
   const order=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
   if(!order)return json({error:'Order not found'},404);
   if(order.status==='cancelled'||order.paid_at||order.kitchen_completed_at)return json({error:'Order closed'},409);
@@ -684,17 +688,21 @@ if(path==='/api/device/me'&&req.method==='GET')return json({role:session.role,st
   let statements;
   try{statements=await prepareOrderItems(env,b.items,id,now,storeId);}catch(e){return json({error:e.message},400);}
   statements.push(env.DB.prepare("UPDATE orders SET status='new',updated_at=? WHERE id=? AND store_id=? AND paid_at IS NULL AND kitchen_completed_at IS NULL AND status!='cancelled'").bind(now,id,storeId));
-  statements.push(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(uid(),id,'items_added',session.role,JSON.stringify({count:b.items.length,store_id:storeId}),now));
+  // The event primary key is the idempotency guard. D1 batch is atomic: a duplicate
+  // key aborts the entire batch, including all prepared kitchen items.
+  statements.unshift(env.DB.prepare('INSERT INTO events(id,order_id,event,actor,detail,created_at) VALUES(?,?,?,?,?,?)').bind(requestKey,id,'items_added',session.role,JSON.stringify({count:b.items.length,store_id:storeId}),now));
   let result;
   try{result=await env.DB.batch(statements);}
   catch(e){
+   const duplicate=await env.DB.prepare("SELECT order_id,detail FROM events WHERE id=? AND event='items_added'").bind(requestKey).first();
+   if(duplicate){let detail={};try{detail=JSON.parse(duplicate.detail||'{}')}catch{}return duplicate.order_id===id&&detail.store_id===storeId?json({ok:true,duplicate:true}):json({error:'Request key already used'},409);}
    // Migration 0009 rejects additions when checkout or kitchen completion wins
    // the race. Report a recoverable conflict, not an internal server error.
    const current=await env.DB.prepare('SELECT status,paid_at,kitchen_completed_at FROM orders WHERE id=? AND store_id=?').bind(id,storeId).first();
    if(!current||current.status==='cancelled'||current.paid_at||current.kitchen_completed_at)return json({error:'Order changed; refresh'},409);
    throw e;
   }
-  if(result[result.length-2].meta.changes!==1)return json({error:'Order changed; refresh'},409);
+  if(result[result.length-1].meta.changes!==1)return json({error:'Order changed; refresh'},409);
   await broadcastStore(env,storeId,'orders',{id});
   return json({ok:true});
  }
