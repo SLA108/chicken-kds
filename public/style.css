@@ -1157,3 +1157,16 @@ body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,
 .kitchen .kds-platform-head .kds-head-row h3{font-size:1.65rem;font-weight:900}
 .kitchen .kds-platform-head .kds-head-row:last-of-type{opacity:.95}
 @media(max-width:780px){.kitchen .kds-platform-head .kds-platform-order-number{font-size:2.1rem}}
+
+/* Age severity remains the header background; platform color is confined to a badge. */
+.kitchen .kds-order-head.kds-platform-head{background:#24446a;color:#f8fafc;border:0}
+.kitchen .kds-order-head.kds-platform-head[data-age-band=blue]{background:#24446a}
+.kitchen .kds-order-head.kds-platform-head[data-age-band=green]{background:#205344}
+.kitchen .kds-order-head.kds-platform-head[data-age-band=yellow]{background:#635122}
+.kitchen .kds-order-head.kds-platform-head[data-age-band=red]{background:#642d34}
+.kitchen .kds-platform-head .kds-platform-title{align-items:flex-start;gap:8px;margin-bottom:4px}
+.kitchen .kds-platform-head .kds-platform-order-number{font-size:clamp(1.65rem,2.8vw,2.25rem);font-weight:900;line-height:1.12;margin:0;text-align:left;min-width:0;overflow-wrap:anywhere}
+.kitchen .kds-platform-head .kds-platform-badge{display:inline-block;flex-shrink:0;background:var(--kds-platform-color);color:var(--kds-platform-ink);font-size:.72rem;font-weight:850;line-height:1.2;padding:5px 7px;border-radius:6px;max-width:44%;text-align:center}
+.kitchen .kds-platform-head .kds-platform-timing{align-items:baseline}
+.kitchen .kds-platform-head .kds-platform-timing .kds-age{font-size:1.55rem}
+@media(max-width:780px){.kitchen .kds-platform-head .kds-platform-order-number{font-size:1.8rem}}
