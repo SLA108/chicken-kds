@@ -1259,3 +1259,11 @@ body:not(.kitchen) .kds-header-menu-content a:hover{background:#40516c}
 
 /* Pickup Queue uses the same crisp monochrome icon language as POS order types. */
 .pickup-queue-icon{width:20px;height:20px;display:inline-block;flex:0 0 20px;vertical-align:middle}
+
+/* POS: order title on the left, dine-in/takeaway/table controls on the right. */
+.foh-order-header{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.foh-order-header .foh-title{flex:1 1 200px;min-width:0;margin:0}
+.foh-order-header .foh-title h2{font-size:clamp(17px,1.7vw,21px)}
+.foh-order-header .foh-title p{margin:3px 0 0}
+.foh-order-header .foh-order-controls{flex:0 1 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0;min-width:0}
+@media(max-width:740px){.foh-order-header{align-items:stretch;gap:10px}.foh-order-header .foh-title{flex:1 1 100%}.foh-order-header .foh-order-controls{flex:1 1 100%;justify-content:flex-start}}
