@@ -1333,6 +1333,27 @@ function bindKitchenViewTabs(){
   kitchen();if(next==='dag')loadKitchenProduction();
  });
 }
+const kitchenDishSync=new Map();
+function updateKitchenDishUI(id,next){
+ const order=orders.find(o=>(o.items||[]).some(i=>String(i.id)===id));const item=order?.items.find(i=>String(i.id)===id);if(!item)return;
+ item.is_done=next?1:0;kitchenPending.set(id,next);
+ const btn=document.querySelector('[data-item-done="'+id+'"]');
+ if(btn){btn.classList.toggle('is-done',next);const check=btn.querySelector('.kds-check');if(check)check.textContent=next?'✓':'○';}
+ const count=order.items.filter(i=>i.is_done).length,card=btn?.closest('.kds-order');
+ const progress=card?.querySelector('.kds-progress');if(progress)progress.textContent=count+'/'+order.items.length+' Done';
+ const complete=card?.querySelector('[data-kitchen-complete]');if(complete){const ready=count===order.items.length;complete.disabled=!ready;complete.textContent=ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+count+'/'+order.items.length;}
+}
+async function syncKitchenDish(id){
+ const state=kitchenDishSync.get(id);if(!state||state.running)return;state.running=true;
+ try{
+  while(state.saved!==state.desired){const target=state.desired;await api('/order-items/'+id+'/done','PATCH',{});state.saved=target;}
+  const confirmed=await api('/orders');const item=confirmed.flatMap(o=>o.items||[]).find(i=>String(i.id)===id);
+  if(!item||!!item.is_done!==state.desired)throw Error('Dish state not confirmed');
+  if(state.desired)acknowledgeKitchenProductionItem(id);
+  kitchenPending.delete(id);kitchenDishSync.delete(id);await refresh();
+ }catch(e){kitchenPending.delete(id);kitchenDishSync.delete(id);notify('Dish sync failed: '+e.message);await refresh();}
+ finally{state.running=false;}
+}
 function kitchen(){
  const active=orders.filter(o=>o.status!=='cancelled'&&!o.kitchen_completed_at&&!kitchenCompleting.has(o.id)&&o.items.length).sort((a,b)=>a.created_at.localeCompare(b.created_at));
  const card=o=>{
@@ -1344,7 +1365,7 @@ function kitchen(){
    '<div class="kds-order-head'+(brand?' kds-platform-head':'')+'"'+platformStyle+' role="button" tabindex="0" aria-label="Mark all dishes done" data-kitchen-mark-all="'+esc(o.id)+'" data-age-band="'+kitchenAgeBand(kitchenAge(o.created_at))+'">'+
     (brand?'<div class="kds-head-row kds-platform-title"><span class="kds-platform-badge">'+esc(brand.name)+'</span><strong class="kds-age" data-kitchen-age="'+esc(o.created_at)+'">'+kitchenDuration(kitchenAge(o.created_at))+'</strong></div>':'<div class="kds-head-row"><h3>'+esc(o.table_no||sourceName[o.source])+'</h3><strong class="kds-age" data-kitchen-age="'+esc(o.created_at)+'">'+kitchenDuration(kitchenAge(o.created_at))+'</strong></div>')+
     (brand?'<div class="kds-platform-order-number">#'+esc(o.external_order_id||o.id.slice(0,8))+'</div>':'')+
-    '<div class="kds-head-row"><span>Received '+warsawClock(o.created_at)+'</span><span>'+done+'/'+o.items.length+' Done</span></div>'+
+    '<div class="kds-head-row"><span>Received '+warsawClock(o.created_at)+'</span><span class="kds-progress">'+done+'/'+o.items.length+' Done</span></div>'+
     (o.platform_deadline_at?'<div class="kds-deadline" style="margin-top:8px;padding:8px;border:2px solid #fbbf24;border-radius:10px"><div style="font-size:0.8rem;font-weight:800">READY BY · '+warsawClock(o.platform_deadline_at)+'</div><strong data-kitchen-deadline="'+esc(o.platform_deadline_at)+'" style="display:block;font-size:1.25rem;font-weight:900">Calculating…</strong></div>':'')+
    '</div>'+
    (o.platform?'<button type="button" class="alt" data-platform-edit="'+esc(o.id)+'">Edit Platform Order</button>':'')+
@@ -1418,43 +1439,12 @@ function kitchen(){
  head.onclick=mark;
  head.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();mark()}};
 });
-document.querySelectorAll('[data-item-done]').forEach(btn=>btn.onclick=async()=>{
-  const id=btn.dataset.itemDone;
-  if(kitchenBusy.has(id))return;
-  const order=orders.find(o=>(o.items||[]).some(i=>i.id===id));
-  const item=order?.items.find(i=>i.id===id);
-  if(!item)return;
-  kitchenBusy.add(id);
-  const previous=!!item.is_done, next=!previous;
-  kitchenPending.set(id,next);
-  item.is_done=next?1:0;
-  btn.classList.toggle('is-done',next);
-  const check=btn.querySelector('.kds-check');
-  if(check)check.textContent=next?'✓':'○';
-  const head=btn.closest('.kds-order')?.querySelector('.kds-head-row:nth-child(2) span:last-child');
-  const count=order.items.filter(i=>i.is_done).length;
-  if(head)head.textContent=count+'/'+order.items.length+' Done';
-  const complete=btn.closest('.kds-order')?.querySelector('[data-kitchen-complete]');
-  if(complete){const ready=count===order.items.length;complete.disabled=!ready;complete.textContent=ready?'✓ COMPLETE ORDER':'COMPLETE ORDER · '+count+'/'+order.items.length}
-  btn.blur();
-  try{
-   await api('/order-items/'+id+'/done','PATCH',{});
-   // Fetch confirmed server state before releasing the optimistic override.
-   const confirmed=await api('/orders');
-   const saved=confirmed.flatMap(o=>o.items||[]).find(i=>i.id===id);
-   if(saved&&!!saved.is_done===next){
-    if(next)acknowledgeKitchenProductionItem(id);
-    kitchenPending.delete(id);
-    // A later refresh uses the server value, never an older in-flight response.
-    await refresh();
-   }else{await refresh();}
-  }catch(e){
-   kitchenPending.delete(id);
-   item.is_done=previous?1:0;
-   notify('Could not save dish: '+e.message);
-   await refresh();
-  }finally{kitchenBusy.delete(id)}
- });
+document.querySelectorAll('[data-item-done]').forEach(btn=>btn.onclick=()=>{
+ const id=btn.dataset.itemDone,order=orders.find(o=>(o.items||[]).some(i=>String(i.id)===id));const item=order?.items.find(i=>String(i.id)===id);
+ if(!item||kitchenCompleting.has(order.id))return;
+ let state=kitchenDishSync.get(id);if(!state){state={saved:!!item.is_done,desired:!!item.is_done,running:false};kitchenDishSync.set(id,state);}
+ state.desired=!state.desired;updateKitchenDishUI(id,state.desired);btn.blur();void syncKitchenDish(id);
+});
  document.querySelectorAll('[data-kitchen-complete]').forEach(btn=>btn.onclick=async()=>{
   const id=btn.dataset.kitchenComplete;
   if(btn.disabled||kitchenCompleting.has(id))return;
