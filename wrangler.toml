@@ -23,3 +23,31 @@ head_sampling_rate = 1
 [[r2_buckets]]
 binding = "MENU_IMAGES"
 bucket_name = "chicken-kds-images"
+
+# Isolated preview Worker with shared production D1 data.
+# Test ONLY in the authorized Test Store. This is NOT a database sandbox.
+[env.preview]
+name = "chicken-kds-preview"
+workers_dev = true
+assets = { directory = "./public", binding = "ASSETS", run_worker_first = ["/api/*", "/images/*", "/ws"] }
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "chicken_kds"
+database_id = "82bc303c-98c0-4701-9a5d-bbf703a2bb6d"
+
+[[env.preview.durable_objects.bindings]]
+name = "ROOM"
+class_name = "OrderRoom"
+
+[[env.preview.migrations]]
+tag = "v1"
+new_sqlite_classes = ["OrderRoom"]
+
+[[env.preview.r2_buckets]]
+binding = "MENU_IMAGES"
+bucket_name = "chicken-kds-images"
+
+[env.preview.observability]
+enabled = true
+head_sampling_rate = 1
