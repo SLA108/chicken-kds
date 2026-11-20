@@ -1170,3 +1170,8 @@ body.kitchen,body.kitchen main,body.kitchen button,body.kitchen .kds-order-head,
 .kitchen .kds-platform-head .kds-platform-timing{align-items:baseline}
 .kitchen .kds-platform-head .kds-platform-timing .kds-age{font-size:1.55rem}
 @media(max-width:780px){.kitchen .kds-platform-head .kds-platform-order-number{font-size:1.8rem}}
+
+/* Match regular ticket layout: small brand left, elapsed time right. */
+.kitchen .kds-platform-head .kds-platform-title{align-items:center;margin-bottom:7px}
+.kitchen .kds-platform-head .kds-platform-order-number{display:block;margin:3px 0 9px;font-size:clamp(1.7rem,2.9vw,2.3rem)}
+.kitchen .kds-platform-head .kds-platform-badge{font-size:.75rem;max-width:58%;padding:5px 8px}
