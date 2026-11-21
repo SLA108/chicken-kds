@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/v3-multistore-foundation
+      - feature/kitchen-dag-quick-order
   pull_request:
   workflow_dispatch:
 
@@ -19,8 +20,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci
+      - run: npm install --no-package-lock
       - run: npm run check:syntax
       - run: npm test
