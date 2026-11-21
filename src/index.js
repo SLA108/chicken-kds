@@ -117,10 +117,10 @@ if(path.startsWith('/api/integrations/')){
    const span=(Date.parse(to+'T00:00:00Z')-Date.parse(from+'T00:00:00Z'))/86400000;
    if(span>31)return json({error:'Date range cannot exceed 31 days'},400);
    const limitParam=url.searchParams.get('limit');
-   if(limitParam!==null&&(!/^\\d+$/.test(limitParam)||Number(limitParam)<1||Number(limitParam)>200))return json({error:'Invalid limit'},400);
+   if(limitParam!==null&&(!/^\d+$/.test(limitParam)||Number(limitParam)<1||Number(limitParam)>200))return json({error:'Invalid limit'},400);
    const limit=limitParam===null?100:Number(limitParam);
    const cursor=url.searchParams.get('cursor')||'';
-   if(cursor&&!/^\\d{4}-\\d{2}-\\d{2}T[0-9:.Z+-]{8,30}\\|[a-zA-Z0-9_-]{1,100}$/.test(cursor))return json({error:'Invalid cursor'},400);
+   if(cursor&&!/^\d{4}-\d{2}-\d{2}T[0-9:.Z+-]{8,30}\|[a-zA-Z0-9_-]{1,100}$/.test(cursor))return json({error:'Invalid cursor'},400);
    const where=["o.paid_at IS NOT NULL","o.status!='cancelled'","o.paid_at>=?","o.paid_at<?"];
    const args=[warsawBusinessStartUTC(from),warsawBusinessStartUTC(nextDay(to))];
    if(storeId){where.push('o.store_id=?');args.push(storeId);}
