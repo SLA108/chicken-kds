@@ -112,6 +112,24 @@ if(path.startsWith('/api/integrations/')){
    const rows=(await env.DB.prepare(sql).bind(...args,...params).all()).results;
    return json({stores:rows,from:from||null,to:to||null,timezone:'Europe/Warsaw',currency:'PLN',amount_unit:'grosz'});
   }
+  if(path==='/api/integrations/order-performance'){
+   if(!from||!to)return json({error:'from and to dates are required'},400);
+   const span=(Date.parse(to+'T00:00:00Z')-Date.parse(from+'T00:00:00Z'))/86400000;
+   if(span>31)return json({error:'Date range cannot exceed 31 days'},400);
+   const limitParam=url.searchParams.get('limit');
+   if(limitParam!==null&&(!/^\\d+$/.test(limitParam)||Number(limitParam)<1||Number(limitParam)>200))return json({error:'Invalid limit'},400);
+   const limit=limitParam===null?100:Number(limitParam);
+   const cursor=url.searchParams.get('cursor')||'';
+   if(cursor&&!/^\\d{4}-\\d{2}-\\d{2}T[0-9:.Z+-]{8,30}\\|[a-zA-Z0-9_-]{1,100}$/.test(cursor))return json({error:'Invalid cursor'},400);
+   const where=["o.paid_at IS NOT NULL","o.status!='cancelled'","o.paid_at>=?","o.paid_at<?"];
+   const args=[warsawBusinessStartUTC(from),warsawBusinessStartUTC(nextDay(to))];
+   if(storeId){where.push('o.store_id=?');args.push(storeId);}
+   if(cursor){const [timestamp,id]=cursor.split('|');where.push('(o.paid_at>? OR (o.paid_at=? AND o.id>?))');args.push(timestamp,timestamp,id);}
+   const sql='SELECT o.id AS order_id,o.store_id,o.paid_at AS completed_at,o.source,r.rating AS service_rating FROM orders o LEFT JOIN order_service_ratings r ON r.order_id=o.id AND r.store_id=o.store_id WHERE '+where.join(' AND ')+' ORDER BY o.paid_at ASC,o.id ASC LIMIT ?';
+   const rows=(await env.DB.prepare(sql).bind(...args,limit+1).all()).results;
+   const hasMore=rows.length>limit,orders=rows.slice(0,limit),last=orders[orders.length-1];
+   return json({orders,next_cursor:hasMore&&last?last.completed_at+'|'+last.order_id:null,completion_basis:'paid_at',timezone:'Europe/Warsaw'});
+  }
   if(path==='/api/integrations/tips'){
    const limit=Math.min(Math.max(Number(url.searchParams.get('limit'))||100,1),200);
    const cursor=url.searchParams.get('cursor')||'';
